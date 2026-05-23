@@ -315,8 +315,8 @@
     <div class="login-wrapper">
         <div class="login-card">
             <div class="logo-area">
-                <div class="logo-icon">💼</div>
-                <div class="logo-title">Biz<span>Account</span> Pro</div>
+                <img src="{{ asset('images/logo.png') }}" alt="" width="100px;">
+                <div class="logo-title">Eemot <span>Account</span> Pro</div>
                 <div class="logo-subtitle">Sign in to your account</div>
             </div>
 

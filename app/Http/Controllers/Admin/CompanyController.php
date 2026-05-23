@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Company;
+use App\Models\Permission;
+use App\Models\Role;
 use App\Models\User;
 use App\Models\UserCompany;
+use App\Models\UserRole;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Storage;
@@ -59,6 +62,8 @@ class CompanyController extends Controller
         ]);
 
         UserCompany::create(['user_id' => $admin->id, 'company_id' => $company->id]);
+        $adminRole = $this->ensureCompanyAdminRole($company->id);
+        UserRole::create(['user_id' => $admin->id, 'role_id' => $adminRole->id, 'company_id' => $company->id]);
 
         AuditLog::log('created', ['model' => Company::class, 'model_id' => $company->id, 'description' => "Company created: {$company->name}"]);
         return redirect()->route('admin.companies.index')->with('success', 'Company & Admin created!');
@@ -88,5 +93,17 @@ class CompanyController extends Controller
     {
         $company->delete();
         return redirect()->route('admin.companies.index')->with('success', 'Company deleted!');
+    }
+
+    private function ensureCompanyAdminRole(int $companyId): Role
+    {
+        $role = Role::firstOrCreate(
+            ['company_id' => $companyId, 'slug' => 'company-admin'],
+            ['name' => 'Company Admin', 'description' => 'Default full-access admin role for this company.', 'is_active' => true]
+        );
+
+        $role->permissions()->sync(Permission::whereNotIn('module', ['permissions','companies'])->pluck('id')->all());
+
+        return $role;
     }
 }

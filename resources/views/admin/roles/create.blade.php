@@ -15,6 +15,17 @@
                 <label>Role Name *</label>
                 <input type="text" name="name" class="form-control" value="{{ old('name') }}" placeholder="e.g. Salesman, Accountant" required>
             </div>
+            @if(auth()->user()->isSuperAdmin())
+            <div class="form-group">
+                <label>Company *</label>
+                <select name="company_id" class="form-control" required>
+                    <option value="">Select company</option>
+                    @foreach($companies as $company)
+                        <option value="{{ $company->id }}" @selected((int) old('company_id') === (int) $company->id)>{{ $company->name }}</option>
+                    @endforeach
+                </select>
+            </div>
+            @endif
             <div class="form-group">
                 <label>Description</label>
                 <textarea name="description" class="form-control" rows="2" placeholder="Brief description of this role">{{ old('description') }}</textarea>

@@ -65,7 +65,7 @@
     <div class="register-wrapper">
         <div class="register-card">
             <div class="logo-area">
-                <div class="logo-icon">💼</div>
+                <img src="{{ asset('images/logo.png') }}" alt="" width="100px;">
                 <div class="logo-title">Biz<span>Account</span> Pro</div>
                 <div class="logo-subtitle">Create your account</div>
             </div>

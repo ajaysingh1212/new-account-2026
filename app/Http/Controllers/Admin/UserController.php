@@ -19,11 +19,15 @@ class UserController extends Controller
         $authUser = auth()->user();
         if ($authUser->isSuperAdmin()) {
             $users = User::with('currentCompany')->latest()->paginate(15);
-        } else {
+        } elseif ($authUser->isAdmin()) {
             $companyId = $authUser->current_company_id;
             $users = User::whereHas('userRoles', fn($q) => $q->where('company_id', $companyId))
                 ->with(['userRoles' => fn($q) => $q->where('company_id', $companyId)->with('role')])
                 ->latest()->paginate(15);
+        } else {
+            $users = User::where('id', $authUser->id)
+                ->with(['userRoles' => fn($q) => $q->where('company_id', $authUser->current_company_id)->with('role')])
+                ->paginate(15);
         }
         return view('admin.users.index', compact('users'));
     }
@@ -57,10 +61,15 @@ class UserController extends Controller
 
         $authUser = auth()->user();
 
-        // Super admin can create admins; company admin can only create users
-        if (!$authUser->isSuperAdmin() && $request->user_type === 'super_admin') {
+        if (!$authUser->isSuperAdmin() && $request->user_type !== 'user') {
             abort(403);
         }
+
+        if (!$authUser->isSuperAdmin() && (int) $request->company_id !== (int) $authUser->current_company_id) {
+            abort(403);
+        }
+
+        $roleIds = $this->allowedRoleIds($request->role_ids ?? [], (int) $request->company_id);
 
         $user = User::create([
             'name'               => $request->name,
@@ -76,8 +85,8 @@ class UserController extends Controller
         UserCompany::create(['user_id' => $user->id, 'company_id' => $request->company_id]);
 
         // Attach roles
-        if ($request->role_ids) {
-            foreach ($request->role_ids as $roleId) {
+        if ($roleIds) {
+            foreach ($roleIds as $roleId) {
                 UserRole::create([
                     'user_id'    => $user->id,
                     'role_id'    => $roleId,
@@ -126,6 +135,11 @@ class UserController extends Controller
             'role_ids'   => 'nullable|array',
         ]);
 
+        $authUser = auth()->user();
+        if (!$authUser->isSuperAdmin() && ((int) $request->company_id !== (int) $authUser->current_company_id || $request->user_type !== 'user')) {
+            abort(403);
+        }
+
         $old = $user->toArray();
         $data = $request->only('name','email','user_type','phone','is_active');
         $data['current_company_id'] = $request->company_id;
@@ -136,8 +150,9 @@ class UserController extends Controller
 
         // Update roles
         UserRole::where('user_id', $user->id)->where('company_id', $request->company_id)->delete();
-        if ($request->role_ids) {
-            foreach ($request->role_ids as $roleId) {
+        $roleIds = $this->allowedRoleIds($request->role_ids ?? [], (int) $request->company_id);
+        if ($roleIds) {
+            foreach ($roleIds as $roleId) {
                 UserRole::create(['user_id' => $user->id, 'role_id' => $roleId, 'company_id' => $request->company_id]);
             }
         }
@@ -165,5 +180,25 @@ class UserController extends Controller
     {
         $user->update(['is_active' => !$user->is_active]);
         return response()->json(['status' => $user->is_active, 'message' => 'Status updated']);
+    }
+
+    private function allowedRoleIds(array $roleIds, int $companyId): array
+    {
+        $authUser = auth()->user();
+        $requested = array_map('intval', $roleIds);
+
+        $query = Role::where('company_id', $companyId)->whereIn('id', $requested);
+
+        if (!$authUser->isSuperAdmin()) {
+            $allowedPermissionIds = $authUser->rolesForCompany($companyId)
+                ->flatMap(fn($role) => $role->permissions->pluck('id'))
+                ->map(fn($id) => (int) $id)
+                ->unique()
+                ->all();
+
+            $query->whereDoesntHave('permissions', fn($q) => $q->whereNotIn('permissions.id', $allowedPermissionIds));
+        }
+
+        return $query->pluck('id')->map(fn($id) => (int) $id)->all();
     }
 }

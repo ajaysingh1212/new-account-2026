@@ -192,7 +192,12 @@
             <li class="nav-item d-none d-sm-inline-block">
                 <span class="navbar-text text-muted" style="font-size:13px;">
                     @if(auth()->user()->currentCompany)
-                        <i class="fas fa-building me-1" style="color:#7C3AED"></i>
+                                    <img
+                                        src="{{ Storage::url(auth()->user()->currentCompany->logo) }}"
+                                        alt="Company Logo"
+                                        style="height:60px;width:auto;"
+                                    >
+
                         {{ auth()->user()->currentCompany->name }}
                     @endif
                 </span>

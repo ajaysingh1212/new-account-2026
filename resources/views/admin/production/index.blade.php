@@ -1,0 +1,17 @@
+@extends('layouts.admin')
+@section('title','Production Batches')
+@section('content')
+<div class="card">
+    <div class="card-header d-flex justify-content-between">
+        <h3 class="card-title m-0">Production / CRM Assembly</h3>
+        @can('production.create')<a href="{{ route('admin.production-batches.create') }}" class="btn btn-primary btn-sm">New Batch</a>@endcan
+    </div>
+    <div class="card-body table-responsive">
+        <table id="prodTable" class="table table-hover">
+            <thead><tr><th>Batch</th><th>Date</th><th>Finished Item</th><th>Qty</th><th>Raw Cost</th><th>Cost/Unit</th><th>Created By</th></tr></thead>
+            <tbody>@foreach($batches as $batch)<tr><td>{{ $batch->batch_no }}</td><td>{{ $batch->production_date?->format('d M Y') }}</td><td>{{ $batch->finishedItem?->name }}</td><td>{{ $batch->quantity }}</td><td>Rs {{ number_format((float)$batch->raw_material_cost,2) }}</td><td>Rs {{ number_format((float)$batch->cost_per_unit,2) }}</td><td><strong>{{ $batch->creator?->name ?? 'System' }}</strong><br><small class="text-muted">{{ $batch->creator?->rolesForCompany($batch->company_id)->pluck('name')->join(', ') ?: 'No role' }}</small></td></tr>@endforeach</tbody>
+        </table>
+    </div>
+</div>
+@endsection
+@push('scripts')<script>$('#prodTable').DataTable();</script>@endpush

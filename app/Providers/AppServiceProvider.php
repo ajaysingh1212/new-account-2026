@@ -22,7 +22,6 @@ class AppServiceProvider extends ServiceProvider
                 $permissions = Permission::all();
                 foreach ($permissions as $permission) {
                     Gate::define($permission->slug, function (User $user) use ($permission) {
-                        if ($user->isAdmin()) return true; // Admin has all perms in their company
                         return $user->hasPermission($permission->slug);
                     });
                 }

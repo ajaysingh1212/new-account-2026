@@ -1,0 +1,16 @@
+@include('admin.partials.print-document', [
+    'title' => 'Sale Invoice',
+    'docNo' => $invoice->invoice_no,
+    'docDate' => $invoice->billing_date,
+    'status' => $invoice->status,
+    'party' => $invoice->party,
+    'lines' => $invoice->items,
+    'billingAddress' => $invoice->billing_address,
+    'shippingAddress' => $invoice->shipping_address,
+    'subtotal' => $invoice->subtotal,
+    'discount' => $invoice->discount_amount,
+    'tax' => $invoice->tax_amount,
+    'grandTotal' => $invoice->grand_total,
+    'terms' => $invoice->terms,
+    'accent' => '#2563eb',
+])

@@ -1,0 +1,16 @@
+@include('admin.partials.print-document', [
+    'title' => 'Estimate / Quotation',
+    'docNo' => $estimate->estimate_no,
+    'docDate' => $estimate->estimate_date,
+    'status' => $estimate->status,
+    'party' => $estimate->party,
+    'lines' => $estimate->items,
+    'billingAddress' => $estimate->billing_address,
+    'shippingAddress' => $estimate->shipping_address,
+    'subtotal' => $estimate->subtotal,
+    'discount' => $estimate->discount_amount,
+    'tax' => $estimate->tax_amount,
+    'grandTotal' => $estimate->grand_total,
+    'terms' => $estimate->terms,
+    'accent' => '#4338ca',
+])

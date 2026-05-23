@@ -1,6 +1,21 @@
 <?php
 
 use App\Http\Controllers\Admin;
+use App\Http\Controllers\Admin\Accounts\BankAccountController;
+use App\Http\Controllers\Admin\Accounts\BankTransactionController;
+use App\Http\Controllers\Admin\Accounts\CostCenterController;
+use App\Http\Controllers\Admin\Accounts\PartyController;
+use App\Http\Controllers\Admin\Accounts\PartyPaymentController;
+use App\Http\Controllers\Admin\Accounts\SubCostCenterController;
+use App\Http\Controllers\Admin\Inventory\ItemController;
+use App\Http\Controllers\Admin\Inventory\ProductTypeController;
+use App\Http\Controllers\Admin\Inventory\StockController;
+use App\Http\Controllers\Admin\Production\ProductionBatchController;
+use App\Http\Controllers\Admin\Purchase\PurchaseBillController;
+use App\Http\Controllers\Admin\ReportController;
+use App\Http\Controllers\Admin\Sales\DeliveryChallanController;
+use App\Http\Controllers\Admin\Sales\EstimateController;
+use App\Http\Controllers\Admin\Sales\SalesInvoiceController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
@@ -10,6 +25,10 @@ Route::get('/', function () {
         ? redirect()->route('admin.dashboard')
         : redirect()->route('login');
 });
+
+Route::get('/dashboard', function () {
+    return redirect()->route('admin.dashboard');
+})->middleware(['auth', 'verified'])->name('dashboard');
 
 require __DIR__ . '/auth.php';
 
@@ -23,15 +42,124 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified'])->group(
     Route::get('/profile', [Admin\ProfileController::class, 'edit'])->name('profile.edit');
     Route::post('/profile', [Admin\ProfileController::class, 'update'])->name('profile.update');
 
+    Route::middleware('permission:parties.view')->group(function () {
+        Route::resource('parties', PartyController::class)->only(['create','store'])->middleware('permission:parties.create');
+        Route::resource('parties', PartyController::class)->only(['edit','update'])->middleware('permission:parties.edit');
+        Route::resource('parties', PartyController::class)->only(['destroy'])->middleware('permission:parties.delete');
+        Route::resource('parties', PartyController::class)->only(['index','show']);
+    });
+    Route::middleware('permission:cost_centers.view')->group(function () {
+        Route::resource('cost-centers', CostCenterController::class)->only(['index']);
+        Route::resource('cost-centers', CostCenterController::class)->only(['create','store','edit','update','destroy'])->middleware('permission:cost_centers.manage');
+        Route::resource('sub-cost-centers', SubCostCenterController::class)->only(['index']);
+        Route::resource('sub-cost-centers', SubCostCenterController::class)->only(['create','store','edit','update','destroy'])->middleware('permission:cost_centers.manage');
+    });
+    Route::middleware('permission:banking.view')->group(function () {
+        Route::resource('bank-accounts', BankAccountController::class)->only(['create','store','edit','update','destroy'])->middleware('permission:banking.manage');
+        Route::resource('bank-accounts', BankAccountController::class)->only(['index','show']);
+        Route::resource('bank-transactions', BankTransactionController::class)->only(['create','store'])->middleware('permission:banking.manage');
+        Route::resource('bank-transactions', BankTransactionController::class)->only(['index']);
+        Route::get('bank-reports/statement', [BankTransactionController::class, 'report'])->name('bank-reports.statement');
+    });
+    Route::middleware('permission:party_payments.view')->group(function () {
+        Route::resource('party-payments', PartyPaymentController::class)->only(['index','create','store']);
+    });
+    Route::middleware('permission:product_types.view')->group(function () {
+        Route::resource('product-types', ProductTypeController::class)->only(['index']);
+        Route::resource('product-types', ProductTypeController::class)->only(['create','store','edit','update','destroy'])->middleware('permission:product_types.manage');
+    });
+    Route::middleware('permission:items.view')->group(function () {
+        Route::resource('items', ItemController::class)->only(['index']);
+        Route::resource('items', ItemController::class)->only(['create','store'])->middleware('permission:items.create');
+        Route::resource('items', ItemController::class)->only(['edit','update'])->middleware('permission:items.edit');
+        Route::resource('items', ItemController::class)->only(['destroy'])->middleware('permission:items.delete');
+    });
+    Route::middleware('permission:stocks.view')->group(function () {
+        Route::get('stocks', [StockController::class, 'index'])->name('stocks.index');
+        Route::get('stocks/history', [StockController::class, 'history'])->name('stocks.history');
+    });
+    Route::middleware('permission:production.view')->group(function () {
+        Route::resource('production-batches', ProductionBatchController::class)->only(['index','create','store']);
+    });
+    Route::middleware('permission:purchase.view')->group(function () {
+        Route::get('purchases/{purchase}/print', [PurchaseBillController::class, 'print'])->middleware('permission:purchase.print')->name('purchases.print');
+        Route::resource('purchases', PurchaseBillController::class)->only(['create','store'])->middleware('permission:purchase.create');
+        Route::resource('purchases', PurchaseBillController::class)->only(['index','show']);
+    });
+    Route::middleware('permission:sales.view')->group(function () {
+        Route::get('sales/{sale}/print', [SalesInvoiceController::class, 'print'])->middleware('permission:sales.print')->name('sales.print');
+        Route::resource('sales', SalesInvoiceController::class)->only(['create','store'])->middleware('permission:sales.create');
+        Route::resource('sales', SalesInvoiceController::class)->only(['index','show']);
+    });
+    Route::middleware('permission:estimates.view')->group(function () {
+        Route::get('estimates/{estimate}/print', [EstimateController::class, 'print'])->middleware('permission:estimates.print')->name('estimates.print');
+        Route::post('estimates/{estimate}/convert', [EstimateController::class, 'convert'])->middleware('permission:estimates.convert')->name('estimates.convert');
+        Route::patch('estimates/{estimate}/cancel', [EstimateController::class, 'cancel'])->middleware('permission:estimates.edit')->name('estimates.cancel');
+        Route::resource('estimates', EstimateController::class)->only(['create','store'])->middleware('permission:estimates.create');
+        Route::resource('estimates', EstimateController::class)->only(['edit','update'])->middleware('permission:estimates.edit');
+        Route::resource('estimates', EstimateController::class)->only(['destroy'])->middleware('permission:estimates.delete');
+        Route::resource('estimates', EstimateController::class)->only(['index','show']);
+    });
+    Route::middleware('permission:delivery_challans.view')->group(function () {
+        Route::get('delivery-challans/{deliveryChallan}/print', [DeliveryChallanController::class, 'print'])->middleware('permission:delivery_challans.print')->name('delivery-challans.print');
+        Route::patch('delivery-challans/{deliveryChallan}/cancel', [DeliveryChallanController::class, 'cancel'])->middleware('permission:delivery_challans.edit')->name('delivery-challans.cancel');
+        Route::resource('delivery-challans', DeliveryChallanController::class)->only(['create','store'])->middleware('permission:delivery_challans.create');
+        Route::resource('delivery-challans', DeliveryChallanController::class)->only(['edit','update'])->middleware('permission:delivery_challans.edit');
+        Route::resource('delivery-challans', DeliveryChallanController::class)->only(['destroy'])->middleware('permission:delivery_challans.delete');
+        Route::resource('delivery-challans', DeliveryChallanController::class)->only(['index','show']);
+    });
+
+    Route::middleware('permission:reports.gst')->group(function () {
+        Route::get('reports/gst-1', [ReportController::class, 'gst1'])->name('reports.gst1');
+        Route::get('reports/gst-2', [ReportController::class, 'gst2'])->name('reports.gst2');
+        Route::get('reports/gst-3', [ReportController::class, 'gst3'])->name('reports.gst3');
+    });
+    Route::middleware('permission:reports.party')->group(function () {
+        Route::get('reports/party-statement', [ReportController::class, 'partyStatement'])->name('reports.party-statement');
+        Route::get('reports/party-profit-loss', [ReportController::class, 'partyProfitLoss'])->name('reports.party-profit-loss');
+        Route::get('reports/all-parties', [ReportController::class, 'allParties'])->name('reports.all-parties');
+        Route::get('reports/party-by-item', [ReportController::class, 'partyByItem'])->name('reports.party-by-item');
+        Route::get('reports/sale-purchase-by-party', [ReportController::class, 'salePurchaseByParty'])->name('reports.sale-purchase-by-party');
+    });
+    Route::middleware('permission:reports.transaction')->group(function () {
+        Route::get('reports/sales', [ReportController::class, 'salesReport'])->name('reports.sales');
+        Route::get('reports/purchases', [ReportController::class, 'purchaseReport'])->name('reports.purchases');
+        Route::get('reports/day-book', [ReportController::class, 'dayBook'])->name('reports.day-book');
+        Route::get('reports/all-transactions', [ReportController::class, 'allTransactions'])->name('reports.all-transactions');
+        Route::get('reports/profit-loss', [ReportController::class, 'profitLoss'])->name('reports.profit-loss');
+        Route::get('reports/bill-wise-profit', [ReportController::class, 'billWiseProfit'])->name('reports.bill-wise-profit');
+        Route::get('reports/balance-sheet', [ReportController::class, 'balanceSheet'])->name('reports.balance-sheet');
+    });
+    // Stock Transfers (Inventory ke andar)
+    Route::middleware('permission:stocks.view')->group(function () {
+        Route::get('stock-transfers', [\App\Http\Controllers\Admin\Inventory\StockTransferController::class, 'index'])->name('stock-transfers.index');
+        Route::get('stock-transfers/create', [\App\Http\Controllers\Admin\Inventory\StockTransferController::class, 'create'])->name('stock-transfers.create');
+        Route::post('stock-transfers', [\App\Http\Controllers\Admin\Inventory\StockTransferController::class, 'store'])->name('stock-transfers.store');
+        Route::get('stock-transfers/{stockTransfer}', [\App\Http\Controllers\Admin\Inventory\StockTransferController::class, 'show'])->name('stock-transfers.show');
+        Route::post('stock-transfers/{stockTransfer}/approve', [\App\Http\Controllers\Admin\Inventory\StockTransferController::class, 'approve'])->name('stock-transfers.approve');
+        Route::post('stock-transfers/{stockTransfer}/reject', [\App\Http\Controllers\Admin\Inventory\StockTransferController::class, 'reject'])->name('stock-transfers.reject');
+        Route::get('stock-transfers-item-stock', [\App\Http\Controllers\Admin\Inventory\StockTransferController::class, 'itemStock'])->name('stock-transfers.item-stock');
+    });
+
+    // Company Merges (SuperAdmin only - existing companies group ke andar daalein)
+    Route::middleware('super_admin')->group(function () {
+        Route::get('company-merges', [\App\Http\Controllers\Admin\CompanyMergeController::class, 'index'])->name('company-merges.index');
+        Route::post('company-merges', [\App\Http\Controllers\Admin\CompanyMergeController::class, 'store'])->name('company-merges.store');
+        Route::delete('company-merges/{companyMerge}', [\App\Http\Controllers\Admin\CompanyMergeController::class, 'destroy'])->name('company-merges.destroy');
+    });
     // ── User Management (admin + super_admin) ─────────────
     Route::middleware('company_admin')->group(function () {
 
-        // Users
-        Route::resource('users', Admin\UserController::class);
-        Route::patch('users/{user}/toggle-status', [Admin\UserController::class, 'toggleStatus'])->name('users.toggle-status');
+        Route::resource('users', Admin\UserController::class)->only(['index'])->middleware('permission:users.view');
+        Route::resource('users', Admin\UserController::class)->only(['create','store'])->middleware('permission:users.create');
+        Route::resource('users', Admin\UserController::class)->only(['edit','update'])->middleware('permission:users.edit');
+        Route::resource('users', Admin\UserController::class)->only(['destroy'])->middleware('permission:users.delete');
+        Route::patch('users/{user}/toggle-status', [Admin\UserController::class, 'toggleStatus'])->middleware('permission:users.edit')->name('users.toggle-status');
 
-        // Roles
-        Route::resource('roles', Admin\RoleController::class);
+        Route::resource('roles', Admin\RoleController::class)->only(['index'])->middleware('permission:roles.view');
+        Route::resource('roles', Admin\RoleController::class)->only(['create','store'])->middleware('permission:roles.create');
+        Route::resource('roles', Admin\RoleController::class)->only(['edit','update'])->middleware('permission:roles.edit');
+        Route::resource('roles', Admin\RoleController::class)->only(['destroy'])->middleware('permission:roles.delete');
 
         // Permissions (super_admin only)
         Route::middleware('super_admin')->group(function () {
@@ -42,7 +170,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified'])->group(
         });
 
         // Audit Logs
-        Route::get('audit-logs', [Admin\AuditLogController::class, 'index'])->name('audit-logs.index');
+        Route::get('audit-logs', [Admin\AuditLogController::class, 'index'])->middleware('permission:audit.view')->name('audit-logs.index');
     });
 });
 

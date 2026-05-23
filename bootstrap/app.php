@@ -11,6 +11,10 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+       if (env('APP_ENV') === 'testing') {
+            $middleware->validateCsrfTokens(except: ['*']);
+       }
+
        $middleware->alias([
             'super_admin'   => \App\Http\Middleware\SuperAdmin::class,
             'company_admin' => \App\Http\Middleware\CompanyAdmin::class,

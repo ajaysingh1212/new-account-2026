@@ -21,7 +21,13 @@ class EntryVisibility extends Model
      */
     public static function canView(User $user, string $entryType, int $entryId): bool
     {
-        if ($user->isSuperAdmin() || $user->isAdmin()) return true;
+        if ($user->isSuperAdmin()) return true;
+        if ($user->isAdmin()) {
+            return static::where('entry_type', $entryType)
+                ->where('entry_id', $entryId)
+                ->where('company_id', $user->current_company_id)
+                ->exists();
+        }
 
         $vis = static::where('entry_type', $entryType)->where('entry_id', $entryId)->first();
         if (!$vis) return false; // default: only creator sees

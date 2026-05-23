@@ -14,7 +14,7 @@ return [
     |
     */
 
-'title' => 'BizAccount Pro',
+'title' => 'Eemot Account',
 'title_prefix' => '',
 'title_postfix' => ' | BizAccount Pro',
 

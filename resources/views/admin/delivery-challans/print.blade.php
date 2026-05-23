@@ -1,0 +1,16 @@
+@include('admin.partials.print-document', [
+    'title' => 'Delivery Challan',
+    'docNo' => $deliveryChallan->challan_no,
+    'docDate' => $deliveryChallan->challan_date,
+    'status' => $deliveryChallan->status,
+    'party' => $deliveryChallan->party,
+    'lines' => $deliveryChallan->items,
+    'billingAddress' => $deliveryChallan->billing_address,
+    'shippingAddress' => $deliveryChallan->shipping_address,
+    'subtotal' => $deliveryChallan->subtotal,
+    'discount' => $deliveryChallan->discount_amount,
+    'tax' => $deliveryChallan->tax_amount,
+    'grandTotal' => $deliveryChallan->grand_total,
+    'terms' => trim(($deliveryChallan->terms ?? '')."\nDispatch: ".($deliveryChallan->dispatch_through ?? '')."\nVehicle: ".($deliveryChallan->vehicle_no ?? '')."\nLR: ".($deliveryChallan->lr_no ?? '')),
+    'accent' => '#0f766e',
+])
