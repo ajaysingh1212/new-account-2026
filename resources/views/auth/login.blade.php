@@ -316,7 +316,7 @@
         <div class="login-card">
             <div class="logo-area">
                 <img src="{{ asset('images/logo.png') }}" alt="" width="100px;">
-                <div class="logo-title">Eemot <span>Accounts</span> Pro</div>
+                <div class="logo-title">Eemot <span>Account</span> Pro</div>
                 <div class="logo-subtitle">Sign in to your account</div>
             </div>
 
