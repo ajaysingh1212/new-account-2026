@@ -19,7 +19,7 @@
                     <td>{{ ucfirst($invoice->sale_type) }}</td>
                     <td>Rs {{ number_format((float)$invoice->grand_total,2) }}</td>
                     <td><span class="badge-active">{{ ucfirst($invoice->status) }}</span></td>
-                    <td><a href="{{ route('admin.sales.show',$invoice) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a> @can('sales.print')<a href="{{ route('admin.sales.print',$invoice) }}" target="_blank" class="btn btn-secondary btn-sm"><i class="fas fa-print"></i></a>@endcan</td>
+                    <td><a href="{{ route('admin.sales.show',$invoice) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a> @can('sales.edit')<a href="{{ route('admin.sales.edit',$invoice) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>@endcan @can('sales.print')<a href="{{ route('admin.sales.print',$invoice) }}" target="_blank" class="btn btn-secondary btn-sm"><i class="fas fa-print"></i></a>@endcan</td>
                 </tr>
             @endforeach
             </tbody>

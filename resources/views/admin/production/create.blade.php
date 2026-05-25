@@ -251,6 +251,14 @@
 
             {{-- Apply-all bar --}}
             <div class="apply-bar">
+                <i class="fas fa-id-card" style="color:#7890b5"></i>
+                <label>Buyer</label>
+                <select id="globalBuyer" class="form-control" style="max-width:260px;height:36px">
+                    <option value="" data-code="">Select buyer</option>
+                    @foreach($buyers as $buyer)
+                        <option value="{{ $buyer->id }}" data-code="{{ $buyer->buyer_code }}">{{ $buyer->buyer_code }} | {{ $buyer->name }}</option>
+                    @endforeach
+                </select>
                 <i class="fas fa-warehouse" style="color:#7890b5"></i>
                 <label>Warehouse / Location</label>
                 <input type="text" id="globalWarehouse" class="form-control" style="max-width:260px;height:36px" placeholder="Enter warehouse / storage location for all goods…">
@@ -264,7 +272,7 @@
                     <option value="exclusive">Tax Exclusive</option>
                     <option value="inclusive">Tax Inclusive</option>
                 </select>
-                <button type="button" id="applyGlobal" class="btn" style="background:#f59e0b;color:#111;border-radius:8px;font-weight:700;height:36px;padding:0 18px">Apply</button>
+                <button type="button" id="applyGlobal" class="btn" style="background:#f59e0b;color:#111;border-radius:8px;font-weight:700;height:36px;padding:0 18px">Apply To All</button>
             </div>
 
             {{-- Column headers --}}
@@ -497,7 +505,13 @@ function buildUnitRows(){
             </div>
             <div style="display:grid;grid-template-columns:140px 160px 180px 130px 90px 140px 1fr 80px;gap:8px;align-items:end">
                 <div><small style="color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.6px">Buyer Code</small>
-                    <input class="form-control" style="height:36px;font-size:12px" value="BC-AUTO-${String(i+1).padStart(3,'0')}" readonly></div>
+                    <select name="unit_buyer_id[${i}]" class="form-control unit-buyer" style="height:36px;font-size:12px">
+                        <option value="" data-code="BC-AUTO-${String(i+1).padStart(3,'0')}">Auto</option>
+                        @foreach($buyers as $buyer)
+                            <option value="{{ $buyer->id }}" data-code="{{ $buyer->buyer_code }}">{{ $buyer->buyer_code }} | {{ $buyer->name }}</option>
+                        @endforeach
+                    </select>
+                    <input type="hidden" name="unit_buyer_code[${i}]" class="unit-buyer-code" value="BC-AUTO-${String(i+1).padStart(3,'0')}"></div>
                 <div><small style="color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.6px">Serial No.</small>
                     <input type="text" name="unit_serial[${i}]" class="form-control unit-serial" style="height:36px;font-size:12px" placeholder="Auto or manual"></div>
                 <div><small style="color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.6px">Batch No. (Purchase)</small>
@@ -534,14 +548,22 @@ $('#autoBatches').click(()=>{
 // ── Apply-all bar ─────────────────────────────────────────────
 $('#applyGlobal').click(()=>{
     const wh = $('#globalWarehouse').val();
+    const buyerId = $('#globalBuyer').val();
+    const buyerCode = $('#globalBuyer option:selected').data('code');
     const sp = $('#globalSalePrice').val();
     const gst= $('#globalGst').val();
     const sm = $('#globalSaleMode').val();
+    if(buyerId){ $('.unit-buyer').val(buyerId); $('.unit-buyer-code').val(buyerCode); }
     if(wh) $('.unit-warehouse').val(wh);
     if(sp) $('.unit-sale-price').val(sp);
     if(gst!=='') $('.unit-gst').val(gst);
     $('.unit-sale-mode').val(sm);
     recalcBreakdown();
+});
+
+$(document).on('change','.unit-buyer',function(){
+    const code = $(this).find(':selected').data('code') || '';
+    $(this).closest('.unit-row').find('.unit-buyer-code').val(code);
 });
 
 // ── Per-unit profit + breakdown ────────────────────────────────

@@ -19,7 +19,7 @@
                     <td>{{ ucfirst($bill->purchase_type) }}</td>
                     <td>Rs {{ number_format((float)$bill->grand_total,2) }}</td>
                     <td><span class="badge-active">{{ ucfirst($bill->status) }}</span></td>
-                    <td><a href="{{ route('admin.purchases.show',$bill) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a> @can('purchase.print')<a href="{{ route('admin.purchases.print',$bill) }}" target="_blank" class="btn btn-secondary btn-sm"><i class="fas fa-print"></i></a>@endcan</td>
+                    <td><a href="{{ route('admin.purchases.show',$bill) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a> @can('purchase.edit')<a href="{{ route('admin.purchases.edit',$bill) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>@endcan @can('purchase.print')<a href="{{ route('admin.purchases.print',$bill) }}" target="_blank" class="btn btn-secondary btn-sm"><i class="fas fa-print"></i></a>@endcan</td>
                 </tr>
             @endforeach
             </tbody>

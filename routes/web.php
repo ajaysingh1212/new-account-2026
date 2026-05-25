@@ -8,14 +8,17 @@ use App\Http\Controllers\Admin\Accounts\PartyController;
 use App\Http\Controllers\Admin\Accounts\PartyPaymentController;
 use App\Http\Controllers\Admin\Accounts\SubCostCenterController;
 use App\Http\Controllers\Admin\Inventory\ItemController;
+use App\Http\Controllers\Admin\Inventory\BuyerController;
 use App\Http\Controllers\Admin\Inventory\ProductTypeController;
 use App\Http\Controllers\Admin\Inventory\StockController;
 use App\Http\Controllers\Admin\Production\ProductionBatchController;
 use App\Http\Controllers\Admin\Purchase\PurchaseBillController;
+use App\Http\Controllers\Admin\Purchase\PurchaseReturnController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\Sales\DeliveryChallanController;
 use App\Http\Controllers\Admin\Sales\EstimateController;
 use App\Http\Controllers\Admin\Sales\SalesInvoiceController;
+use App\Http\Controllers\Admin\Sales\SalesReturnController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
@@ -79,17 +82,24 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified'])->group(
         Route::get('stocks/history', [StockController::class, 'history'])->name('stocks.history');
     });
     Route::middleware('permission:production.view')->group(function () {
-        Route::resource('production-batches', ProductionBatchController::class)->only(['index','create','store']);
+        Route::resource('buyers', BuyerController::class)->only(['index','create','store','edit','update']);
+        Route::resource('production-batches', ProductionBatchController::class)->only(['create','store'])->middleware('permission:production.create');
+        Route::resource('production-batches', ProductionBatchController::class)->only(['edit','update'])->middleware('permission:production.create');
+        Route::resource('production-batches', ProductionBatchController::class)->only(['index','show']);
     });
     Route::middleware('permission:purchase.view')->group(function () {
         Route::get('purchases/{purchase}/print', [PurchaseBillController::class, 'print'])->middleware('permission:purchase.print')->name('purchases.print');
         Route::resource('purchases', PurchaseBillController::class)->only(['create','store'])->middleware('permission:purchase.create');
+        Route::resource('purchases', PurchaseBillController::class)->only(['edit','update'])->middleware('permission:purchase.edit');
         Route::resource('purchases', PurchaseBillController::class)->only(['index','show']);
+        Route::resource('purchase-returns', PurchaseReturnController::class)->only(['index','create','store','show']);
     });
     Route::middleware('permission:sales.view')->group(function () {
         Route::get('sales/{sale}/print', [SalesInvoiceController::class, 'print'])->middleware('permission:sales.print')->name('sales.print');
         Route::resource('sales', SalesInvoiceController::class)->only(['create','store'])->middleware('permission:sales.create');
+        Route::resource('sales', SalesInvoiceController::class)->only(['edit','update'])->middleware('permission:sales.edit');
         Route::resource('sales', SalesInvoiceController::class)->only(['index','show']);
+        Route::resource('sales-returns', SalesReturnController::class)->only(['index','create','store','show']);
     });
     Route::middleware('permission:estimates.view')->group(function () {
         Route::get('estimates/{estimate}/print', [EstimateController::class, 'print'])->middleware('permission:estimates.print')->name('estimates.print');
@@ -129,6 +139,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified'])->group(
         Route::get('reports/profit-loss', [ReportController::class, 'profitLoss'])->name('reports.profit-loss');
         Route::get('reports/bill-wise-profit', [ReportController::class, 'billWiseProfit'])->name('reports.bill-wise-profit');
         Route::get('reports/balance-sheet', [ReportController::class, 'balanceSheet'])->name('reports.balance-sheet');
+        Route::get('reports/item-trace', [ReportController::class, 'itemTrace'])->name('reports.item-trace');
     });
     // Stock Transfers (Inventory ke andar)
     Route::middleware('permission:stocks.view')->group(function () {

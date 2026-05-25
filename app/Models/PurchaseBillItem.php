@@ -11,5 +11,6 @@ class PurchaseBillItem extends Model
         'discount_type','discount_value','discount_amount','tax_percent','tax_amount','line_total',
     ];
 
+    public function purchaseBill() { return $this->belongsTo(PurchaseBill::class); }
     public function item() { return $this->belongsTo(Item::class); }
 }

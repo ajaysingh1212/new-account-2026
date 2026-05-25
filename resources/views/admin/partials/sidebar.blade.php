@@ -67,10 +67,11 @@
                 @endif
                 @if($canAnySale)
                     <li class="nav-header">SALE</li>
-                    <li class="nav-item has-treeview {{ request()->routeIs('admin.sales*','admin.estimates*','admin.delivery-challans*') ? 'menu-open' : '' }}">
-                        <a href="#" class="nav-link {{ request()->routeIs('admin.sales*','admin.estimates*','admin.delivery-challans*') ? 'active' : '' }}"><i class="nav-icon fas fa-file-invoice-dollar" style="color:#06B6D4"></i><p>Sale <i class="right fas fa-angle-left"></i></p></a>
+                    <li class="nav-item has-treeview {{ request()->routeIs('admin.sales*','admin.sales-returns*','admin.estimates*','admin.delivery-challans*') ? 'menu-open' : '' }}">
+                        <a href="#" class="nav-link {{ request()->routeIs('admin.sales*','admin.sales-returns*','admin.estimates*','admin.delivery-challans*') ? 'active' : '' }}"><i class="nav-icon fas fa-file-invoice-dollar" style="color:#06B6D4"></i><p>Sale <i class="right fas fa-angle-left"></i></p></a>
                         <ul class="nav nav-treeview">
                             @can('sales.view')<li class="nav-item"><a href="{{ route('admin.sales.index') }}" class="nav-link {{ request()->routeIs('admin.sales*') ? 'active' : '' }}"><i class="fas fa-file-alt nav-icon"></i><p>Sale Invoice</p></a></li>@endcan
+                            @can('sales.view')<li class="nav-item"><a href="{{ route('admin.sales-returns.index') }}" class="nav-link {{ request()->routeIs('admin.sales-returns*') ? 'active' : '' }}"><i class="fas fa-undo nav-icon"></i><p>Sales Return</p></a></li>@endcan
                             @can('party_payments.create')<li class="nav-item"><a href="{{ route('admin.party-payments.create', ['type' => 'payment_in']) }}" class="nav-link"><i class="fas fa-money-bill-wave nav-icon"></i><p>Payment In</p></a></li>@endcan
                             @can('estimates.view')<li class="nav-item"><a href="{{ route('admin.estimates.index') }}" class="nav-link {{ request()->routeIs('admin.estimates*') ? 'active' : '' }}"><i class="fas fa-file-contract nav-icon"></i><p>Estimate Quotation</p></a></li>@endcan
                             @can('delivery_challans.view')<li class="nav-item"><a href="{{ route('admin.delivery-challans.index') }}" class="nav-link {{ request()->routeIs('admin.delivery-challans*') ? 'active' : '' }}"><i class="fas fa-truck nav-icon"></i><p>Delivery Challan</p></a></li>@endcan
@@ -80,10 +81,11 @@
 
                 @if($canAnyPurchase)
                     <li class="nav-header">PURCHASE</li>
-                    <li class="nav-item has-treeview {{ request()->routeIs('admin.purchases*') ? 'menu-open' : '' }}">
-                        <a href="#" class="nav-link {{ request()->routeIs('admin.purchases*') ? 'active' : '' }}"><i class="nav-icon fas fa-shopping-cart" style="color:#EC4899"></i><p>Purchase <i class="right fas fa-angle-left"></i></p></a>
+                    <li class="nav-item has-treeview {{ request()->routeIs('admin.purchases*','admin.purchase-returns*') ? 'menu-open' : '' }}">
+                        <a href="#" class="nav-link {{ request()->routeIs('admin.purchases*','admin.purchase-returns*') ? 'active' : '' }}"><i class="nav-icon fas fa-shopping-cart" style="color:#EC4899"></i><p>Purchase <i class="right fas fa-angle-left"></i></p></a>
                         <ul class="nav nav-treeview">
                             @can('purchase.view')<li class="nav-item"><a href="{{ route('admin.purchases.index') }}" class="nav-link {{ request()->routeIs('admin.purchases*') ? 'active' : '' }}"><i class="fas fa-file-invoice nav-icon"></i><p>Purchase Bill</p></a></li>@endcan
+                            @can('purchase.view')<li class="nav-item"><a href="{{ route('admin.purchase-returns.index') }}" class="nav-link {{ request()->routeIs('admin.purchase-returns*') ? 'active' : '' }}"><i class="fas fa-undo nav-icon"></i><p>Purchase Return</p></a></li>@endcan
                             @can('party_payments.create')<li class="nav-item"><a href="{{ route('admin.party-payments.create', ['type' => 'payment_out']) }}" class="nav-link"><i class="fas fa-hand-holding-usd nav-icon"></i><p>Payment Out</p></a></li>@endcan
                         </ul>
                     </li>
@@ -91,13 +93,14 @@
 
                 @if($canAnyInventory)
                     <li class="nav-header">INVENTORY</li>
-                    <li class="nav-item has-treeview {{ request()->routeIs('admin.items*','admin.product-types*','admin.stocks*','admin.production-batches*') ? 'menu-open' : '' }}">
-                        <a href="#" class="nav-link {{ request()->routeIs('admin.items*','admin.product-types*','admin.stocks*','admin.production-batches*') ? 'active' : '' }}"><i class="nav-icon fas fa-boxes" style="color:#F59E0B"></i><p>Inventory <i class="right fas fa-angle-left"></i></p></a>
+                    <li class="nav-item has-treeview {{ request()->routeIs('admin.items*','admin.product-types*','admin.stocks*','admin.production-batches*','admin.buyers*') ? 'menu-open' : '' }}">
+                        <a href="#" class="nav-link {{ request()->routeIs('admin.items*','admin.product-types*','admin.stocks*','admin.production-batches*','admin.buyers*') ? 'active' : '' }}"><i class="nav-icon fas fa-boxes" style="color:#F59E0B"></i><p>Inventory <i class="right fas fa-angle-left"></i></p></a>
                         <ul class="nav nav-treeview">
                             @can('items.view')<li class="nav-item"><a href="{{ route('admin.items.index') }}" class="nav-link {{ request()->routeIs('admin.items*') ? 'active' : '' }}"><i class="fas fa-box nav-icon"></i><p>Item Master</p></a></li>@endcan
                             @can('product_types.view')<li class="nav-item"><a href="{{ route('admin.product-types.index') }}" class="nav-link {{ request()->routeIs('admin.product-types*') ? 'active' : '' }}"><i class="fas fa-tags nav-icon"></i><p>Product Types</p></a></li>@endcan
                             @can('stocks.view')<li class="nav-item"><a href="{{ route('admin.stocks.index') }}" class="nav-link {{ request()->routeIs('admin.stocks.index') ? 'active' : '' }}"><i class="fas fa-layer-group nav-icon"></i><p>Current Stocks</p></a></li>@endcan
                             @can('stocks.view')<li class="nav-item"><a href="{{ route('admin.stocks.history') }}" class="nav-link {{ request()->routeIs('admin.stocks.history') ? 'active' : '' }}"><i class="fas fa-history nav-icon"></i><p>Stock History</p></a></li>@endcan
+                            @can('production.view')<li class="nav-item"><a href="{{ route('admin.buyers.index') }}" class="nav-link {{ request()->routeIs('admin.buyers*') ? 'active' : '' }}"><i class="fas fa-id-card nav-icon"></i><p>Buyer Master</p></a></li>@endcan
                             @can('stocks.view')
                                 <li class="nav-item">
                                     <a href="{{ route('admin.stock-transfers.index') }}"
@@ -171,6 +174,7 @@
                                 <li class="nav-item"><a href="{{ route('admin.reports.profit-loss') }}" class="nav-link"><i class="fas fa-heart nav-icon"></i><p>Profit And Loss</p></a></li>
                                 <li class="nav-item"><a href="{{ route('admin.reports.bill-wise-profit') }}" class="nav-link"><i class="fas fa-file-invoice nav-icon"></i><p>Bill Wise Profit</p></a></li>
                                 <li class="nav-item"><a href="{{ route('admin.reports.balance-sheet') }}" class="nav-link"><i class="fas fa-balance-scale nav-icon"></i><p>Balance Sheet</p></a></li>
+                                <li class="nav-item"><a href="{{ route('admin.reports.item-trace') }}" class="nav-link"><i class="fas fa-search-location nav-icon"></i><p>Return Trace Report</p></a></li>
                             </ul>
                         </li>
                     @endcan

@@ -8,6 +8,7 @@ use App\Models\Item;
 use App\Models\Party;
 use App\Models\PartyLedger;
 use App\Models\PurchaseBill;
+use App\Models\ProductionBatch;
 use App\Models\SalesInvoice;
 use App\Services\EntryVisibilityService;
 use Carbon\Carbon;
@@ -174,6 +175,50 @@ class ReportController extends Controller
         $parties = $visibility->scopeForUser(Party::query(), Party::class)->get();
         $banks = $visibility->scopeForUser(\App\Models\BankAccount::query(), \App\Models\BankAccount::class)->get();
         return view('admin.reports.balance-sheet', compact('filters','parties','banks'));
+    }
+
+    public function itemTrace(Request $request, EntryVisibilityService $visibility)
+    {
+        $type = $request->input('type', 'invoice');
+        $term = trim((string) $request->input('q', ''));
+        $result = null;
+
+        if ($term !== '') {
+            if ($type === 'invoice') {
+                $result = [
+                    'sales' => $visibility->scopeForUser(
+                        SalesInvoice::with(['party','items.item'])->where('invoice_no', $term),
+                        SalesInvoice::class
+                    )->first(),
+                ];
+            } elseif ($type === 'production') {
+                $result = [
+                    'production' => $visibility->scopeForUser(
+                        ProductionBatch::with('finishedItem.bomMaterials.rawItem')->where('batch_no', $term),
+                        ProductionBatch::class
+                    )->first(),
+                ];
+            } else {
+                $batches = $visibility->scopeForUser(
+                    ProductionBatch::with('finishedItem.bomMaterials.rawItem'),
+                    ProductionBatch::class
+                )->get();
+                $matches = $batches->flatMap(function (ProductionBatch $batch) use ($term) {
+                    return collect($batch->units_data ?? [])
+                        ->filter(fn($unit) => in_array($term, [$unit['buyer_code'] ?? null, $unit['serial_no'] ?? null, $unit['batch_no'] ?? null], true))
+                        ->map(fn($unit, $index) => ['batch' => $batch, 'unit' => $unit, 'key' => $batch->id.'-'.$index]);
+                })->values();
+
+                $sales = SalesInvoice::with(['party','items.item'])
+                    ->whereHas('items', fn($q) => $q->where('selected_units', 'like', '%' . $term . '%'))
+                    ->where('company_id', auth()->user()->current_company_id)
+                    ->get();
+
+                $result = ['unitMatches' => $matches, 'sales' => $sales];
+            }
+        }
+
+        return view('admin.reports.item-trace', compact('type', 'term', 'result'));
     }
 
     private function gstReport(Request $request, EntryVisibilityService $visibility, string $type): array
