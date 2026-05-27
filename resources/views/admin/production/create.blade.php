@@ -4,7 +4,7 @@
 @push('styles')
 <style>
 /* ── Base ── */
-.pb-page{background:#0d111a;border-radius:18px;padding:28px;color:#fff}
+.pb-page{background:#46609a;border-radius:18px;padding:28px;color:#fff}
 /* ── Header ── */
 .pb-head{display:flex;gap:18px;align-items:center;margin-bottom:24px}
 .pb-icon{width:62px;height:62px;border-radius:16px;background:linear-gradient(135deg,#f59e0b,#d97706);display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
