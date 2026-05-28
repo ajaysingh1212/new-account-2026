@@ -51,6 +51,7 @@ class ProductionBatchController extends Controller
             'hsn_code'         => $item->hsn_code,
             'sale_price'       => (float) $item->sale_price,
             'sale_gst_percent' => (float) $item->sale_gst_percent,
+            'requires_gps'      => $this->isGpsItem($item),
             'bom'              => $item->bomMaterials->map(fn($bom) => [
                 'raw_item_id'      => $bom->raw_item_id,
                 'name'             => $bom->rawItem?->name ?? 'Unknown',
@@ -119,6 +120,7 @@ class ProductionBatchController extends Controller
             'unit_buyer_id.*'  => ['nullable','exists:buyers,id'],
             'unit_buyer_code.*'=> ['nullable','string','max:100'],
             'unit_batch.*'     => ['nullable','string','max:100'],
+            'unit_vts_sim.*'   => ['nullable','string','max:100'],
             'unit_sale_price.*'=> ['nullable','numeric','min:0'],
             'unit_gst.*'       => ['nullable','numeric','min:0'],
             'unit_warehouse.*' => ['nullable','string','max:255'],
@@ -129,6 +131,7 @@ class ProductionBatchController extends Controller
             $finished = Item::with('bomMaterials.rawItem')->lockForUpdate()->findOrFail($data['finished_item_id']);
             $qty      = (float) $data['quantity'];
             $rawCost  = 0;
+            $requiresGps = $this->isGpsItem($finished);
 
             // 1. Consume raw materials & validate stock
             foreach ($finished->bomMaterials as $bom) {
@@ -160,11 +163,14 @@ class ProductionBatchController extends Controller
             $unitsData = [];
             $unitCount = (int) $qty;
             for ($i = 0; $i < $unitCount; $i++) {
+                $vtsSim = trim((string) $request->input("unit_vts_sim.{$i}", ''));
+                abort_if($requiresGps && $vtsSim === '', 422, 'VTS/SIM number is required for every GPS finished goods unit.');
                 $unitsData[] = [
                     'buyer_id'   => $request->input("unit_buyer_id.{$i}"),
                     'buyer_code' => $request->input("unit_buyer_code.{$i}") ?: 'BC-AUTO-' . str_pad((string) ($i + 1), 3, '0', STR_PAD_LEFT),
                     'serial_no'  => $request->input("unit_serial.{$i}"),
                     'batch_no'   => $request->input("unit_batch.{$i}"),
+                    'vts_sim'    => $vtsSim ?: null,
                     'sale_price' => $request->input("unit_sale_price.{$i}"),
                     'gst'        => $request->input("unit_gst.{$i}"),
                     'sale_mode'  => $request->input("unit_sale_mode.{$i}", 'exclusive'),
@@ -222,6 +228,7 @@ class ProductionBatchController extends Controller
             'unit_buyer_id.*' => ['nullable','exists:buyers,id'],
             'unit_serial.*' => ['nullable','string','max:100'],
             'unit_batch.*' => ['nullable','string','max:100'],
+            'unit_vts_sim.*' => ['nullable','string','max:100'],
             'unit_sale_price.*' => ['nullable','numeric','min:0'],
             'unit_gst.*' => ['nullable','numeric','min:0'],
             'unit_sale_mode.*' => ['nullable','in:exclusive,inclusive'],
@@ -243,6 +250,7 @@ class ProductionBatchController extends Controller
             $finished = Item::with('bomMaterials.rawItem')->lockForUpdate()->findOrFail($productionBatch->finished_item_id);
             $qty = (float) $data['quantity'];
             $rawCost = 0;
+            $requiresGps = $this->isGpsItem($finished);
 
             foreach ($finished->bomMaterials as $bom) {
                 $raw = Item::lockForUpdate()->findOrFail($bom->raw_item_id);
@@ -266,11 +274,14 @@ class ProductionBatchController extends Controller
 
             $unitsData = [];
             for ($i = 0; $i < (int) $qty; $i++) {
+                $vtsSim = trim((string) $request->input("unit_vts_sim.{$i}", ''));
+                abort_if($requiresGps && $vtsSim === '', 422, 'VTS/SIM number is required for every GPS finished goods unit.');
                 $unitsData[] = [
                     'buyer_code' => $request->input("unit_buyer_code.{$i}") ?: 'BC-AUTO-' . str_pad((string) ($i + 1), 3, '0', STR_PAD_LEFT),
                     'buyer_id' => $request->input("unit_buyer_id.{$i}"),
                     'serial_no' => $request->input("unit_serial.{$i}"),
                     'batch_no' => $request->input("unit_batch.{$i}"),
+                    'vts_sim' => $vtsSim ?: null,
                     'sale_price' => $request->input("unit_sale_price.{$i}"),
                     'gst' => $request->input("unit_gst.{$i}"),
                     'sale_mode' => $request->input("unit_sale_mode.{$i}", 'exclusive'),
@@ -380,5 +391,17 @@ class ProductionBatchController extends Controller
     {
         $count = ProductionBatch::where('company_id', auth()->user()->current_company_id)->count() + 1;
         return 'PB-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
+    }
+
+    private function isGpsItem(Item $item): bool
+    {
+        return str_contains(strtolower(implode(' ', array_filter([
+            $item->name,
+            $item->item_code,
+            $item->sku,
+            $item->brand,
+            $item->model,
+            $item->description,
+        ]))), 'gps');
     }
 }

@@ -3,7 +3,7 @@
 
 @push('styles')
 <style>
-.prod-shell{background:#fff;border:1px solid #e8edf5;border-radius:8px;box-shadow:0 16px 36px rgba(15,23,42,.08);overflow:hidden}.prod-head{background:#1f2937;color:#fff;padding:22px 24px;display:flex;justify-content:space-between;align-items:center}.prod-head h2{font-weight:800;margin:0;font-size:24px}.prod-section{padding:20px 24px;border-bottom:1px solid #edf1f7}.unit-grid{display:grid;grid-template-columns:60px 140px 150px 170px 120px 90px 120px 1fr;gap:8px;align-items:end}.unit-row{border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:10px;background:#fbfdff}.unit-row.sold{background:#fff7ed;border-color:#fed7aa}.unit-head{font-size:11px;text-transform:uppercase;color:#667085;font-weight:800}.form-control{border-radius:6px}
+.prod-shell{background:#fff;border:1px solid #e8edf5;border-radius:8px;box-shadow:0 16px 36px rgba(15,23,42,.08);overflow:hidden}.prod-head{background:#1f2937;color:#fff;padding:22px 24px;display:flex;justify-content:space-between;align-items:center}.prod-head h2{font-weight:800;margin:0;font-size:24px}.prod-section{padding:20px 24px;border-bottom:1px solid #edf1f7}.unit-grid{display:grid;grid-template-columns:60px 140px 150px 170px 150px 120px 90px 120px 1fr;gap:8px;align-items:end}.unit-row{border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:10px;background:#fbfdff}.unit-row.sold{background:#fff7ed;border-color:#fed7aa}.unit-head{font-size:11px;text-transform:uppercase;color:#667085;font-weight:800}.form-control{border-radius:6px}
 @media(max-width:992px){.unit-grid{grid-template-columns:1fr 1fr}}
 </style>
 @endpush
@@ -38,7 +38,7 @@
             <b>Individual Finished Goods</b>
             <button type="button" class="btn btn-outline-primary btn-sm" id="syncRows"><i class="fas fa-sync mr-1"></i>Sync Rows With Qty</button>
         </div>
-<div class="unit-grid unit-head mb-2"><span>#</span><span>Buyer Code</span><span>Serial No.</span><span>Batch No.</span><span>Sale Price</span><span>GST</span><span>Mode</span><span>Warehouse / Notes</span></div>
+<div class="unit-grid unit-head mb-2"><span>#</span><span>Buyer Code</span><span>Serial No.</span><span>Batch No.</span><span>VTS/SIM No.</span><span>Sale Price</span><span>GST</span><span>Mode</span><span>Warehouse / Notes</span></div>
         <div id="unitRows"></div>
     </div>
 
@@ -58,6 +58,7 @@ function unitRow(i, unit={}){let sold=SOLD_KEYS.includes(`${BATCH_ID}-${i}`);ret
 <div><label>Buyer Code</label><input name="unit_buyer_code[${i}]" class="form-control" value="${unit.buyer_code||('BC-AUTO-'+String(i+1).padStart(3,'0'))}" ${sold?'readonly':''}><input type="hidden" name="unit_buyer_id[${i}]" value="${unit.buyer_id||''}"></div>
 <div><label>Serial No.</label><input name="unit_serial[${i}]" class="form-control" value="${unit.serial_no||''}" ${sold?'readonly':''}></div>
 <div><label>Batch No. (Purchase)</label><input name="unit_batch[${i}]" class="form-control" value="${unit.batch_no||''}" ${sold?'readonly':''}></div>
+<div><label>VTS/SIM No.</label><input name="unit_vts_sim[${i}]" class="form-control" value="${unit.vts_sim||''}" ${sold?'readonly':''}></div>
 <div><label>Sale Price</label><input type="number" step="0.01" name="unit_sale_price[${i}]" class="form-control" value="${unit.sale_price||0}"></div>
 <div><label>GST</label><input type="number" step="0.01" name="unit_gst[${i}]" class="form-control" value="${unit.gst||0}"></div>
 <div><label>Mode</label><select name="unit_sale_mode[${i}]" class="form-control"><option value="exclusive" ${(unit.sale_mode||'exclusive')==='exclusive'?'selected':''}>Exclusive</option><option value="inclusive" ${unit.sale_mode==='inclusive'?'selected':''}>Inclusive</option></select></div>

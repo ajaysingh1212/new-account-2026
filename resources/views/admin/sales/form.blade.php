@@ -58,6 +58,21 @@
             <div class="col-md-3 form-group"><label>Phone</label><input name="phone" class="form-control" value="{{ old('phone',$invoice->phone ?? '') }}"></div>
             <div class="col-md-3 form-group"><label>Attachment</label><input type="file" name="attachment" class="form-control">@if($isEdit && $invoice->attachment)<small><a target="_blank" href="{{ asset('storage/'.$invoice->attachment) }}">Current attachment</a></small>@endif</div>
         </div>
+        @if($mergedCompanies->count())
+        <div class="border rounded p-3 mt-2">
+            <label class="mb-2"><input type="checkbox" name="inter_company_transfer" value="1" id="interCompanyTransfer" @checked(old('inter_company_transfer', $invoice->inter_company_transfer ?? false))> Auto purchase in merged company</label>
+            <div id="mergedCompanyBox" class="row" style="display:none">
+                @foreach($mergedCompanies as $company)
+                    <div class="col-md-4">
+                        <label class="d-block border rounded p-2">
+                            <input type="checkbox" name="target_company_ids[]" value="{{ $company->id }}" @checked(in_array($company->id, old('target_company_ids', $invoice->inter_company_target_company_ids ?? [])))>
+                            <strong>{{ $company->name }}</strong><br><small>{{ $company->phone ?: 'No phone' }} | GST {{ $company->gst_number ?: '-' }}</small>
+                        </label>
+                    </div>
+                @endforeach
+            </div>
+        </div>
+        @endif
     </div>
 
     <div class="trade-section">
@@ -106,7 +121,7 @@
 
 <template id="lineTpl">
 <tr>
-    <td class="item-cell" data-label="Item"><select name="item_id[]" class="form-control item-select wide-select" required><option value="">Select finished goods</option>@foreach($items as $it)<option value="{{ $it->id }}" data-unit="{{ $it->unit }}" data-price="{{ $it->sale_price }}" data-tax="{{ $it->sale_gst_percent }}">{{ $it->name }} | {{ $it->item_code }} | Stock {{ $it->current_stock }}</option>@endforeach</select></td>
+    <td class="item-cell" data-label="Item"><select name="item_id[]" class="form-control item-select wide-select" required><option value="">Select finished goods</option>@foreach($items as $it)<option value="{{ $it->id }}" data-unit="{{ $it->unit }}" data-price="{{ $it->sale_price }}" data-tax="{{ $it->sale_gst_percent }}" data-gps="{{ str_contains(strtolower(implode(' ', array_filter([$it->name, $it->item_code, $it->sku, $it->brand, $it->model, $it->description]))), 'gps') ? 1 : 0 }}">{{ $it->name }} | {{ $it->item_code }} | Stock {{ $it->current_stock }}</option>@endforeach</select></td>
     <td class="desc-cell" data-label="Description"><input name="description[]" class="form-control"></td>
     <td class="num-cell" data-label="Qty"><input type="number" step="1" min="1" name="quantity[]" class="form-control line-qty" value="1" required></td>
     <td data-label="Serial Selection"><button type="button" class="btn btn-outline-info icon-btn choose-units" title="Select serials"><i class="fas fa-barcode"></i></button><input type="hidden" name="selected_units[]" class="selected-units-json"><div class="selected-units mt-1"></div></td>
@@ -122,16 +137,17 @@
 <script>
 const UNIT_POOL = @json($unitPool);
 const PREFILL_LINES = @json($lines->values());
+const ITEM_META = @json($itemMeta);
 let activeRow = null;
 let activeFilter = 'available';
 
 function money(n){return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function rowSelected($row){try{return JSON.parse($row.find('.selected-units-json').val()||'[]')}catch(e){return []}}
-function setRowSelected($row, units){$row.find('.selected-units-json').val(JSON.stringify(units));$row.find('.selected-units').html(units.map(u=>`<span class="selected-pill">${u.serial_no||'No serial'} <small>${u.production_batch_no||''}</small></span>`).join(''));calc()}
-function autoSelectUnits($row){let itemId=$row.find('[name="item_id[]"]').val(),qty=parseInt($row.find('[name="quantity[]"]').val())||1;if(!itemId)return;let used=[];$('#lineTable tbody tr').not($row).each(function(){used=used.concat(rowSelected($(this)).map(u=>u.key))});let units=(UNIT_POOL[itemId]||[]).filter(u=>!u.sold&&!used.includes(u.key)).slice(0,qty);setRowSelected($row,units)}
+function setRowSelected($row, units){$row.find('.selected-units-json').val(JSON.stringify(units));$row.find('.selected-units').html(units.map(u=>`<span class="selected-pill">${u.serial_no||'No serial'}${u.vts_sim?' / '+u.vts_sim:''} <small>${u.production_batch_no||''}</small></span>`).join(''));calc()}
+function autoSelectUnits($row){let itemId=$row.find('[name="item_id[]"]').val(),qty=parseInt($row.find('[name="quantity[]"]').val())||1;if(!itemId)return;let used=[];$('#lineTable tbody tr').not($row).each(function(){used=used.concat(rowSelected($(this)).map(u=>u.key))});let requiresGps=ITEM_META[itemId]&&ITEM_META[itemId].requires_gps;let units=(UNIT_POOL[itemId]||[]).filter(u=>!u.sold&&!used.includes(u.key)&&(!requiresGps||u.vts_sim)).slice(0,qty);setRowSelected($row,units)}
 function calc(){let sub=0,tax=0;$('#lineTable tbody tr').each(function(){let r=$(this),q=+r.find('[name="quantity[]"]').val()||0,p=+r.find('[name="unit_price[]"]').val()||0,d=+r.find('[name="discount_value[]"]').val()||0,dt=r.find('[name="discount_type[]"]').val(),tx=+r.find('[name="tax_percent[]"]').val()||0,b=q*p,da=dt==='flat'?d:b*d/100;sub+=b;tax+=Math.max(0,b-da)*tx/100});let od=+$('[name="discount_amount"]').val()||0;$('#uiSubtotal').text(money(sub));$('#uiTax').text(money(tax));$('#uiTotal').text(money(Math.max(0,sub-od+tax)))}
 function addLine(data={}){let $row=$($('#lineTpl').html());$('#lineTable tbody').append($row);if(data.item_id){$row.find('[name="item_id[]"]').val(data.item_id).trigger('change')}['description','quantity','unit','unit_price','discount_type','discount_value','tax_percent'].forEach(k=>$row.find(`[name="${k}[]"]`).val(data[k]??$row.find(`[name="${k}[]"]`).val()));setRowSelected($row,data.selected_units||[]);calc()}
-function renderDrawer(){if(!activeRow)return;let itemId=activeRow.find('[name="item_id[]"]').val(),qty=parseInt(activeRow.find('[name="quantity[]"]').val())||1,selected=rowSelected(activeRow),selectedKeys=selected.map(u=>u.key),units=UNIT_POOL[itemId]||[];$('#drawerTitle').text(activeRow.find('.item-select option:selected').text()||'Finished Goods Units');$('#drawerHint').text(`Select ${qty} unit(s). ${selected.length} selected.`);let filtered=units.filter(u=>activeFilter==='all'||(activeFilter==='sold'&&u.sold)||(activeFilter==='selected'&&selectedKeys.includes(u.key))||(activeFilter==='available'&&!u.sold));$('#unitList').html(filtered.map(u=>{let checked=selectedKeys.includes(u.key),disabled=u.sold&&!checked;return `<label class="unit-card ${u.sold?'sold':''} ${checked?'selected':''}"><input type="checkbox" class="unit-check" data-key="${u.key}" ${checked?'checked':''} ${disabled?'disabled':''}><span><b>${u.serial_no||'No serial'} / ${u.batch_no||'No purchase batch'}</b><div class="unit-meta">Buyer ${u.buyer_code||'-'} | Production ${u.production_batch_no||'-'} | ${u.production_date||'-'}</div><div class="unit-meta">${u.sold?'Sold':'Available'} | Warehouse ${u.warehouse||'-'} | Cost ${money(u.cost_per_unit)}</div></span></label>`}).join('')||'<div class="text-muted p-3">No units found for this filter.</div>')}
+function renderDrawer(){if(!activeRow)return;let itemId=activeRow.find('[name="item_id[]"]').val(),qty=parseInt(activeRow.find('[name="quantity[]"]').val())||1,selected=rowSelected(activeRow),selectedKeys=selected.map(u=>u.key),units=UNIT_POOL[itemId]||[];$('#drawerTitle').text(activeRow.find('.item-select option:selected').text()||'Finished Goods Units');$('#drawerHint').text(`Select ${qty} unit(s). ${selected.length} selected.`);let filtered=units.filter(u=>activeFilter==='all'||(activeFilter==='sold'&&u.sold)||(activeFilter==='selected'&&selectedKeys.includes(u.key))||(activeFilter==='available'&&!u.sold));$('#unitList').html(filtered.map(u=>{let checked=selectedKeys.includes(u.key),disabled=u.sold&&!checked;return `<label class="unit-card ${u.sold?'sold':''} ${checked?'selected':''}"><input type="checkbox" class="unit-check" data-key="${u.key}" ${checked?'checked':''} ${disabled?'disabled':''}><span><b>${u.serial_no||'No serial'} / ${u.batch_no||'No purchase batch'}</b><div class="unit-meta">VTS/SIM ${u.vts_sim||'-'} | Buyer ${u.buyer_code||'-'} | Production ${u.production_batch_no||'-'} | ${u.production_date||'-'}</div><div class="unit-meta">${u.sold?'Sold':'Available'} | Warehouse ${u.warehouse||'-'} | Cost ${money(u.cost_per_unit)}</div></span></label>`}).join('')||'<div class="text-muted p-3">No units found for this filter.</div>')}
 function openDrawer($row){activeRow=$row;activeFilter='available';$('.unit-filter').removeClass('btn-primary').addClass('btn-outline-secondary');$('.unit-filter[data-filter="available"]').addClass('btn-primary').removeClass('btn-outline-secondary');$('#unitDrawer,#unitBackdrop').addClass('open');renderDrawer()}
 
 $('#addLine').click(()=>addLine());
@@ -140,7 +156,8 @@ $(document).on('click','.remove-row',function(){$(this).closest('tr').remove();c
 $(document).on('change','.item-select',function(){let o=$(this).find(':selected'),r=$(this).closest('tr');r.find('[name="unit[]"]').val(o.data('unit'));r.find('[name="unit_price[]"]').val(o.data('price'));r.find('[name="tax_percent[]"]').val(o.data('tax'));autoSelectUnits(r);calc()});
 $(document).on('click','.choose-units',function(){openDrawer($(this).closest('tr'))});
 $(document).on('change','.line-qty',function(){autoSelectUnits($(this).closest('tr'));});
-$(document).on('change','.unit-check',function(){let selected=rowSelected(activeRow),units=UNIT_POOL[activeRow.find('[name="item_id[]"]').val()]||[],unit=units.find(u=>u.key===$(this).data('key')),qty=parseInt(activeRow.find('[name="quantity[]"]').val())||1;if(this.checked){if(selected.length>=qty){this.checked=false;alert(`You can select only ${qty} unit(s).`);return}selected.push(unit)}else{selected=selected.filter(u=>u.key!==$(this).data('key'))}setRowSelected(activeRow,selected);renderDrawer()});
+$(document).on('change','.unit-check',function(){let selected=rowSelected(activeRow),itemId=activeRow.find('[name="item_id[]"]').val(),units=UNIT_POOL[itemId]||[],unit=units.find(u=>u.key===$(this).data('key')),qty=parseInt(activeRow.find('[name="quantity[]"]').val())||1;if(this.checked){if(selected.length>=qty){this.checked=false;alert(`You can select only ${qty} unit(s).`);return}if(ITEM_META[itemId]&&ITEM_META[itemId].requires_gps&&!unit.vts_sim&&!confirm('Aap GPS product select kiye hain, lekin is unit me SIM/VTS number nahi hai. Kya aap isko select karna chahte hain?')){this.checked=false;return}selected.push(unit)}else{selected=selected.filter(u=>u.key!==$(this).data('key'))}setRowSelected(activeRow,selected);renderDrawer()});
+$('#interCompanyTransfer').on('change',function(){$('#mergedCompanyBox').toggle(this.checked)}).trigger('change');
 $('.unit-filter').click(function(){activeFilter=$(this).data('filter');$('.unit-filter').removeClass('btn-primary').addClass('btn-outline-secondary');$(this).addClass('btn-primary').removeClass('btn-outline-secondary');renderDrawer()});
 $('#closeDrawer,#unitBackdrop').click(()=>$('#unitDrawer,#unitBackdrop').removeClass('open'));
 

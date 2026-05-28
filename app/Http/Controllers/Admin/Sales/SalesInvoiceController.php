@@ -5,9 +5,14 @@ namespace App\Http\Controllers\Admin\Sales;
 use App\Http\Controllers\Controller;
 use App\Models\CostCenter;
 use App\Models\AuditLog;
+use App\Models\Company;
+use App\Models\CompanyMerge;
 use App\Models\Item;
 use App\Models\Party;
 use App\Models\ProductionBatch;
+use App\Models\ProductType;
+use App\Models\PurchaseBill;
+use App\Models\PurchaseBillItem;
 use App\Models\SalesInvoice;
 use App\Models\SalesInvoiceItem;
 use App\Models\SubCostCenter;
@@ -63,6 +68,9 @@ class SalesInvoiceController extends Controller
             'item_id.*' => ['required','exists:items,id'],
             'quantity.*' => ['required','numeric','min:0.001'],
             'unit_price.*' => ['required','numeric','min:0'],
+            'inter_company_transfer' => ['nullable','boolean'],
+            'target_company_ids' => ['nullable','array'],
+            'target_company_ids.*' => ['integer'],
         ]);
 
         DB::transaction(function () use ($request, $data, $accounting, $visibility) {
@@ -74,6 +82,8 @@ class SalesInvoiceController extends Controller
                 'invoice_no' => $data['invoice_no'] ?: $this->nextNo(),
                 'attachment' => $attachment,
                 'created_by' => auth()->id(),
+                'inter_company_transfer' => $request->boolean('inter_company_transfer'),
+                'inter_company_target_company_ids' => $request->boolean('inter_company_transfer') ? $this->validatedTargetCompanyIds($request, auth()->user()->current_company_id) : null,
             ]));
             $totals = $this->storeLines($request, $invoice, $accounting);
             $invoice->update($totals);
@@ -92,6 +102,10 @@ class SalesInvoiceController extends Controller
             }
 
             $visibility->syncFromRequest($request, $invoice);
+
+            if ($invoice->inter_company_transfer) {
+                $this->createInterCompanyPurchases($invoice->fresh(['items.item', 'party']), $accounting);
+            }
         });
 
         return redirect()->route('admin.sales.index')->with('success', 'Sales invoice posted with stock and party ledger.');
@@ -118,6 +132,8 @@ class SalesInvoiceController extends Controller
             $sale->update(array_merge($data, [
                 'invoice_no' => $data['invoice_no'] ?: $sale->invoice_no,
                 'attachment' => $attachment,
+                'inter_company_transfer' => $request->boolean('inter_company_transfer'),
+                'inter_company_target_company_ids' => $request->boolean('inter_company_transfer') ? $this->validatedTargetCompanyIds($request, $sale->company_id) : null,
             ]));
 
             $totals = $this->storeLines($request, $sale, $accounting);
@@ -137,6 +153,9 @@ class SalesInvoiceController extends Controller
             }
 
             $visibility->syncFromRequest($request, $sale);
+            if ($sale->inter_company_transfer) {
+                $this->createInterCompanyPurchases($sale->fresh(['items.item', 'party']), $accounting);
+            }
             $this->logUpdate($sale, $oldValues, $sale->fresh('items')->toArray());
         });
 
@@ -178,6 +197,13 @@ class SalesInvoiceController extends Controller
             'subCostCenters' => SubCostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
             'invoiceNo' => $invoice?->invoice_no ?? $this->nextNo(),
             'unitPool' => $this->finishedGoodsUnitPool($companyId, $invoice?->id),
+            'itemMeta' => $items->mapWithKeys(fn(Item $item) => [
+                $item->id => ['requires_gps' => $this->isGpsItem($item)],
+            ])->all(),
+            'mergedCompanies' => Company::whereIn('id', CompanyMerge::getMergedCompanyIds($companyId))
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->get(['id','name','phone','gst_number']),
         ];
     }
 
@@ -203,6 +229,9 @@ class SalesInvoiceController extends Controller
             'quantity.*' => ['required','numeric','min:0.001'],
             'unit_price.*' => ['required','numeric','min:0'],
             'selected_units.*' => ['nullable','string'],
+            'inter_company_transfer' => ['nullable','boolean'],
+            'target_company_ids' => ['nullable','array'],
+            'target_company_ids.*' => ['integer'],
         ]);
     }
 
@@ -217,6 +246,7 @@ class SalesInvoiceController extends Controller
             abort_if($item->productType?->nature !== 'finished_goods', 422, 'Only finished goods can be sold from Sales.');
 
             $selectedUnits = $this->decodeSelectedUnits($request->selected_units[$i] ?? null);
+            abort_if($this->isGpsItem($item) && collect($selectedUnits)->contains(fn($unit) => empty($unit['vts_sim'])), 422, "VTS/SIM number is required for selected GPS units of {$item->name}.");
             $selectedKeys = collect($selectedUnits)->pluck('key')->filter()->values()->all();
             abort_if(count($selectedKeys) !== (int) $qty || (float) ((int) $qty) !== $qty, 422, "Select exactly {$qty} finished goods unit(s) for {$item->name}.");
             $availableKeys = collect($unitPool[$item->id] ?? [])->where('sold', false)->pluck('key')->all();
@@ -317,7 +347,7 @@ class SalesInvoiceController extends Controller
             ->filter()
             ->all();
 
-        return ProductionBatch::with('finishedItem')
+        $producedUnits = ProductionBatch::with('finishedItem')
             ->where('company_id', $companyId)
             ->get()
             ->flatMap(function (ProductionBatch $batch) use ($soldKeys) {
@@ -337,12 +367,221 @@ class SalesInvoiceController extends Controller
             ->groupBy('item_id')
             ->map(fn($rows) => $rows->values()->all())
             ->all();
+
+        $purchasedUnits = $this->purchasedFinishedGoodsUnitPool($companyId, $soldKeys);
+        foreach ($purchasedUnits as $itemId => $rows) {
+            $producedUnits[$itemId] = array_values(array_merge($producedUnits[$itemId] ?? [], $rows));
+        }
+
+        return $producedUnits;
+    }
+
+    private function purchasedFinishedGoodsUnitPool(int $companyId, array $soldKeys): array
+    {
+        return PurchaseBillItem::with(['purchaseBill', 'item.productType'])
+            ->whereHas('purchaseBill', fn($q) => $q->where('company_id', $companyId))
+            ->whereHas('item.productType', fn($q) => $q->where('nature', 'finished_goods'))
+            ->get()
+            ->flatMap(function (PurchaseBillItem $line) use ($soldKeys) {
+                return collect($line->selected_units ?? [])->map(function ($unit, $index) use ($line, $soldKeys) {
+                    $key = 'PBI-' . $line->id . '-' . $index;
+                    return array_merge($unit, [
+                        'key' => $key,
+                        'item_id' => $line->item_id,
+                        'item_name' => $line->item?->name,
+                        'production_batch_no' => $unit['production_batch_no'] ?? $line->purchaseBill?->invoice_no,
+                        'production_date' => $line->purchaseBill?->billing_date?->format('Y-m-d'),
+                        'cost_per_unit' => (float) $line->unit_price,
+                        'sold' => in_array($key, $soldKeys, true),
+                    ]);
+                });
+            })
+            ->groupBy('item_id')
+            ->map(fn($rows) => $rows->values()->all())
+            ->all();
     }
 
     private function decodeSelectedUnits(?string $json): array
     {
         $units = json_decode($json ?: '[]', true);
         return is_array($units) ? array_values($units) : [];
+    }
+
+    private function validatedTargetCompanyIds(Request $request, int $companyId): array
+    {
+        $allowed = CompanyMerge::getMergedCompanyIds($companyId);
+        $selected = array_values(array_unique(array_map('intval', $request->input('target_company_ids', []))));
+        abort_if(empty($selected), 422, 'Select at least one merged company for inter-company sale.');
+        abort_if(count(array_diff($selected, $allowed)) > 0, 422, 'Selected company is not merged with current company.');
+        return $selected;
+    }
+
+    private function createInterCompanyPurchases(SalesInvoice $invoice, AccountingService $accounting): void
+    {
+        $sourceCompany = Company::findOrFail($invoice->company_id);
+
+        foreach ($invoice->inter_company_target_company_ids ?? [] as $targetCompanyId) {
+            if (PurchaseBill::where('company_id', $targetCompanyId)->where('source_sales_invoice_id', $invoice->id)->exists()) {
+                continue;
+            }
+
+            $targetParty = $this->supplierPartyForCompany($targetCompanyId, $sourceCompany);
+            $purchase = PurchaseBill::create([
+                'company_id' => $targetCompanyId,
+                'party_id' => $targetParty->id,
+                'purchase_type' => 'credit',
+                'invoice_no' => $this->nextInterCompanyPurchaseNo($targetCompanyId, $invoice),
+                'supplier_bill_no' => $invoice->invoice_no,
+                'billing_date' => $invoice->billing_date,
+                'purchase_bill_date' => $invoice->billing_date,
+                'reference_no' => 'Auto purchase from sale ' . $invoice->invoice_no,
+                'phone' => $invoice->phone ?: $sourceCompany->phone,
+                'billing_address' => $sourceCompany->address,
+                'shipping_address' => $sourceCompany->address,
+                'subtotal' => $invoice->subtotal,
+                'discount_amount' => $invoice->discount_amount,
+                'tax_amount' => $invoice->tax_amount,
+                'grand_total' => $invoice->grand_total,
+                'notes' => trim(($invoice->notes ?: '') . "\nInter-company purchase auto-created from {$sourceCompany->name} sale {$invoice->invoice_no}."),
+                'terms' => $invoice->terms,
+                'status' => 'posted',
+                'created_by' => auth()->id(),
+                'source_sales_invoice_id' => $invoice->id,
+                'inter_company_source_company_id' => $invoice->company_id,
+            ]);
+
+            foreach ($invoice->items as $line) {
+                $targetItem = $this->targetItemForSaleLine($line->item, $targetCompanyId);
+                $purchaseLine = PurchaseBillItem::create([
+                    'purchase_bill_id' => $purchase->id,
+                    'item_id' => $targetItem->id,
+                    'description' => $line->description,
+                    'quantity' => $line->quantity,
+                    'unit' => $line->unit,
+                    'unit_price' => $line->unit_price,
+                    'discount_type' => $line->discount_type,
+                    'discount_value' => $line->discount_value,
+                    'discount_amount' => $line->discount_amount,
+                    'tax_percent' => $line->tax_percent,
+                    'tax_amount' => $line->tax_amount,
+                    'line_total' => $line->line_total,
+                    'selected_units' => $line->selected_units,
+                ]);
+
+                $accounting->moveStock($targetItem, [
+                    'party_id' => $targetParty->id,
+                    'movement_date' => $purchase->billing_date,
+                    'movement_type' => 'inter_company_purchase',
+                    'direction' => 'in',
+                    'quantity' => (float) $purchaseLine->quantity,
+                    'unit_price' => $purchaseLine->unit_price,
+                    'total_value' => $purchaseLine->line_total,
+                    'reference_type' => PurchaseBill::class,
+                    'reference_id' => $purchase->id,
+                    'reference_no' => $purchase->invoice_no,
+                    'description' => 'Auto purchase stock in from inter-company sale.',
+                ]);
+            }
+
+            $accounting->postPartyLedger($targetParty, [
+                'entry_date' => $purchase->billing_date,
+                'entry_type' => 'purchase',
+                'reference_type' => PurchaseBill::class,
+                'reference_id' => $purchase->id,
+                'reference_no' => $purchase->invoice_no,
+                'credit' => $purchase->grand_total,
+                'debit' => 0,
+                'description' => 'Auto inter-company purchase payable.',
+            ]);
+        }
+    }
+
+    private function supplierPartyForCompany(int $targetCompanyId, Company $sourceCompany): Party
+    {
+        return Party::firstOrCreate(
+            ['company_id' => $targetCompanyId, 'party_code' => 'CO-' . $sourceCompany->id],
+            [
+                'party_type' => 'supplier',
+                'display_name' => $sourceCompany->name,
+                'legal_name' => $sourceCompany->name,
+                'email' => $sourceCompany->email,
+                'phone' => $sourceCompany->phone,
+                'gstin' => $sourceCompany->gst_number,
+                'pan_number' => $sourceCompany->pan_number,
+                'billing_address' => $sourceCompany->address,
+                'shipping_address' => $sourceCompany->address,
+                'country' => 'India',
+                'status' => 'active',
+                'created_by' => auth()->id(),
+            ]
+        );
+    }
+
+    private function targetItemForSaleLine(Item $sourceItem, int $targetCompanyId): Item
+    {
+        $productType = ProductType::firstOrCreate(
+            ['company_id' => $targetCompanyId, 'code' => 'FINISHED'],
+            ['name' => 'Finished Goods', 'nature' => 'finished_goods', 'status' => 'active']
+        );
+
+        $defaults = [
+            'product_type_id' => $productType->id,
+            'item_type' => $sourceItem->item_type,
+            'hsn_code' => $sourceItem->hsn_code,
+            'barcode' => $sourceItem->barcode,
+            'qr_code' => $sourceItem->qr_code,
+            'name' => $sourceItem->name,
+            'sku' => $sourceItem->sku,
+            'unit' => $sourceItem->unit,
+            'brand' => $sourceItem->brand,
+            'model' => $sourceItem->model,
+            'size' => $sourceItem->size,
+            'color' => $sourceItem->color,
+            'description' => $sourceItem->description,
+            'purchase_price' => $sourceItem->purchase_price,
+            'purchase_tax_inclusive' => $sourceItem->purchase_tax_inclusive,
+            'purchase_gst_percent' => $sourceItem->purchase_gst_percent,
+            'sale_price' => $sourceItem->sale_price,
+            'sale_tax_inclusive' => $sourceItem->sale_tax_inclusive,
+            'sale_gst_percent' => $sourceItem->sale_gst_percent,
+            'track_stock' => true,
+            'status' => 'active',
+            'created_by' => auth()->id(),
+        ];
+
+        $item = Item::firstOrCreate(
+            ['company_id' => $targetCompanyId, 'item_code' => $sourceItem->item_code],
+            $defaults
+        );
+
+        if ($item->product_type_id !== $productType->id) {
+            $item->update(['product_type_id' => $productType->id, 'track_stock' => true, 'status' => 'active']);
+        }
+
+        return $item;
+    }
+
+    private function nextInterCompanyPurchaseNo(int $targetCompanyId, SalesInvoice $invoice): string
+    {
+        $base = substr('IC-' . $invoice->invoice_no, 0, 20);
+        if (!PurchaseBill::where('company_id', $targetCompanyId)->where('invoice_no', $base)->withTrashed()->exists()) {
+            return $base;
+        }
+
+        $suffix = PurchaseBill::where('company_id', $targetCompanyId)->withTrashed()->count() + 1;
+        return substr('IC-' . $invoice->invoice_no . '-' . $suffix, 0, 20);
+    }
+
+    private function isGpsItem(Item $item): bool
+    {
+        return str_contains(strtolower(implode(' ', array_filter([
+            $item->name,
+            $item->item_code,
+            $item->sku,
+            $item->brand,
+            $item->model,
+            $item->description,
+        ]))), 'gps');
     }
 
     private function logUpdate(SalesInvoice $invoice, array $oldValues, array $newValues): void

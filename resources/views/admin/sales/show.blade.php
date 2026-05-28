@@ -21,7 +21,7 @@
                 <tr>
                     <td>{{ $line->item?->name }}</td>
                     <td>{{ $line->quantity }}</td>
-                    <td>@foreach(($line->selected_units ?? []) as $unit)<span class="badge badge-info mr-1">{{ $unit['serial_no'] ?? 'No serial' }} / {{ $unit['batch_no'] ?? '-' }}</span>@endforeach</td>
+                    <td>@foreach(($line->selected_units ?? []) as $unit)<span class="badge badge-info mr-1">{{ $unit['serial_no'] ?? 'No serial' }} / {{ $unit['batch_no'] ?? '-' }}@if(!empty($unit['vts_sim'])) / {{ $unit['vts_sim'] }}@endif</span>@endforeach</td>
                     <td>Rs {{ number_format((float)$line->unit_price,2) }}</td>
                     <td>Rs {{ number_format((float)$line->tax_amount,2) }}</td>
                     <td>Rs {{ number_format((float)$line->line_total,2) }}</td>

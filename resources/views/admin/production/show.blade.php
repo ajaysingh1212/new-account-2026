@@ -19,7 +19,7 @@
         </div>
         <div class="table-responsive">
             <table class="table table-hover">
-                <thead><tr><th>#</th><th>Buyer Code</th><th>Serial No.</th><th>Batch No. (Purchase)</th><th>Sale Price</th><th>GST</th><th>Warehouse</th><th>Notes</th></tr></thead>
+                <thead><tr><th>#</th><th>Buyer Code</th><th>Serial No.</th><th>Batch No. (Purchase)</th><th>VTS/SIM No.</th><th>Sale Price</th><th>GST</th><th>Warehouse</th><th>Notes</th></tr></thead>
                 <tbody>
                 @foreach(($batch->units_data ?? []) as $i => $unit)
                     <tr>
@@ -27,6 +27,7 @@
                         <td>{{ $unit['buyer_code'] ?? '-' }}</td>
                         <td>{{ $unit['serial_no'] ?? '-' }}</td>
                         <td>{{ $unit['batch_no'] ?? '-' }}</td>
+                        <td>{{ $unit['vts_sim'] ?? '-' }}</td>
                         <td>Rs {{ number_format((float)($unit['sale_price'] ?? 0),2) }}</td>
                         <td>{{ $unit['gst'] ?? 0 }}%</td>
                         <td>{{ $unit['warehouse'] ?? '-' }}</td>

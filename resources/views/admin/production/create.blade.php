@@ -276,11 +276,12 @@
             </div>
 
             {{-- Column headers --}}
-            <div style="display:grid;grid-template-columns:40px 140px 160px 180px 130px 90px 140px 80px 80px;gap:8px;padding:0 0 6px;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#64748b;font-weight:600">
+            <div style="display:grid;grid-template-columns:40px 140px 150px 170px 150px 120px 80px 120px 80px 80px;gap:8px;padding:0 0 6px;font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#64748b;font-weight:600">
                 <span>#</span>
                 <span>Buyer Code (Auto)</span>
                 <span>Serial No.</span>
                 <span>Batch No. (Purchase)</span>
+                <span class="gps-header" style="display:none">VTS/SIM No.</span>
                 <span>Sale Price ₹ *</span>
                 <span>GST %</span>
                 <span>Sale Mode</span>
@@ -376,6 +377,7 @@ function renderStep(){
 $('#finished_item_id').on('change', function(){
     const id = $(this).val();
     selectedItem = id ? ITEMS[id] : null;
+    $('.gps-header').toggle(!!(selectedItem && selectedItem.requires_gps));
     if(!selectedItem){ $('#productInfo,#bomSection,#qtyBomSection').hide(); return; }
 
     // Info strip
@@ -489,7 +491,12 @@ function batchPrefix(){
     const d = new Date();
     return d.toLocaleString('en-IN',{month:'short'}).toUpperCase()+d.getFullYear();
 }
-function randSuffix(){ return Math.random().toString(36).slice(2,6).toUpperCase(); }
+function randomSerial(){ return String(Math.floor(10000000 + Math.random() * 90000000)); }
+function randomBatchNo(){
+    const letters = Array.from({length:4}, () => String.fromCharCode(65 + Math.floor(Math.random() * 26))).join('');
+    const digits = String(Math.floor(1000 + Math.random() * 9000));
+    return letters + digits;
+}
 
 function buildUnitRows(){
     const q = qty();
@@ -497,13 +504,14 @@ function buildUnitRows(){
     for(let i=0;i<q;i++){
         const saleP = selectedItem ? (selectedItem.sale_price||0) : 0;
         const gstP  = selectedItem ? (selectedItem.sale_gst_percent||0) : 0;
+        const gpsRequired = selectedItem && selectedItem.requires_gps;
         html+=`<div class="unit-row" data-index="${i}">
             <div class="unit-row-head">
                 <div class="unit-num">${i+1}</div>
                 <span style="color:#93a4bf;font-size:12px">Unit ${i+1} of ${q}</span>
                 <span class="profit-badge" id="profit_${i}">—</span>
             </div>
-            <div style="display:grid;grid-template-columns:140px 160px 180px 130px 90px 140px 1fr 80px;gap:8px;align-items:end">
+            <div style="display:grid;grid-template-columns:140px 150px 170px ${gpsRequired ? '150px' : '0'} 120px 80px 120px 1fr 80px;gap:8px;align-items:end;overflow:auto">
                 <div><small style="color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.6px">Buyer Code</small>
                     <select name="unit_buyer_id[${i}]" class="form-control unit-buyer" style="height:36px;font-size:12px">
                         <option value="" data-code="BC-AUTO-${String(i+1).padStart(3,'0')}">Auto</option>
@@ -515,7 +523,9 @@ function buildUnitRows(){
                 <div><small style="color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.6px">Serial No.</small>
                     <input type="text" name="unit_serial[${i}]" class="form-control unit-serial" style="height:36px;font-size:12px" placeholder="Auto or manual"></div>
                 <div><small style="color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.6px">Batch No. (Purchase)</small>
-                    <input type="text" name="unit_batch[${i}]" class="form-control unit-batchno" style="height:36px;font-size:12px" value="${batchPrefix()+'-'+randSuffix()}"></div>
+                    <input type="text" name="unit_batch[${i}]" class="form-control unit-batchno" style="height:36px;font-size:12px" value="${randomBatchNo()}"></div>
+                <div class="gps-field" style="${gpsRequired ? '' : 'display:none;overflow:hidden'}"><small style="color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.6px">VTS/SIM No. *</small>
+                    <input type="text" name="unit_vts_sim[${i}]" class="form-control unit-vts-sim" style="height:36px;font-size:12px" ${gpsRequired ? 'required' : ''}></div>
                 <div><small style="color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.6px">Sale Price ₹ *</small>
                     <input type="number" step="0.01" name="unit_sale_price[${i}]" class="form-control unit-sale-price" style="height:36px" value="${saleP}" data-index="${i}"></div>
                 <div><small style="color:#64748b;font-size:10px;text-transform:uppercase;letter-spacing:.6px">GST %</small>
@@ -538,11 +548,10 @@ function buildUnitRows(){
 
 // ── Auto-gen buttons ──────────────────────────────────────────
 $('#autoSerials').click(()=>{
-    $('.unit-serial').each(function(i){ $(this).val('SN-'+batchPrefix()+'-'+String(i+1).padStart(4,'0')); });
+    $('.unit-serial').each(function(){ $(this).val(randomSerial()); });
 });
 $('#autoBatches').click(()=>{
-    const prefix = batchPrefix();
-    $('.unit-batchno').each(function(){ $(this).val(prefix+'-'+randSuffix()); });
+    $('.unit-batchno').each(function(){ $(this).val(randomBatchNo()); });
 });
 
 // ── Apply-all bar ─────────────────────────────────────────────
