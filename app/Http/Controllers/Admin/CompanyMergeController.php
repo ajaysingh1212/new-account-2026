@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Company;
 use App\Models\CompanyMerge;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Hash;
 
 class CompanyMergeController extends Controller
 {
@@ -44,6 +45,12 @@ class CompanyMergeController extends Controller
 
     public function destroy(CompanyMerge $companyMerge)
     {
+        request()->validate([
+            'super_admin_password' => ['required', 'string'],
+        ]);
+
+        abort_unless(Hash::check(request('super_admin_password'), auth()->user()->password), 403, 'Super admin password galat hai.');
+
         $companyMerge->delete();
         return back()->with('success', 'Merge hata diya gaya.');
     }

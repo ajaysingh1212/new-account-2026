@@ -21,4 +21,6 @@ class PurchaseBill extends Model
     public function party() { return $this->belongsTo(Party::class); }
     public function items() { return $this->hasMany(PurchaseBillItem::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
+    public function sourceSalesInvoice() { return $this->belongsTo(SalesInvoice::class, 'source_sales_invoice_id'); }
+    public function interCompanySourceCompany() { return $this->belongsTo(Company::class, 'inter_company_source_company_id'); }
 }

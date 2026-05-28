@@ -7,15 +7,18 @@ use App\Models\CostCenter;
 use App\Models\AuditLog;
 use App\Models\Company;
 use App\Models\CompanyMerge;
+use App\Models\EntryVisibility;
 use App\Models\Item;
 use App\Models\Party;
 use App\Models\ProductionBatch;
 use App\Models\ProductType;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseBillItem;
+use App\Models\Role;
 use App\Models\SalesInvoice;
 use App\Models\SalesInvoiceItem;
 use App\Models\SubCostCenter;
+use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
 use Illuminate\Http\Request;
@@ -71,6 +74,8 @@ class SalesInvoiceController extends Controller
             'inter_company_transfer' => ['nullable','boolean'],
             'target_company_ids' => ['nullable','array'],
             'target_company_ids.*' => ['integer'],
+            'purchase_visible_to_roles' => ['nullable','array'],
+            'purchase_visible_to_users' => ['nullable','array'],
         ]);
 
         DB::transaction(function () use ($request, $data, $accounting, $visibility) {
@@ -104,7 +109,7 @@ class SalesInvoiceController extends Controller
             $visibility->syncFromRequest($request, $invoice);
 
             if ($invoice->inter_company_transfer) {
-                $this->createInterCompanyPurchases($invoice->fresh(['items.item', 'party']), $accounting);
+                $this->createInterCompanyPurchases($invoice->fresh(['items.item', 'party']), $accounting, $request);
             }
         });
 
@@ -154,7 +159,9 @@ class SalesInvoiceController extends Controller
 
             $visibility->syncFromRequest($request, $sale);
             if ($sale->inter_company_transfer) {
-                $this->createInterCompanyPurchases($sale->fresh(['items.item', 'party']), $accounting);
+                $this->createInterCompanyPurchases($sale->fresh(['items.item', 'party']), $accounting, $request);
+            } else {
+                $this->removeInterCompanyPurchases($sale, $accounting);
             }
             $this->logUpdate($sale, $oldValues, $sale->fresh('items')->toArray());
         });
@@ -190,6 +197,11 @@ class SalesInvoiceController extends Controller
             ->orderBy('name')
             ->get();
 
+        $mergedCompanies = Company::whereIn('id', CompanyMerge::getMergedCompanyIds($companyId))
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get(['id','name','phone','gst_number']);
+
         return [
             'parties' => Party::where('company_id', $companyId)->orderBy('display_name')->get(),
             'items' => $items,
@@ -200,10 +212,9 @@ class SalesInvoiceController extends Controller
             'itemMeta' => $items->mapWithKeys(fn(Item $item) => [
                 $item->id => ['requires_gps' => $this->isGpsItem($item)],
             ])->all(),
-            'mergedCompanies' => Company::whereIn('id', CompanyMerge::getMergedCompanyIds($companyId))
-                ->where('is_active', true)
-                ->orderBy('name')
-                ->get(['id','name','phone','gst_number']),
+            'mergedCompanies' => $mergedCompanies,
+            'interCompanyVisibility' => $this->interCompanyVisibilityData($mergedCompanies),
+            'interCompanySelectedVisibility' => $this->interCompanySelectedVisibility($invoice),
         ];
     }
 
@@ -232,6 +243,8 @@ class SalesInvoiceController extends Controller
             'inter_company_transfer' => ['nullable','boolean'],
             'target_company_ids' => ['nullable','array'],
             'target_company_ids.*' => ['integer'],
+            'purchase_visible_to_roles' => ['nullable','array'],
+            'purchase_visible_to_users' => ['nullable','array'],
         ]);
     }
 
@@ -416,39 +429,39 @@ class SalesInvoiceController extends Controller
         return $selected;
     }
 
-    private function createInterCompanyPurchases(SalesInvoice $invoice, AccountingService $accounting): void
+    private function createInterCompanyPurchases(SalesInvoice $invoice, AccountingService $accounting, Request $request): void
     {
         $sourceCompany = Company::findOrFail($invoice->company_id);
+        $targetIds = array_map('intval', $invoice->inter_company_target_company_ids ?? []);
 
-        foreach ($invoice->inter_company_target_company_ids ?? [] as $targetCompanyId) {
-            if (PurchaseBill::where('company_id', $targetCompanyId)->where('source_sales_invoice_id', $invoice->id)->exists()) {
-                continue;
-            }
+        PurchaseBill::with(['items.item', 'party'])
+            ->where('source_sales_invoice_id', $invoice->id)
+            ->whereNotIn('company_id', $targetIds)
+            ->get()
+            ->each(function (PurchaseBill $purchase) use ($accounting) {
+                $this->reverseInterCompanyPurchase($purchase, $accounting);
+                $purchase->items()->delete();
+                $purchase->delete();
+                EntryVisibility::where('entry_type', PurchaseBill::class)->where('entry_id', $purchase->id)->delete();
+            });
 
+        foreach ($targetIds as $targetCompanyId) {
             $targetParty = $this->supplierPartyForCompany($targetCompanyId, $sourceCompany);
-            $purchase = PurchaseBill::create([
-                'company_id' => $targetCompanyId,
-                'party_id' => $targetParty->id,
-                'purchase_type' => 'credit',
-                'invoice_no' => $this->nextInterCompanyPurchaseNo($targetCompanyId, $invoice),
-                'supplier_bill_no' => $invoice->invoice_no,
-                'billing_date' => $invoice->billing_date,
-                'purchase_bill_date' => $invoice->billing_date,
-                'reference_no' => 'Auto purchase from sale ' . $invoice->invoice_no,
-                'phone' => $invoice->phone ?: $sourceCompany->phone,
-                'billing_address' => $sourceCompany->address,
-                'shipping_address' => $sourceCompany->address,
-                'subtotal' => $invoice->subtotal,
-                'discount_amount' => $invoice->discount_amount,
-                'tax_amount' => $invoice->tax_amount,
-                'grand_total' => $invoice->grand_total,
-                'notes' => trim(($invoice->notes ?: '') . "\nInter-company purchase auto-created from {$sourceCompany->name} sale {$invoice->invoice_no}."),
-                'terms' => $invoice->terms,
-                'status' => 'posted',
-                'created_by' => auth()->id(),
-                'source_sales_invoice_id' => $invoice->id,
-                'inter_company_source_company_id' => $invoice->company_id,
-            ]);
+            $purchase = PurchaseBill::where('company_id', $targetCompanyId)
+                ->where('source_sales_invoice_id', $invoice->id)
+                ->first();
+
+            $oldValues = null;
+            if ($purchase) {
+                $purchase->load(['items.item', 'party']);
+                $oldValues = $purchase->replicate()->toArray();
+                $oldValues['items'] = $purchase->items->toArray();
+                $this->reverseInterCompanyPurchase($purchase, $accounting);
+                $purchase->items()->delete();
+                $purchase->update($this->interCompanyPurchasePayload($invoice, $sourceCompany, $targetParty));
+            } else {
+                $purchase = PurchaseBill::create($this->interCompanyPurchasePayload($invoice, $sourceCompany, $targetParty, $targetCompanyId));
+            }
 
             foreach ($invoice->items as $line) {
                 $targetItem = $this->targetItemForSaleLine($line->item, $targetCompanyId);
@@ -493,7 +506,150 @@ class SalesInvoiceController extends Controller
                 'debit' => 0,
                 'description' => 'Auto inter-company purchase payable.',
             ]);
+
+            $this->syncPurchaseVisibility($request, $purchase, $targetCompanyId);
+
+            if ($oldValues) {
+                AuditLog::log('updated', [
+                    'company_id' => $purchase->company_id,
+                    'model' => PurchaseBill::class,
+                    'model_id' => $purchase->id,
+                    'old_values' => $oldValues,
+                    'new_values' => $purchase->fresh('items')->toArray(),
+                    'description' => 'Auto inter-company purchase updated from source sale edit by ' . (auth()->user()?->name ?? 'System') . '.',
+                ]);
+            }
         }
+    }
+
+    private function removeInterCompanyPurchases(SalesInvoice $invoice, AccountingService $accounting): void
+    {
+        PurchaseBill::with(['items.item', 'party'])
+            ->where('source_sales_invoice_id', $invoice->id)
+            ->get()
+            ->each(function (PurchaseBill $purchase) use ($accounting) {
+                $this->reverseInterCompanyPurchase($purchase, $accounting);
+                $purchase->items()->delete();
+                $purchase->delete();
+                EntryVisibility::where('entry_type', PurchaseBill::class)->where('entry_id', $purchase->id)->delete();
+            });
+    }
+
+    private function interCompanyPurchasePayload(SalesInvoice $invoice, Company $sourceCompany, Party $targetParty, ?int $targetCompanyId = null): array
+    {
+        $payload = [
+            'party_id' => $targetParty->id,
+            'purchase_type' => 'credit',
+            'supplier_bill_no' => $invoice->invoice_no,
+            'billing_date' => $invoice->billing_date,
+            'purchase_bill_date' => $invoice->billing_date,
+            'reference_no' => 'Auto purchase from sale ' . $invoice->invoice_no,
+            'phone' => $invoice->phone ?: $sourceCompany->phone,
+            'billing_address' => $sourceCompany->address,
+            'shipping_address' => $sourceCompany->address,
+            'subtotal' => $invoice->subtotal,
+            'discount_amount' => $invoice->discount_amount,
+            'tax_amount' => $invoice->tax_amount,
+            'grand_total' => $invoice->grand_total,
+            'notes' => trim(($invoice->notes ?: '') . "\nInter-company purchase auto-created from {$sourceCompany->name} sale {$invoice->invoice_no}."),
+            'terms' => $invoice->terms,
+            'status' => 'posted',
+            'created_by' => auth()->id(),
+            'source_sales_invoice_id' => $invoice->id,
+            'inter_company_source_company_id' => $invoice->company_id,
+        ];
+
+        if ($targetCompanyId) {
+            $payload['company_id'] = $targetCompanyId;
+            $payload['invoice_no'] = $this->nextInterCompanyPurchaseNo($targetCompanyId, $invoice);
+        }
+
+        return $payload;
+    }
+
+    private function reverseInterCompanyPurchase(PurchaseBill $purchase, AccountingService $accounting): void
+    {
+        foreach ($purchase->items as $line) {
+            if (!$line->item) {
+                continue;
+            }
+
+            $accounting->moveStock($line->item, [
+                'party_id' => $purchase->party_id,
+                'movement_date' => now()->toDateString(),
+                'movement_type' => 'inter_company_purchase_reversal',
+                'direction' => 'out',
+                'quantity' => (float) $line->quantity,
+                'unit_price' => $line->unit_price,
+                'total_value' => $line->line_total,
+                'reference_type' => PurchaseBill::class,
+                'reference_id' => $purchase->id,
+                'reference_no' => $purchase->invoice_no,
+                'description' => 'Auto purchase reversal before source sale update.',
+            ]);
+        }
+
+        if ($purchase->party) {
+            $accounting->postPartyLedger($purchase->party, [
+                'entry_date' => now()->toDateString(),
+                'entry_type' => 'purchase_reversal',
+                'reference_type' => PurchaseBill::class,
+                'reference_id' => $purchase->id,
+                'reference_no' => $purchase->invoice_no,
+                'credit' => 0,
+                'debit' => $purchase->grand_total,
+                'description' => 'Auto purchase ledger reversal before source sale update.',
+            ]);
+        }
+    }
+
+    private function syncPurchaseVisibility(Request $request, PurchaseBill $purchase, int $targetCompanyId): void
+    {
+        EntryVisibility::updateOrCreate(
+            [
+                'entry_type' => PurchaseBill::class,
+                'entry_id' => $purchase->id,
+            ],
+            [
+                'company_id' => $targetCompanyId,
+                'visible_to_all_company' => false,
+                'visible_to_roles' => array_values(array_filter(array_map('intval', $request->input("purchase_visible_to_roles.{$targetCompanyId}", [])))),
+                'visible_to_users' => array_values(array_filter(array_map('intval', $request->input("purchase_visible_to_users.{$targetCompanyId}", [])))),
+            ]
+        );
+    }
+
+    private function interCompanyVisibilityData($companies): array
+    {
+        return $companies->mapWithKeys(fn(Company $company) => [
+            $company->id => [
+                'roles' => Role::where('company_id', $company->id)->orderBy('name')->get(['id','name']),
+                'users' => User::where('current_company_id', $company->id)->where('is_active', true)->orderBy('name')->get(['id','name','email']),
+            ],
+        ])->all();
+    }
+
+    private function interCompanySelectedVisibility(?SalesInvoice $invoice): array
+    {
+        if (!$invoice) {
+            return [];
+        }
+
+        return PurchaseBill::where('source_sales_invoice_id', $invoice->id)
+            ->get()
+            ->mapWithKeys(function (PurchaseBill $bill) {
+                $visibility = EntryVisibility::where('entry_type', PurchaseBill::class)
+                    ->where('entry_id', $bill->id)
+                    ->first();
+
+                return [
+                    $bill->company_id => [
+                        'roles' => $visibility?->visible_to_roles ?? [],
+                        'users' => $visibility?->visible_to_users ?? [],
+                    ],
+                ];
+            })
+            ->all();
     }
 
     private function supplierPartyForCompany(int $targetCompanyId, Company $sourceCompany): Party

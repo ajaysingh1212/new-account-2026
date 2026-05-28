@@ -53,6 +53,7 @@
                 </a>
                 <form action="{{ route('admin.companies.destroy', $company) }}" method="POST" class="d-inline">
                     @csrf @method('DELETE')
+                    <input type="hidden" name="super_admin_password" class="super-admin-password">
                     <button type="button" class="btn btn-danger btn-sm btn-delete"><i class="fas fa-trash"></i></button>
                 </form>
             </div>
@@ -64,3 +65,16 @@
 
 {{ $companies->links() }}
 @endsection
+
+@push('scripts')
+<script>
+$(document).on('click','.btn-delete',function(){
+    if(!confirm('Company delete karne par is company ke saare books of account, users, entries aur records delete ho jayenge. Continue?')) return;
+    const password = prompt('Confirm karne ke liye super admin password daaliye');
+    if(!password) return;
+    const form = $(this).closest('form');
+    form.find('.super-admin-password').val(password);
+    form.trigger('submit');
+});
+</script>
+@endpush

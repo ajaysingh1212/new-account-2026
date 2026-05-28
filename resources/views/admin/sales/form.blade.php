@@ -68,6 +68,20 @@
                             <input type="checkbox" name="target_company_ids[]" value="{{ $company->id }}" @checked(in_array($company->id, old('target_company_ids', $invoice->inter_company_target_company_ids ?? [])))>
                             <strong>{{ $company->name }}</strong><br><small>{{ $company->phone ?: 'No phone' }} | GST {{ $company->gst_number ?: '-' }}</small>
                         </label>
+                        <div class="pl-3 pr-2 pb-2">
+                            <label class="small mb-1">Purchase visible to roles</label>
+                            <select name="purchase_visible_to_roles[{{ $company->id }}][]" class="form-control select2" multiple style="width:100%">
+                                @foreach(($interCompanyVisibility[$company->id]['roles'] ?? collect()) as $role)
+                                    <option value="{{ $role->id }}" @selected(in_array($role->id, old("purchase_visible_to_roles.{$company->id}", $interCompanySelectedVisibility[$company->id]['roles'] ?? [])))>{{ $role->name }}</option>
+                                @endforeach
+                            </select>
+                            <label class="small mt-2 mb-1">Purchase visible to users</label>
+                            <select name="purchase_visible_to_users[{{ $company->id }}][]" class="form-control select2" multiple style="width:100%">
+                                @foreach(($interCompanyVisibility[$company->id]['users'] ?? collect()) as $user)
+                                    <option value="{{ $user->id }}" @selected(in_array($user->id, old("purchase_visible_to_users.{$company->id}", $interCompanySelectedVisibility[$company->id]['users'] ?? [])))>{{ $user->name }} | {{ $user->email }}</option>
+                                @endforeach
+                            </select>
+                        </div>
                     </div>
                 @endforeach
             </div>

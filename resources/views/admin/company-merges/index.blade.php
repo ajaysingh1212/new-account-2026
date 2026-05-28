@@ -101,10 +101,10 @@
                                 <td><strong>{{ $m->mergedWith->name }}</strong></td>
                                 <td><small>{{ $m->creator->name ?? '-' }}<br>{{ $m->created_at->format('d M Y') }}</small></td>
                                 <td>
-                                    <form action="{{ route('admin.company-merges.destroy', $m) }}" method="POST"
-                                        onsubmit="return confirm('Ye merge hatayein? Dono companies ke beech future transfers nahi honge.')">
+                                    <form action="{{ route('admin.company-merges.destroy', $m) }}" method="POST" class="merge-delete-form">
                                         @csrf @method('DELETE')
-                                        <button type="submit" class="btn btn-sm btn-danger">
+                                        <input type="hidden" name="super_admin_password" class="super-admin-password">
+                                        <button type="button" class="btn btn-sm btn-danger btn-remove-merge">
                                             <i class="fas fa-unlink"></i> Remove
                                         </button>
                                     </form>
@@ -128,6 +128,14 @@
 <script>
 $(function() {
     $('.select2').select2({ placeholder: '-- Select --', allowClear: true });
+    $(document).on('click','.btn-remove-merge',function(){
+        if(!confirm('Ye merge remove karne par dono companies ke beech future transfer/auto purchase relation band ho jayega. Continue?')) return;
+        const password = prompt('Confirm karne ke liye super admin password daaliye');
+        if(!password) return;
+        const form = $(this).closest('form');
+        form.find('.super-admin-password').val(password);
+        form.trigger('submit');
+    });
 });
 </script>
 @endpush

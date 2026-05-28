@@ -91,6 +91,12 @@ class CompanyController extends Controller
 
     public function destroy(Company $company)
     {
+        request()->validate([
+            'super_admin_password' => ['required', 'string'],
+        ]);
+
+        abort_unless(Hash::check(request('super_admin_password'), auth()->user()->password), 403, 'Super admin password galat hai.');
+
         $company->delete();
         return redirect()->route('admin.companies.index')->with('success', 'Company deleted!');
     }

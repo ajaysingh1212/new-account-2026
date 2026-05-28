@@ -34,6 +34,16 @@ class PurchaseBillController extends Controller
     public function edit(PurchaseBill $purchase, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($purchase);
+        if ($purchase->source_sales_invoice_id) {
+            $purchase->load(['sourceSalesInvoice.creator', 'interCompanySourceCompany']);
+            return redirect()
+                ->route('admin.purchases.show', $purchase)
+                ->withErrors([
+                    'purchase' => 'Aap ye auto inter-company purchase edit nahi kar sakte. Sirf sale banane wali company sale invoice edit karegi. Sale creator: '
+                        . ($purchase->sourceSalesInvoice?->creator?->name ?? 'Unknown')
+                        . ' (' . ($purchase->sourceSalesInvoice?->creator?->email ?? 'No email') . ').',
+                ]);
+        }
         $purchase->load(['items.item', 'party']);
 
         return view('admin.purchases.edit', array_merge($this->formData($purchase), [
@@ -82,6 +92,7 @@ class PurchaseBillController extends Controller
     public function update(Request $request, PurchaseBill $purchase, AccountingService $accounting, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($purchase);
+        abort_if($purchase->source_sales_invoice_id, 403, 'Auto inter-company purchase direct edit nahi ho sakta. Source sale invoice edit karein.');
         $data = $this->validated($request);
 
         DB::transaction(function () use ($request, $data, $purchase, $accounting, $visibility) {
@@ -128,7 +139,7 @@ class PurchaseBillController extends Controller
     public function show(PurchaseBill $purchase, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($purchase);
-        $purchase->load(['party','items.item']);
+        $purchase->load(['party','items.item','sourceSalesInvoice.creator','interCompanySourceCompany']);
         $auditLogs = AuditLog::with(['user','company'])
             ->where('model', PurchaseBill::class)
             ->where('model_id', $purchase->id)
