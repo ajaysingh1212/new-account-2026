@@ -28,6 +28,7 @@
     if ($user->can('banking.view')) $cards[] = ['label'=>'Bank Balance','value'=>'Rs '.number_format($stats['bank_balance'] ?? 0,2),'icon'=>'fa-university','accent'=>'#06b6d4'];
     if ($user->can('estimates.view')) $cards[] = ['label'=>'Estimates','value'=>$stats['estimates'] ?? 0,'icon'=>'fa-file-contract','accent'=>'#4338ca'];
     if ($user->can('delivery_challans.view')) $cards[] = ['label'=>'Challans','value'=>$stats['challans'] ?? 0,'icon'=>'fa-truck','accent'=>'#0f766e'];
+    if ($user->can('expenses.view')) $cards[] = ['label'=>'Pending Expenses','value'=>$stats['pending_expenses'] ?? 0,'icon'=>'fa-clipboard-check','accent'=>'#10b981'];
     $sales = max(0, (float)($mix['Sales'] ?? 0)); $purchase = max(0, (float)($mix['Purchase'] ?? 0)); $bank = max(0, (float)($mix['Bank'] ?? 0)); $cash = max(0, (float)($mix['Cash'] ?? 0));
     $totalMix = max(1, $sales + $purchase + $bank + $cash);
     $salesEnd = round($sales / $totalMix * 100, 2);

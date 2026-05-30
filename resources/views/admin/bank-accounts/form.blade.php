@@ -1,6 +1,6 @@
 @php $isEdit = $bankAccount->exists; @endphp
 
-<form method="POST" action="{{ $isEdit ? route('admin.bank-accounts.update', $bankAccount) : route('admin.bank-accounts.store') }}">
+<form method="POST" action="{{ $isEdit ? route('admin.bank-accounts.update', $bankAccount) : route('admin.bank-accounts.store') }}" enctype="multipart/form-data">
     @csrf
     @if($isEdit) @method('PUT') @endif
     <div class="card">
@@ -26,6 +26,7 @@
             </div>
             <div class="row">
                 <div class="col-md-3 form-group"><label>Email</label><input type="email" name="email" class="form-control" value="{{ old('email', $bankAccount->email) }}"></div>
+                <div class="col-md-3 form-group"><label>UPI QR Code</label><input type="file" name="upi_qr_code" class="form-control" accept="image/*">@if($isEdit && $bankAccount->upi_qr_code)<small><a target="_blank" href="{{ asset('storage/'.$bankAccount->upi_qr_code) }}">Current QR</a></small>@endif</div>
                 <div class="col-md-3 form-group"><label>Opening Balance</label><input type="number" step="0.01" min="0" name="opening_balance" class="form-control" value="{{ old('opening_balance', $bankAccount->opening_balance ?? 0) }}"></div>
                 <div class="col-md-3 form-group"><label>Opening Date</label><input type="date" name="opening_balance_date" class="form-control" value="{{ old('opening_balance_date', optional($bankAccount->opening_balance_date)->format('Y-m-d') ?? now()->toDateString()) }}"></div>
                 <div class="col-md-3 form-group d-flex align-items-end">

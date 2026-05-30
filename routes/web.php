@@ -15,6 +15,9 @@ use App\Http\Controllers\Admin\Production\ProductionBatchController;
 use App\Http\Controllers\Admin\Purchase\PurchaseBillController;
 use App\Http\Controllers\Admin\Purchase\PurchaseReturnController;
 use App\Http\Controllers\Admin\ReportController;
+use App\Http\Controllers\Admin\ExpenseController;
+use App\Http\Controllers\Admin\ExpenseLedgerController;
+use App\Http\Controllers\Admin\TermsTemplateController;
 use App\Http\Controllers\Admin\Sales\DeliveryChallanController;
 use App\Http\Controllers\Admin\Sales\EstimateController;
 use App\Http\Controllers\Admin\Sales\SalesInvoiceController;
@@ -63,6 +66,18 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('bank-transactions', BankTransactionController::class)->only(['create','store'])->middleware('permission:banking.manage');
         Route::resource('bank-transactions', BankTransactionController::class)->only(['index']);
         Route::get('bank-reports/statement', [BankTransactionController::class, 'report'])->name('bank-reports.statement');
+    });
+    Route::middleware('permission:expenses.view')->group(function () {
+        Route::resource('expense-ledgers', ExpenseLedgerController::class)->only(['index']);
+        Route::resource('expense-ledgers', ExpenseLedgerController::class)->only(['create','store','edit','update'])->middleware('permission:expenses.create');
+        Route::post('expenses/{expense}/approve', [ExpenseController::class, 'approve'])->middleware('permission:expenses.approve')->name('expenses.approve');
+        Route::post('expenses/{expense}/reject', [ExpenseController::class, 'reject'])->middleware('permission:expenses.approve')->name('expenses.reject');
+        Route::resource('expenses', ExpenseController::class)->only(['create','store'])->middleware('permission:expenses.create');
+        Route::resource('expenses', ExpenseController::class)->only(['edit','update'])->middleware('permission:expenses.edit');
+        Route::resource('expenses', ExpenseController::class)->only(['index','show']);
+    });
+    Route::middleware('permission:terms.manage')->group(function () {
+        Route::resource('terms', TermsTemplateController::class)->except(['show','destroy']);
     });
     Route::middleware('permission:party_payments.view')->group(function () {
         Route::get('party-payments/open-bills', [PartyPaymentController::class, 'openBills'])->name('party-payments.open-bills');

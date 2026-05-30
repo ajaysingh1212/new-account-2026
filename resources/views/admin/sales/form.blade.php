@@ -107,7 +107,7 @@
             <div class="col-md-4 form-group"><label>Overall Discount</label><input type="number" step="0.01" name="discount_amount" class="form-control" value="{{ old('discount_amount',$invoice->discount_amount ?? 0) }}"></div>
             <div class="col-md-4 form-group"><label>Notes</label><textarea name="notes" class="form-control" rows="3">{{ old('notes',$invoice->notes ?? '') }}</textarea></div>
             <div class="col-md-4"><div class="total-box"><div class="total-row"><span>Subtotal</span><b id="uiSubtotal">Rs 0.00</b></div><div class="total-row"><span>Tax</span><b id="uiTax">Rs 0.00</b></div><div class="total-row"><span>Total</span><b id="uiTotal">Rs 0.00</b></div></div></div>
-            <div class="col-md-8 form-group"><label>Terms</label><textarea name="terms" class="form-control" rows="2">{{ old('terms',$invoice->terms ?? '') }}</textarea></div>
+            <div class="col-md-8 form-group"><label>Terms</label><select id="termsTemplate" class="form-control mb-2"><option value="">Manual / no template</option>@foreach($termsTemplates as $template)<option value="{{ e($template->content) }}" @selected(!$isEdit && $template->is_default)>{{ $template->title }}{{ $template->is_default ? ' (Default)' : '' }}</option>@endforeach</select><textarea name="terms" id="termsBox" class="form-control" rows="2">{{ old('terms',$invoice->terms ?? ($termsTemplates->firstWhere('is_default', true)?->content ?? '')) }}</textarea></div>
         </div>
         @include('admin.partials.entry-visibility', ['entry' => $invoice ?? null])
     </div>
@@ -174,6 +174,7 @@ $(document).on('change','.unit-check',function(){let selected=rowSelected(active
 $('#interCompanyTransfer').on('change',function(){$('#mergedCompanyBox').toggle(this.checked)}).trigger('change');
 $('.unit-filter').click(function(){activeFilter=$(this).data('filter');$('.unit-filter').removeClass('btn-primary').addClass('btn-outline-secondary');$(this).addClass('btn-primary').removeClass('btn-outline-secondary');renderDrawer()});
 $('#closeDrawer,#unitBackdrop').click(()=>$('#unitDrawer,#unitBackdrop').removeClass('open'));
+$('#termsTemplate').on('change',function(){if(this.value){$('#termsBox').val(this.value)}});
 
 if(PREFILL_LINES.length){PREFILL_LINES.forEach(addLine)}else{addLine()}
 </script>

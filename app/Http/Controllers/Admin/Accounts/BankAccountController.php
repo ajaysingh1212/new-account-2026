@@ -46,6 +46,10 @@ class BankAccountController extends Controller
         $companyId = auth()->user()->current_company_id;
         $data = $this->validated($request, $companyId);
 
+        if ($request->hasFile('upi_qr_code')) {
+            $data['upi_qr_code'] = $request->file('upi_qr_code')->store('bank-qr-codes', 'public');
+        }
+
         $account = DB::transaction(function () use ($data, $companyId) {
             if (!empty($data['is_primary'])) {
                 BankAccount::where('company_id', $companyId)->update(['is_primary' => false]);
@@ -109,6 +113,10 @@ class BankAccountController extends Controller
     {
         $visibility->authorizeManage($bankAccount);
         $data = $this->validated($request, $bankAccount->company_id, $bankAccount->id);
+
+        if ($request->hasFile('upi_qr_code')) {
+            $data['upi_qr_code'] = $request->file('upi_qr_code')->store('bank-qr-codes', 'public');
+        }
 
         DB::transaction(function () use ($bankAccount, $data) {
             if (!empty($data['is_primary'])) {
@@ -175,6 +183,7 @@ class BankAccountController extends Controller
             'ifsc_code' => ['nullable','string','max:20'],
             'swift_code' => ['nullable','string','max:30'],
             'upi_id' => ['nullable','string','max:255'],
+            'upi_qr_code' => ['nullable','image','max:2048'],
             'phone' => ['nullable','string','max:30'],
             'email' => ['nullable','email','max:255'],
             'address' => ['nullable','string'],

@@ -11,7 +11,7 @@ class BankAccount extends Model
 
     protected $fillable = [
         'company_id','account_code','account_type','account_name','bank_name','branch_name',
-        'account_holder_name','account_number','ifsc_code','swift_code','upi_id','phone',
+        'account_holder_name','account_number','ifsc_code','swift_code','upi_id','upi_qr_code','phone',
         'email','address','opening_balance','opening_balance_date','current_balance',
         'is_primary','print_on_invoice','status','notes','created_by','updated_by',
     ];

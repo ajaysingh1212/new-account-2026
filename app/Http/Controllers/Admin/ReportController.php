@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\BankTransaction;
+use App\Models\Expense;
 use App\Models\Item;
 use App\Models\Party;
 use App\Models\PartyLedger;
@@ -162,7 +163,8 @@ class ReportController extends Controller
         $filters = $this->filters($request);
         $sales = (float) $visibility->scopeForUser(SalesInvoice::whereBetween('billing_date', [$filters['from'], $filters['to']]), SalesInvoice::class)->sum('grand_total');
         $purchases = (float) $visibility->scopeForUser(PurchaseBill::whereBetween('billing_date', [$filters['from'], $filters['to']]), PurchaseBill::class)->sum('grand_total');
-        return view('admin.reports.profit-loss', compact('filters','sales','purchases'));
+        $expenses = (float) $visibility->scopeForUser(Expense::whereBetween('expense_date', [$filters['from'], $filters['to']])->where('status', 'approved'), Expense::class)->sum('total_amount');
+        return view('admin.reports.profit-loss', compact('filters','sales','purchases','expenses'));
     }
 
     public function billWiseProfit(Request $request, EntryVisibilityService $visibility)

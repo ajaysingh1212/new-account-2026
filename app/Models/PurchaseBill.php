@@ -19,6 +19,7 @@ class PurchaseBill extends Model
 
     protected $casts = ['billing_date' => 'date', 'purchase_bill_date' => 'date'];
     public function party() { return $this->belongsTo(Party::class); }
+    public function company() { return $this->belongsTo(Company::class); }
     public function items() { return $this->hasMany(PurchaseBillItem::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
     public function sourceSalesInvoice() { return $this->belongsTo(SalesInvoice::class, 'source_sales_invoice_id'); }

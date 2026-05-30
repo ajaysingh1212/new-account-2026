@@ -78,7 +78,7 @@
             <div class="col-md-3 form-group"><label>Attachment</label><input type="file" name="attachment" class="form-control">@if($isEdit && $bill->attachment)<small><a target="_blank" href="{{ asset('storage/'.$bill->attachment) }}">Current attachment</a></small>@endif</div>
             <div class="col-md-3 form-group"><label>Notes</label><textarea name="notes" class="form-control" rows="3">{{ old('notes',$bill->notes ?? '') }}</textarea></div>
             <div class="col-md-3"><div class="total-box"><div class="total-row"><span>Subtotal</span><b id="uiSubtotal">Rs 0.00</b></div><div class="total-row"><span>Tax</span><b id="uiTax">Rs 0.00</b></div><div class="total-row"><span>Total</span><b id="uiTotal">Rs 0.00</b></div></div></div>
-            <div class="col-md-8 form-group"><label>Terms</label><textarea name="terms" class="form-control" rows="2">{{ old('terms',$bill->terms ?? '') }}</textarea></div>
+            <div class="col-md-8 form-group"><label>Terms</label><select id="termsTemplate" class="form-control mb-2"><option value="">Manual / no template</option>@foreach($termsTemplates as $template)<option value="{{ e($template->content) }}" @selected(!$isEdit && $template->is_default)>{{ $template->title }}{{ $template->is_default ? ' (Default)' : '' }}</option>@endforeach</select><textarea name="terms" id="termsBox" class="form-control" rows="2">{{ old('terms',$bill->terms ?? ($termsTemplates->firstWhere('is_default', true)?->content ?? '')) }}</textarea></div>
         </div>
         @include('admin.partials.entry-visibility', ['entry' => $bill ?? null])
     </div>
@@ -110,6 +110,7 @@ $('#addLine').click(()=>addLine());
 $(document).on('input change','#lineTable input,#lineTable select,[name="discount_amount"]',calc);
 $(document).on('click','.remove-row',function(){$(this).closest('tr').remove();calc()});
 $(document).on('change','.item-select',function(){let o=$(this).find(':selected'),r=$(this).closest('tr');r.find('[name="unit[]"]').val(o.data('unit'));r.find('[name="unit_price[]"]').val(o.data('price'));r.find('[name="tax_percent[]"]').val(o.data('tax'));calc()});
+$('#termsTemplate').on('change',function(){if(this.value){$('#termsBox').val(this.value)}});
 if(PREFILL_LINES.length){PREFILL_LINES.forEach(addLine)}else{addLine()}
 </script>
 @endpush

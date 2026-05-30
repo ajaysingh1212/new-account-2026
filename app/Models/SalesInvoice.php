@@ -22,6 +22,7 @@ class SalesInvoice extends Model
         'inter_company_target_company_ids' => 'array',
     ];
     public function party() { return $this->belongsTo(Party::class); }
+    public function company() { return $this->belongsTo(Company::class); }
     public function items() { return $this->hasMany(SalesInvoiceItem::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
 }

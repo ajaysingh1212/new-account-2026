@@ -4,8 +4,9 @@
     $canAnyPurchase = $user->can('purchase.view') || $user->can('party_payments.view');
     $canAnyInventory = $user->can('items.view') || $user->can('product_types.view') || $user->can('stocks.view') || $user->can('production.view');
     $canAnyBanking = $user->can('banking.view') || $user->can('cost_centers.view');
+    $canAnyExpense = $user->can('expenses.view');
     $canAnyReport = $user->can('reports.party') || $user->can('reports.stock') || $user->can('reports.expense') || $user->can('reports.gst') || $user->can('reports.transaction');
-    $canManagement = $user->isSuperAdmin() || $user->isAdmin() || $user->can('users.view') || $user->can('roles.view') || $user->can('audit.view');
+    $canManagement = $user->isSuperAdmin() || $user->isAdmin() || $user->can('users.view') || $user->can('roles.view') || $user->can('audit.view') || $user->can('terms.manage');
 @endphp
 
 <aside class="main-sidebar sidebar-dark-primary elevation-4">
@@ -130,6 +131,17 @@
                     <li class="nav-item"><a href="{{ route('admin.parties.index') }}" class="nav-link {{ request()->routeIs('admin.parties*') ? 'active' : '' }}"><i class="nav-icon fas fa-users" style="color:#8B5CF6"></i><p>Party Details</p></a></li>
                 @endcan
 
+                @if($canAnyExpense)
+                    <li class="nav-header">EXPENSE</li>
+                    <li class="nav-item has-treeview {{ request()->routeIs('admin.expenses*','admin.expense-ledgers*') ? 'menu-open' : '' }}">
+                        <a href="#" class="nav-link {{ request()->routeIs('admin.expenses*','admin.expense-ledgers*') ? 'active' : '' }}"><i class="nav-icon fas fa-receipt" style="color:#10B981"></i><p>Expense <i class="right fas fa-angle-left"></i></p></a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="{{ route('admin.expenses.index') }}" class="nav-link {{ request()->routeIs('admin.expenses*') ? 'active' : '' }}"><i class="fas fa-clipboard-check nav-icon"></i><p>Expense Approval</p></a></li>
+                            <li class="nav-item"><a href="{{ route('admin.expense-ledgers.index') }}" class="nav-link {{ request()->routeIs('admin.expense-ledgers*') ? 'active' : '' }}"><i class="fas fa-book nav-icon"></i><p>Expense Ledgers</p></a></li>
+                        </ul>
+                    </li>
+                @endif
+
                 @if($canAnyBanking)
                     <li class="nav-header">BANKING & COSTING</li>
                     @can('banking.view')<li class="nav-item"><a href="{{ route('admin.bank-accounts.index') }}" class="nav-link {{ request()->routeIs('admin.bank-accounts*') ? 'active' : '' }}"><i class="nav-icon fas fa-university" style="color:#06B6D4"></i><p>Bank Accounts</p></a></li>@endcan
@@ -184,6 +196,7 @@
 
                 @if($canManagement)
                     <li class="nav-header">MANAGEMENT</li>
+                    @can('terms.manage')<li class="nav-item"><a href="{{ route('admin.terms.index') }}" class="nav-link {{ request()->routeIs('admin.terms*') ? 'active' : '' }}"><i class="nav-icon fas fa-file-signature"></i><p>Terms Master</p></a></li>@endcan
                     @can('roles.view')<li class="nav-item"><a href="{{ route('admin.roles.index') }}" class="nav-link {{ request()->routeIs('admin.roles*') ? 'active' : '' }}"><i class="nav-icon fas fa-briefcase"></i><p>Roles</p></a></li>@endcan
                     @can('users.view')<li class="nav-item"><a href="{{ route('admin.users.index') }}" class="nav-link {{ request()->routeIs('admin.users*') ? 'active' : '' }}"><i class="nav-icon fas fa-user"></i><p>Users</p></a></li>@endcan
                     @if($user->isSuperAdmin())<li class="nav-item"><a href="{{ route('admin.permissions.index') }}" class="nav-link {{ request()->routeIs('admin.permissions*') ? 'active' : '' }}"><i class="nav-icon fas fa-lock"></i><p>Permissions</p></a></li>@endif

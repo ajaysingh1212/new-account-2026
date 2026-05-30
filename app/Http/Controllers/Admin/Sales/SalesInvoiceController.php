@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin\Sales;
 use App\Http\Controllers\Controller;
 use App\Models\CostCenter;
 use App\Models\AuditLog;
+use App\Models\BankAccount;
 use App\Models\Company;
 use App\Models\CompanyMerge;
 use App\Models\EntryVisibility;
@@ -18,6 +19,7 @@ use App\Models\Role;
 use App\Models\SalesInvoice;
 use App\Models\SalesInvoiceItem;
 use App\Models\SubCostCenter;
+use App\Models\TermsTemplate;
 use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
@@ -184,8 +186,10 @@ class SalesInvoiceController extends Controller
     public function print(SalesInvoice $sale, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($sale);
-        $sale->load(['party','items.item']);
-        return view('admin.sales.print', ['invoice' => $sale]);
+        $sale->load(['party','items.item','company']);
+        $bankAccount = BankAccount::where('company_id', $sale->company_id)->where('print_on_invoice', true)->where('status', 'active')->first();
+        $defaultTerms = TermsTemplate::where('company_id', $sale->company_id)->where('status', 'active')->whereIn('document_type', ['sales','all'])->orderByDesc('is_default')->first();
+        return view('admin.sales.print', ['invoice' => $sale, 'bankAccount' => $bankAccount, 'company' => $sale->company, 'defaultTerms' => $defaultTerms]);
     }
 
     private function formData(?SalesInvoice $invoice = null): array
@@ -215,6 +219,12 @@ class SalesInvoiceController extends Controller
             'mergedCompanies' => $mergedCompanies,
             'interCompanyVisibility' => $this->interCompanyVisibilityData($mergedCompanies),
             'interCompanySelectedVisibility' => $this->interCompanySelectedVisibility($invoice),
+            'termsTemplates' => TermsTemplate::where('company_id', $companyId)
+                ->where('status', 'active')
+                ->whereIn('document_type', ['all', 'sales'])
+                ->orderByDesc('is_default')
+                ->orderBy('title')
+                ->get(),
         ];
     }
 

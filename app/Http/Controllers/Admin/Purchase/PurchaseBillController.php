@@ -4,12 +4,14 @@ namespace App\Http\Controllers\Admin\Purchase;
 
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
+use App\Models\BankAccount;
 use App\Models\CostCenter;
 use App\Models\Item;
 use App\Models\Party;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseBillItem;
 use App\Models\SubCostCenter;
+use App\Models\TermsTemplate;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
 use Illuminate\Http\Request;
@@ -151,8 +153,10 @@ class PurchaseBillController extends Controller
     public function print(PurchaseBill $purchase, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($purchase);
-        $purchase->load(['party','items.item']);
-        return view('admin.purchases.print', ['bill' => $purchase]);
+        $purchase->load(['party','items.item','company']);
+        $bankAccount = BankAccount::where('company_id', $purchase->company_id)->where('print_on_invoice', true)->where('status', 'active')->first();
+        $defaultTerms = TermsTemplate::where('company_id', $purchase->company_id)->where('status', 'active')->whereIn('document_type', ['purchase','all'])->orderByDesc('is_default')->first();
+        return view('admin.purchases.print', ['bill' => $purchase, 'bankAccount' => $bankAccount, 'company' => $purchase->company, 'defaultTerms' => $defaultTerms]);
     }
 
     private function formData(?PurchaseBill $bill = null): array
@@ -171,6 +175,12 @@ class PurchaseBillController extends Controller
             'costCenters' => CostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
             'subCostCenters' => SubCostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
             'invoiceNo' => $bill?->invoice_no ?? $this->nextNo(),
+            'termsTemplates' => TermsTemplate::where('company_id', $companyId)
+                ->where('status', 'active')
+                ->whereIn('document_type', ['all', 'purchase'])
+                ->orderByDesc('is_default')
+                ->orderBy('title')
+                ->get(),
         ];
     }
 

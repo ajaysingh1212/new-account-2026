@@ -8,6 +8,7 @@ use App\Models\Company;
 use App\Models\CostCenter;
 use App\Models\DeliveryChallan;
 use App\Models\Estimate;
+use App\Models\Expense;
 use App\Models\Item;
 use App\Models\Party;
 use App\Models\PartyPaymentAllocation;
@@ -40,6 +41,7 @@ class DashboardController extends Controller
                 'purchases' => $this->scope(PurchaseBill::query(), $companyId)->whereBetween('billing_date', [$from, $to])->sum('grand_total'),
                 'estimates' => $this->scope(Estimate::query(), $companyId)->whereBetween('estimate_date', [$from, $to])->count(),
                 'challans' => $this->scope(DeliveryChallan::query(), $companyId)->whereBetween('challan_date', [$from, $to])->count(),
+                'pending_expenses' => $this->scope(Expense::query(), $companyId)->where('status', 'pending_approval')->count(),
             ];
             $recentLogs = AuditLog::with('user','company')
                 ->latest('created_at')->take(15)->get();
@@ -65,6 +67,7 @@ class DashboardController extends Controller
                 'low_stock' => (clone $itemQuery)->whereNotNull('low_stock_qty')->whereColumn('current_stock', '<=', 'low_stock_qty')->count(),
                 'estimates' => $visibility->scopeForUser(Estimate::query(), Estimate::class)->whereBetween('estimate_date', [$from, $to])->count(),
                 'challans' => $visibility->scopeForUser(DeliveryChallan::query(), DeliveryChallan::class)->whereBetween('challan_date', [$from, $to])->count(),
+                'pending_expenses' => $visibility->scopeForUser(Expense::query(), Expense::class)->where('status', 'pending_approval')->count(),
             ];
             $recentLogs = AuditLog::with('user')
                 ->where('company_id', $companyId)
@@ -145,6 +148,7 @@ class DashboardController extends Controller
             ['can' => 'estimates.create', 'route' => 'admin.estimates.create', 'icon' => 'fa-file-contract', 'label' => 'New Estimate'],
             ['can' => 'delivery_challans.create', 'route' => 'admin.delivery-challans.create', 'icon' => 'fa-truck', 'label' => 'New Challan'],
             ['can' => 'purchase.create', 'route' => 'admin.purchases.create', 'icon' => 'fa-shopping-cart', 'label' => 'New Purchase'],
+            ['can' => 'expenses.create', 'route' => 'admin.expenses.create', 'icon' => 'fa-receipt', 'label' => 'New Expense'],
             ['can' => 'items.create', 'route' => 'admin.items.create', 'icon' => 'fa-box', 'label' => 'Add Item'],
             ['can' => 'banking.manage', 'route' => 'admin.bank-transactions.create', 'icon' => 'fa-exchange-alt', 'label' => 'Bank Transfer'],
             ['can' => 'users.create', 'route' => 'admin.users.create', 'icon' => 'fa-user-plus', 'label' => 'Add User'],

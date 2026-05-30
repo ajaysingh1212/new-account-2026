@@ -69,6 +69,7 @@ class PermissionSeeder extends Seeder
             ['name'=>'Create Expenses', 'slug'=>'expenses.create', 'module'=>'expenses'],
             ['name'=>'Edit Expenses', 'slug'=>'expenses.edit', 'module'=>'expenses'],
             ['name'=>'Delete Expenses', 'slug'=>'expenses.delete', 'module'=>'expenses'],
+            ['name'=>'Approve Expenses', 'slug'=>'expenses.approve', 'module'=>'expenses'],
 
             ['name'=>'View Parties', 'slug'=>'parties.view', 'module'=>'parties'],
             ['name'=>'Create Parties', 'slug'=>'parties.create', 'module'=>'parties'],
@@ -91,6 +92,7 @@ class PermissionSeeder extends Seeder
             ['name'=>'View Transaction Reports', 'slug'=>'reports.transaction', 'module'=>'reports'],
 
             ['name'=>'View Audit Logs', 'slug'=>'audit.view', 'module'=>'audit'],
+            ['name'=>'Manage Terms', 'slug'=>'terms.manage', 'module'=>'terms'],
         ];
 
         foreach ($permissions as $permission) {

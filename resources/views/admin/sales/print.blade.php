@@ -11,6 +11,8 @@
     'discount' => $invoice->discount_amount,
     'tax' => $invoice->tax_amount,
     'grandTotal' => $invoice->grand_total,
-    'terms' => $invoice->terms,
+    'terms' => $invoice->terms ?: ($defaultTerms?->content ?? ''),
+    'company' => $company ?? $invoice->company,
+    'bankAccount' => $bankAccount ?? null,
     'accent' => '#2563eb',
 ])
