@@ -260,10 +260,54 @@ class SalesInvoiceController extends Controller
 
             $selectedUnits = $this->decodeSelectedUnits($request->selected_units[$i] ?? null);
             abort_if($this->isGpsItem($item) && collect($selectedUnits)->contains(fn($unit) => empty($unit['vts_sim'])), 422, "VTS/SIM number is required for selected GPS units of {$item->name}.");
-            $selectedKeys = collect($selectedUnits)->pluck('key')->filter()->values()->all();
-            abort_if(count($selectedKeys) !== (int) $qty || (float) ((int) $qty) !== $qty, 422, "Select exactly {$qty} finished goods unit(s) for {$item->name}.");
-            $availableKeys = collect($unitPool[$item->id] ?? [])->where('sold', false)->pluck('key')->all();
-            abort_if(count(array_diff($selectedKeys, $availableKeys)) > 0, 422, "One or more selected units for {$item->name} are already sold or invalid.");
+            $selectedKeys = collect($selectedUnits)
+                ->pluck('key')
+                ->filter()
+                ->values()
+                ->all();
+
+            abort_if(
+                count($selectedKeys) !== (int) $qty || (float) ((int) $qty) !== $qty,
+                422,
+                "Select exactly {$qty} finished goods unit(s) for {$item->name}."
+            );
+            /*
+            |--------------------------------------------------------------------------
+            | Allow existing units when editing invoice
+            |--------------------------------------------------------------------------
+            */
+            $availableKeys = collect($unitPool[$item->id] ?? [])
+                ->where('sold', false)
+                ->pluck('key')
+                ->all();
+
+            if ($invoice->exists) {
+
+                $existingKeys = SalesInvoiceItem::where('sales_invoice_id', $invoice->id)
+                    ->where('item_id', $item->id)
+                    ->get()
+                    ->flatMap(function ($line) {
+                        return collect($line->selected_units ?? [])
+                            ->pluck('key');
+                    })
+                    ->filter()
+                    ->values()
+                    ->all();
+
+                $availableKeys = array_values(
+                    array_unique(
+                        array_merge($availableKeys, $existingKeys)
+                    )
+                );
+            }
+
+            $invalidKeys = array_diff($selectedKeys, $availableKeys);
+
+            abort_if(
+                count($invalidKeys) > 0,
+                422,
+                "One or more selected units for {$item->name} are already sold or invalid. Invalid Keys: " . implode(', ', $invalidKeys)
+            );
 
             $price = (float) $request->unit_price[$i];
             $base = $qty * $price;
