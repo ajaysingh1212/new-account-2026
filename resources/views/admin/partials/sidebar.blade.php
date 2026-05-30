@@ -164,7 +164,7 @@
                         </li>
                     @endcan
                     @can('reports.transaction')
-                        <li class="nav-item has-treeview {{ request()->routeIs('admin.reports.sales','admin.reports.purchases','admin.reports.day-book','admin.reports.all-transactions','admin.reports.profit-loss','admin.reports.bill-wise-profit','admin.reports.balance-sheet') ? 'menu-open' : '' }}">
+                        <li class="nav-item has-treeview {{ request()->routeIs('admin.reports.sales','admin.reports.purchases','admin.reports.day-book','admin.reports.all-transactions','admin.reports.profit-loss','admin.reports.bill-wise-profit','admin.reports.ageing','admin.reports.balance-sheet') ? 'menu-open' : '' }}">
                             <a href="#" class="nav-link"><i class="nav-icon fas fa-exchange-alt"></i><p>Transaction Report <i class="right fas fa-angle-left"></i></p></a>
                             <ul class="nav nav-treeview">
                                 <li class="nav-item"><a href="{{ route('admin.reports.sales') }}" class="nav-link"><i class="fas fa-bookmark nav-icon"></i><p>Sale Report</p></a></li>
@@ -173,6 +173,7 @@
                                 <li class="nav-item"><a href="{{ route('admin.reports.all-transactions') }}" class="nav-link"><i class="fas fa-random nav-icon"></i><p>All Transactions</p></a></li>
                                 <li class="nav-item"><a href="{{ route('admin.reports.profit-loss') }}" class="nav-link"><i class="fas fa-heart nav-icon"></i><p>Profit And Loss</p></a></li>
                                 <li class="nav-item"><a href="{{ route('admin.reports.bill-wise-profit') }}" class="nav-link"><i class="fas fa-file-invoice nav-icon"></i><p>Bill Wise Profit</p></a></li>
+                                <li class="nav-item"><a href="{{ route('admin.reports.ageing') }}" class="nav-link"><i class="fas fa-hourglass-half nav-icon"></i><p>Ageing Report</p></a></li>
                                 <li class="nav-item"><a href="{{ route('admin.reports.balance-sheet') }}" class="nav-link"><i class="fas fa-balance-scale nav-icon"></i><p>Balance Sheet</p></a></li>
                                 <li class="nav-item"><a href="{{ route('admin.reports.item-trace') }}" class="nav-link"><i class="fas fa-search-location nav-icon"></i><p>Return Trace Report</p></a></li>
                             </ul>

@@ -9,9 +9,9 @@ use App\Models\StockMovement;
 
 class AccountingService
 {
-    public function moveStock(Item $item, array $data): void
+    public function moveStock(Item $item, array $data): ?StockMovement
     {
-        if (!$item->track_stock) return;
+        if (!$item->track_stock) return null;
 
         $qty = (float) $data['quantity'];
         $value = (float) ($data['total_value'] ?? ($qty * (float) ($data['unit_price'] ?? 0)));
@@ -24,7 +24,7 @@ class AccountingService
 
         $item->update(['current_stock' => $newStock, 'stock_value' => $newValue]);
 
-        StockMovement::create(array_merge($data, [
+        return StockMovement::create(array_merge($data, [
             'company_id' => $item->company_id,
             'item_id' => $item->id,
             'stock_after' => $newStock,

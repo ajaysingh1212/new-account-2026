@@ -332,6 +332,22 @@
             </div>
             @endif
 
+            @if(session('pin_login_user_id'))
+            <form method="POST" action="{{ route('pin-login') }}" style="margin-bottom:24px;">
+                @csrf
+                <div class="form-group">
+                    <label>Quick PIN Login</label>
+                    <div class="input-wrap">
+                        <input type="password" name="pin" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" placeholder="6 digit PIN" required>
+                        <span class="icon">#</span>
+                    </div>
+                    @error('pin')<div class="error-msg">! {{ $message }}</div>@enderror
+                </div>
+                <button type="submit" class="btn-login">Unlock Account</button>
+                <div class="divider">OR PASSWORD LOGIN</div>
+            </form>
+            @endif
+
             <form method="POST" action="{{ route('login') }}">
                 @csrf
 

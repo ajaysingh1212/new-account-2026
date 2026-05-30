@@ -21,4 +21,5 @@ class PartyPayment extends Model
     public function party() { return $this->belongsTo(Party::class); }
     public function bankAccount() { return $this->belongsTo(BankAccount::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
+    public function allocations() { return $this->hasMany(PartyPaymentAllocation::class); }
 }

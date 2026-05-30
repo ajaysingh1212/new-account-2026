@@ -7,6 +7,7 @@ use App\Models\BankTransaction;
 use App\Models\Item;
 use App\Models\Party;
 use App\Models\PartyLedger;
+use App\Models\PartyPaymentAllocation;
 use App\Models\PurchaseBill;
 use App\Models\ProductionBatch;
 use App\Models\SalesInvoice;
@@ -166,7 +167,48 @@ class ReportController extends Controller
 
     public function billWiseProfit(Request $request, EntryVisibilityService $visibility)
     {
-        return $this->billReport($request, $visibility, SalesInvoice::class, 'sales', 'Bill Wise Profit');
+        $filters = $this->filters($request);
+        $parties = $visibility->scopeForUser(Party::orderBy('display_name'), Party::class)->get();
+        $bills = $visibility->scopeForUser(SalesInvoice::with(['party','items.item'])->whereBetween('billing_date', [$filters['from'], $filters['to']]), SalesInvoice::class)
+            ->when($filters['partyId'], fn($q) => $q->where('party_id', $filters['partyId']))
+            ->latest('billing_date')
+            ->get()
+            ->map(function (SalesInvoice $bill) {
+                $cost = $bill->items->sum(function ($line) {
+                    $unitCost = collect($line->selected_units ?? [])->avg('cost_per_unit');
+                    $unitCost = $unitCost ?: (float) ($line->item?->purchase_price ?? 0);
+                    return $unitCost * (float) $line->quantity;
+                });
+                $sale = (float) $bill->grand_total;
+                return ['bill' => $bill, 'cost' => $cost, 'sale' => $sale, 'profit' => $sale - $cost];
+            });
+
+        return view('admin.reports.bill-wise-profit', compact('filters','parties','bills'));
+    }
+
+    public function ageing(Request $request, EntryVisibilityService $visibility)
+    {
+        $companyParties = $visibility->scopeForUser(Party::orderBy('display_name'), Party::class)->get();
+        $partyId = $request->integer('party_id') ?: null;
+        $bucket = $request->input('bucket', '30');
+        $from = $request->input('from_date');
+        $to = $request->input('to_date', now()->toDateString());
+        $days = $bucket === 'custom' ? null : (int) $bucket;
+        $startDate = $days ? now()->subDays($days)->toDateString() : ($from ?: now()->subDays(30)->toDateString());
+
+        $sales = $visibility->scopeForUser(SalesInvoice::with('party')->where('sale_type', 'credit'), SalesInvoice::class)
+            ->whereBetween('billing_date', [$startDate, $to])
+            ->when($partyId, fn($q) => $q->where('party_id', $partyId))
+            ->get()
+            ->map(fn($bill) => $this->ageingRow($bill, SalesInvoice::class, 'receivable'));
+        $purchases = $visibility->scopeForUser(PurchaseBill::with('party')->where('purchase_type', 'credit'), PurchaseBill::class)
+            ->whereBetween('billing_date', [$startDate, $to])
+            ->when($partyId, fn($q) => $q->where('party_id', $partyId))
+            ->get()
+            ->map(fn($bill) => $this->ageingRow($bill, PurchaseBill::class, 'payable'));
+        $rows = $sales->merge($purchases)->filter(fn($row) => $row['due'] > 0)->sortByDesc('date')->values();
+
+        return view('admin.reports.ageing', ['parties' => $companyParties, 'rows' => $rows, 'partyId' => $partyId, 'bucket' => $bucket, 'from' => $startDate, 'to' => $to]);
     }
 
     public function balanceSheet(Request $request, EntryVisibilityService $visibility)
@@ -285,6 +327,21 @@ class ReportController extends Controller
             'to' => $request->input('to_date', $date->copy()->endOfMonth()->toDateString()),
             'partyId' => $request->integer('party_id') ?: null,
             'withoutGst' => $request->boolean('without_gst'),
+        ];
+    }
+
+    private function ageingRow($bill, string $model, string $kind): array
+    {
+        $paid = (float) PartyPaymentAllocation::where('bill_model', $model)->where('bill_id', $bill->id)->sum('amount');
+        return [
+            'kind' => $kind,
+            'party' => $bill->party?->display_name ?: 'Cash / Walk-in',
+            'invoice' => $bill->invoice_no,
+            'date' => $bill->billing_date,
+            'age' => $bill->billing_date ? $bill->billing_date->diffInDays(now()) : 0,
+            'total' => (float) $bill->grand_total,
+            'paid' => $paid,
+            'due' => max(0, (float) $bill->grand_total - $paid),
         ];
     }
 

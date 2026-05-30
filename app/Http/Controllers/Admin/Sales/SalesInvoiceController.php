@@ -258,7 +258,7 @@ class SalesInvoiceController extends Controller
             abort_if($item->track_stock && (float) $item->current_stock < $qty, 422, "Insufficient stock for {$item->name}");
             abort_if($item->productType?->nature !== 'finished_goods', 422, 'Only finished goods can be sold from Sales.');
 
-            $selectedUnits = $this->decodeSelectedUnits($request->selected_units[$i] ?? null);
+            $selectedUnits = $this->normalizeSelectedUnits($this->decodeSelectedUnits($request->selected_units[$i] ?? null), $unitPool[$item->id] ?? []);
             abort_if($this->isGpsItem($item) && collect($selectedUnits)->contains(fn($unit) => empty($unit['vts_sim'])), 422, "VTS/SIM number is required for selected GPS units of {$item->name}.");
             $selectedKeys = collect($selectedUnits)->pluck('key')->filter()->values()->all();
             abort_if(count($selectedKeys) !== (int) $qty || (float) ((int) $qty) !== $qty, 422, "Select exactly {$qty} finished goods unit(s) for {$item->name}.");
@@ -420,6 +420,30 @@ class SalesInvoiceController extends Controller
         return is_array($units) ? array_values($units) : [];
     }
 
+    private function normalizeSelectedUnits(array $selectedUnits, array $poolUnits): array
+    {
+        return collect($selectedUnits)->map(function (array $selected) use ($poolUnits) {
+            $selectedKey = $selected['key'] ?? null;
+            $poolMatch = collect($poolUnits)->firstWhere('key', $selectedKey);
+            if ($poolMatch) {
+                return $selected;
+            }
+
+            $sameUnit = collect($poolUnits)->first(function ($unit) use ($selected) {
+                foreach (['serial_no', 'vts_sim', 'buyer_code', 'batch_no', 'production_batch_no'] as $field) {
+                    if (!empty($selected[$field]) && !empty($unit[$field]) && (string) $selected[$field] !== (string) $unit[$field]) {
+                        return false;
+                    }
+                }
+
+                return collect(['serial_no', 'vts_sim', 'buyer_code', 'batch_no', 'production_batch_no'])
+                    ->contains(fn($field) => !empty($selected[$field]) && !empty($unit[$field]));
+            });
+
+            return $sameUnit ? array_merge($selected, ['key' => $sameUnit['key']]) : $selected;
+        })->values()->all();
+    }
+
     private function validatedTargetCompanyIds(Request $request, int $companyId): array
     {
         $allowed = CompanyMerge::getMergedCompanyIds($companyId);
@@ -481,7 +505,7 @@ class SalesInvoiceController extends Controller
                     'selected_units' => $line->selected_units,
                 ]);
 
-                $accounting->moveStock($targetItem, [
+                $movement = $accounting->moveStock($targetItem, [
                     'party_id' => $targetParty->id,
                     'movement_date' => $purchase->billing_date,
                     'movement_type' => 'inter_company_purchase',
@@ -494,6 +518,10 @@ class SalesInvoiceController extends Controller
                     'reference_no' => $purchase->invoice_no,
                     'description' => 'Auto purchase stock in from inter-company sale.',
                 ]);
+                $this->syncInterCompanyVisibilityForEntry($request, $targetItem, $targetCompanyId);
+                if ($movement) {
+                    $this->syncInterCompanyVisibilityForEntry($request, $movement, $targetCompanyId);
+                }
             }
 
             $accounting->postPartyLedger($targetParty, [
@@ -605,10 +633,15 @@ class SalesInvoiceController extends Controller
 
     private function syncPurchaseVisibility(Request $request, PurchaseBill $purchase, int $targetCompanyId): void
     {
+        $this->syncInterCompanyVisibilityForEntry($request, $purchase, $targetCompanyId);
+    }
+
+    private function syncInterCompanyVisibilityForEntry(Request $request, $entry, int $targetCompanyId): void
+    {
         EntryVisibility::updateOrCreate(
             [
-                'entry_type' => PurchaseBill::class,
-                'entry_id' => $purchase->id,
+                'entry_type' => $entry::class,
+                'entry_id' => $entry->id,
             ],
             [
                 'company_id' => $targetCompanyId,

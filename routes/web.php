@@ -36,7 +36,7 @@ Route::get('/dashboard', function () {
 require __DIR__ . '/auth.php';
 
 // ── Admin Routes ──────────────────────────────────────────
-Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified'])->group(function () {
+Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_unlocked'])->group(function () {
 
     // Dashboard
     Route::get('/dashboard', [Admin\DashboardController::class, 'index'])->name('dashboard');
@@ -65,6 +65,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified'])->group(
         Route::get('bank-reports/statement', [BankTransactionController::class, 'report'])->name('bank-reports.statement');
     });
     Route::middleware('permission:party_payments.view')->group(function () {
+        Route::get('party-payments/open-bills', [PartyPaymentController::class, 'openBills'])->name('party-payments.open-bills');
         Route::resource('party-payments', PartyPaymentController::class)->only(['index','create','store']);
     });
     Route::middleware('permission:product_types.view')->group(function () {
@@ -138,6 +139,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified'])->group(
         Route::get('reports/all-transactions', [ReportController::class, 'allTransactions'])->name('reports.all-transactions');
         Route::get('reports/profit-loss', [ReportController::class, 'profitLoss'])->name('reports.profit-loss');
         Route::get('reports/bill-wise-profit', [ReportController::class, 'billWiseProfit'])->name('reports.bill-wise-profit');
+        Route::get('reports/ageing', [ReportController::class, 'ageing'])->name('reports.ageing');
         Route::get('reports/balance-sheet', [ReportController::class, 'balanceSheet'])->name('reports.balance-sheet');
         Route::get('reports/item-trace', [ReportController::class, 'itemTrace'])->name('reports.item-trace');
     });

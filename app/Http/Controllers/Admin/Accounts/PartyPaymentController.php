@@ -7,6 +7,9 @@ use App\Models\BankAccount;
 use App\Models\BankTransaction;
 use App\Models\Party;
 use App\Models\PartyPayment;
+use App\Models\PartyPaymentAllocation;
+use App\Models\PurchaseBill;
+use App\Models\SalesInvoice;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
 use Illuminate\Http\Request;
@@ -19,7 +22,7 @@ class PartyPaymentController extends Controller
     {
         $type = $request->query('type');
         $payments = $visibility->scopeForUser(
-            PartyPayment::with(['party','bankAccount','creator'])
+            PartyPayment::with(['party','bankAccount','creator','allocations'])
                 ->when($type, fn($q) => $q->where('payment_type', $type))
                 ->latest('payment_date')
                 ->latest(),
@@ -41,6 +44,57 @@ class PartyPaymentController extends Controller
         ]);
     }
 
+    public function openBills(Request $request)
+    {
+        $companyId = auth()->user()->current_company_id;
+        $data = $request->validate([
+            'party_id' => ['required', Rule::exists('parties', 'id')->where('company_id', $companyId)],
+            'payment_type' => ['required', Rule::in(['payment_in','payment_out'])],
+        ]);
+
+        $model = $data['payment_type'] === 'payment_in' ? SalesInvoice::class : PurchaseBill::class;
+        $typeColumn = $data['payment_type'] === 'payment_in' ? 'sale_type' : 'purchase_type';
+        $billType = $data['payment_type'] === 'payment_in' ? 'sales' : 'purchase';
+
+        $bills = $model::where('company_id', $companyId)
+            ->where('party_id', $data['party_id'])
+            ->where($typeColumn, 'credit')
+            ->latest('billing_date')
+            ->get()
+            ->map(function ($bill) use ($model, $billType) {
+                $paid = (float) PartyPaymentAllocation::where('bill_model', $model)
+                    ->where('bill_id', $bill->id)
+                    ->sum('amount');
+                $due = max(0, (float) $bill->grand_total - $paid);
+
+                return [
+                    'id' => $bill->id,
+                    'type' => $billType,
+                    'invoice_no' => $bill->invoice_no,
+                    'billing_date' => $bill->billing_date?->format('Y-m-d'),
+                    'grand_total' => round((float) $bill->grand_total, 2),
+                    'paid' => round($paid, 2),
+                    'due' => round($due, 2),
+                    'history' => PartyPaymentAllocation::with('payment')
+                        ->where('bill_model', $model)
+                        ->where('bill_id', $bill->id)
+                        ->latest()
+                        ->get()
+                        ->map(fn($allocation) => [
+                            'date' => $allocation->payment?->payment_date?->format('d M Y'),
+                            'reference_no' => $allocation->payment?->reference_no ?: '-',
+                            'amount' => round((float) $allocation->amount, 2),
+                            'mode' => $allocation->payment?->payment_mode ?: '-',
+                        ])
+                        ->values(),
+                ];
+            })
+            ->filter(fn($bill) => $bill['due'] > 0)
+            ->values();
+
+        return response()->json(['bills' => $bills]);
+    }
+
     public function store(Request $request, AccountingService $accounting)
     {
         $companyId = auth()->user()->current_company_id;
@@ -55,6 +109,9 @@ class PartyPaymentController extends Controller
             'payment_mode' => ['nullable','string','max:40'],
             'description' => ['nullable','string'],
             'attachment' => ['nullable','file','max:4096'],
+            'allocations' => ['nullable','array'],
+            'allocations.*.bill_id' => ['required_with:allocations','integer'],
+            'allocations.*.amount' => ['required_with:allocations','numeric','min:0.01'],
         ]);
 
         $data['discount_amount'] = (float) ($data['discount_amount'] ?? 0);
@@ -66,11 +123,50 @@ class PartyPaymentController extends Controller
         DB::transaction(function () use ($data, $companyId, $accounting) {
             $party = Party::where('company_id', $companyId)->lockForUpdate()->findOrFail($data['party_id']);
             $account = BankAccount::where('company_id', $companyId)->lockForUpdate()->findOrFail($data['bank_account_id']);
+            $allocations = collect($data['allocations'] ?? [])
+                ->filter(fn($row) => (float) ($row['amount'] ?? 0) > 0)
+                ->values();
+            abort_if($allocations->isEmpty(), 422, 'Select at least one bill and enter payment amount.');
 
             $payment = PartyPayment::create(array_merge($data, [
                 'company_id' => $companyId,
                 'created_by' => auth()->id(),
             ]));
+
+            $billModel = $payment->payment_type === 'payment_in' ? SalesInvoice::class : PurchaseBill::class;
+            $billType = $payment->payment_type === 'payment_in' ? 'sales' : 'purchase';
+            $typeColumn = $payment->payment_type === 'payment_in' ? 'sale_type' : 'purchase_type';
+            $allocatedTotal = 0;
+
+            foreach ($allocations as $row) {
+                $bill = $billModel::where('company_id', $companyId)
+                    ->where('party_id', $party->id)
+                    ->where($typeColumn, 'credit')
+                    ->lockForUpdate()
+                    ->findOrFail($row['bill_id']);
+                $alreadyPaid = (float) PartyPaymentAllocation::where('bill_model', $billModel)
+                    ->where('bill_id', $bill->id)
+                    ->sum('amount');
+                $due = max(0, (float) $bill->grand_total - $alreadyPaid);
+                $amount = round((float) $row['amount'], 2);
+                abort_if($amount > $due, 422, "Payment cannot be more than due amount for bill {$bill->invoice_no}.");
+                $allocatedTotal += $amount;
+
+                PartyPaymentAllocation::create([
+                    'party_payment_id' => $payment->id,
+                    'company_id' => $companyId,
+                    'party_id' => $party->id,
+                    'bill_type' => $billType,
+                    'bill_model' => $billModel,
+                    'bill_id' => $bill->id,
+                    'bill_no' => $bill->invoice_no,
+                    'bill_date' => $bill->billing_date,
+                    'bill_total' => $bill->grand_total,
+                    'amount' => $amount,
+                ]);
+            }
+
+            abort_if(abs($allocatedTotal - (float) $payment->amount) > 0.01, 422, 'Invoice allocation total must match payment amount.');
 
             $isIn = $payment->payment_type === 'payment_in';
             $partyDebit = $isIn ? 0 : $payment->total_amount;

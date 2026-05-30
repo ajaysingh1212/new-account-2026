@@ -10,6 +10,7 @@ use App\Models\DeliveryChallan;
 use App\Models\Estimate;
 use App\Models\Item;
 use App\Models\Party;
+use App\Models\PartyPaymentAllocation;
 use App\Models\PurchaseBill;
 use App\Models\Role;
 use App\Models\SalesInvoice;
@@ -71,6 +72,10 @@ class DashboardController extends Controller
             $companies = collect();
         }
 
+        $salesDueRows = $this->dueRows(SalesInvoice::class, 'sale_type', $companyId, $visibility, $user);
+        $purchaseDueRows = $this->dueRows(PurchaseBill::class, 'purchase_type', $companyId, $visibility, $user);
+        $stats['sales_due'] = $salesDueRows->sum('due');
+        $stats['purchase_due'] = $purchaseDueRows->sum('due');
         $monthly = $this->monthlySeries($companyId, $visibility, $user);
         $mix = [
             'Sales' => (float) ($stats['sales'] ?? 0),
@@ -80,7 +85,7 @@ class DashboardController extends Controller
         ];
         $quickActions = $this->quickActions($user);
 
-        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','monthly','mix','quickActions'));
+        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','monthly','mix','quickActions','salesDueRows','purchaseDueRows'));
     }
 
     private function scope($query, ?int $companyId)
@@ -151,5 +156,20 @@ class DashboardController extends Controller
         }
 
         return collect($actions)->filter(fn($action) => $user->can($action['can']) || ($user->isSuperAdmin() && $action['route'] === 'admin.companies.create'))->values()->all();
+    }
+
+    private function dueRows(string $model, string $typeColumn, ?int $companyId, EntryVisibilityService $visibility, User $user)
+    {
+        $query = $model::with('party')->where($typeColumn, 'credit');
+        $query = $user->isSuperAdmin() ? $this->scope($query, $companyId) : $visibility->scopeForUser($query, $model);
+
+        return $query->get()
+            ->map(function ($bill) use ($model) {
+                $paid = (float) PartyPaymentAllocation::where('bill_model', $model)->where('bill_id', $bill->id)->sum('amount');
+                $due = max(0, (float) $bill->grand_total - $paid);
+                return ['party' => $bill->party?->display_name ?: 'Cash / Walk-in', 'invoice' => $bill->invoice_no, 'date' => $bill->billing_date, 'total' => (float) $bill->grand_total, 'paid' => $paid, 'due' => $due];
+            })
+            ->filter(fn($row) => $row['due'] > 0)
+            ->values();
     }
 }

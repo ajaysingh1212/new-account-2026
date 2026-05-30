@@ -8,6 +8,7 @@ use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
+use App\Http\Controllers\Auth\ScreenLockController;
 use App\Http\Controllers\Auth\VerifyEmailController;
 use Illuminate\Support\Facades\Route;
 
@@ -56,4 +57,10 @@ Route::middleware('auth')->group(function () {
 
     Route::post('logout', [AuthenticatedSessionController::class, 'destroy'])
         ->name('logout');
+
+    Route::post('screen-lock/pin', [ScreenLockController::class, 'setPin'])->name('screen-lock.pin');
+    Route::post('screen-lock/lock', [ScreenLockController::class, 'lock'])->name('screen-lock.lock');
+    Route::post('screen-lock/unlock', [ScreenLockController::class, 'unlock'])->name('screen-lock.unlock');
 });
+
+Route::post('pin-login', [ScreenLockController::class, 'pinLogin'])->name('pin-login');

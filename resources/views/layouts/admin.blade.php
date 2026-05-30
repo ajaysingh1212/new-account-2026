@@ -166,6 +166,7 @@
         /* ── Page animations ─────────────────── */
         .content-wrapper { animation: fadeIn 0.4s ease; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes wave { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-24px)} }
 
         /* ── Sidebar user panel ─────────────── */
         .user-panel { border-bottom: 1px solid rgba(255,255,255,0.05) !important; padding: 12px 16px !important; }
@@ -206,6 +207,13 @@
 
         <ul class="navbar-nav ml-auto">
             <!-- Search -->
+            <li class="nav-item">
+                @if(auth()->user()->screen_pin)
+                    <button type="button" class="btn btn-sm btn-outline-primary mt-1" id="screenLockBtn"><i class="fas fa-lock"></i> Screen Lock</button>
+                @else
+                    <button type="button" class="btn btn-sm btn-outline-primary mt-1" data-toggle="modal" data-target="#pinSetupModal"><i class="fas fa-key"></i> Set PIN</button>
+                @endif
+            </li>
             <li class="nav-item">
                 <a class="nav-link" href="{{ route('admin.profile.edit') }}" title="Profile">
                     @if(auth()->user()->profile_pic)
@@ -285,6 +293,32 @@
     </footer>
 </div>
 
+<div class="modal fade" id="pinSetupModal" tabindex="-1">
+    <div class="modal-dialog modal-sm modal-dialog-centered">
+        <form class="modal-content" id="pinSetupForm">
+            <div class="modal-header"><h5 class="modal-title">Set 6 Digit PIN</h5><button type="button" class="close" data-dismiss="modal">&times;</button></div>
+            <div class="modal-body">
+                <input type="password" name="pin" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" class="form-control text-center mb-2" placeholder="PIN" required>
+                <input type="password" name="pin_confirmation" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" class="form-control text-center" placeholder="Confirm PIN" required>
+                <div class="text-danger small mt-2" id="pinSetupError"></div>
+            </div>
+            <div class="modal-footer"><button class="btn btn-primary btn-block">Save PIN</button></div>
+        </form>
+    </div>
+</div>
+
+<div id="liveLockOverlay" style="display:none;position:fixed;inset:0;z-index:5000;background:#0f172a;color:#fff;place-items:center;text-align:center;overflow:hidden;">
+    <div style="position:absolute;inset:auto -20% -30% -20%;height:45vh;background:linear-gradient(90deg,#22d3ee,#6366f1,#22c55e);opacity:.5;border-radius:50%;animation:wave 5s ease-in-out infinite"></div>
+    <form id="liveUnlockForm" style="position:relative;width:min(420px,92vw);">
+        <div style="width:84px;height:84px;border-radius:24px;background:rgba(255,255,255,.14);display:grid;place-items:center;margin:0 auto 18px;font-size:34px;font-weight:800;">{{ substr(auth()->user()->name, 0, 1) }}</div>
+        <h2>{{ auth()->user()->name }}</h2>
+        <p>Enter PIN to continue.</p>
+        <input class="form-control text-center" style="letter-spacing:10px;font-size:24px" name="pin" maxlength="6" inputmode="numeric" pattern="[0-9]{6}" required>
+        <div class="text-danger mt-2" id="liveUnlockError"></div>
+        <button class="btn btn-light btn-block mt-3">Unlock</button>
+    </form>
+</div>
+
 <!-- Scripts -->
 <!-- JQUERY FIRST -->
 <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
@@ -333,6 +367,25 @@
 
     // Init Select2
     $('.select2').select2({ theme: 'classic' });
+    $('#pinSetupForm').on('submit', async function(e) {
+        e.preventDefault();
+        const res = await fetch('{{ route('screen-lock.pin') }}', { method:'POST', body:new FormData(this), headers:{'X-CSRF-TOKEN':$('meta[name="csrf-token"]').attr('content'), 'Accept':'application/json'} });
+        if (res.ok) location.reload();
+        else $('#pinSetupError').text('PIN must be 6 digits and confirmation must match.');
+    });
+    $('#screenLockBtn').on('click', async function() {
+        const res = await fetch('{{ route('screen-lock.lock') }}', { method:'POST', headers:{'X-CSRF-TOKEN':$('meta[name="csrf-token"]').attr('content'), 'Accept':'application/json'} });
+        if (res.ok) $('#liveLockOverlay').css('display','grid').find('input[name="pin"]').focus();
+    });
+    $('#liveUnlockForm').on('submit', async function(e) {
+        e.preventDefault();
+        const res = await fetch('{{ route('screen-lock.unlock') }}', { method:'POST', body:new FormData(this), headers:{'X-CSRF-TOKEN':$('meta[name="csrf-token"]').attr('content'), 'Accept':'application/json'} });
+        if (res.ok) { $('#liveLockOverlay').hide(); this.reset(); return; }
+        $('#liveUnlockError').text('Invalid PIN.');
+    });
+    @if(session('screen_locked'))
+        $('#liveLockOverlay').css('display','grid');
+    @endif
 </script>
 
 @stack('scripts')

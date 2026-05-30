@@ -19,7 +19,9 @@
         $cards[] = ['label'=>'Active Companies','value'=>$stats['active_companies'] ?? 0,'icon'=>'fa-check-circle','accent'=>'#22c55e'];
     }
     if ($user->can('sales.view')) $cards[] = ['label'=>'Sales','value'=>'Rs '.number_format($stats['sales'] ?? 0,2),'icon'=>'fa-file-invoice-dollar','accent'=>'#2563eb'];
+    if ($user->can('sales.view')) $cards[] = ['label'=>'Sales Due','value'=>'Rs '.number_format($stats['sales_due'] ?? 0,2),'icon'=>'fa-hand-holding-dollar','accent'=>'#dc2626','target'=>'salesDueBox'];
     if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase','value'=>'Rs '.number_format($stats['purchases'] ?? 0,2),'icon'=>'fa-shopping-cart','accent'=>'#ec4899'];
+    if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase Due','value'=>'Rs '.number_format($stats['purchase_due'] ?? 0,2),'icon'=>'fa-file-circle-exclamation','accent'=>'#f59e0b','target'=>'purchaseDueBox'];
     if ($user->can('parties.view')) $cards[] = ['label'=>'Parties','value'=>$stats['parties'] ?? 0,'icon'=>'fa-users','accent'=>'#8b5cf6'];
     if ($user->can('items.view')) $cards[] = ['label'=>'Items','value'=>$stats['items'] ?? 0,'icon'=>'fa-box','accent'=>'#f59e0b'];
     if ($user->can('stocks.view')) $cards[] = ['label'=>'Low Stock','value'=>$stats['low_stock'] ?? 0,'icon'=>'fa-exclamation-triangle','accent'=>'#ef4444'];
@@ -60,7 +62,7 @@
 <div class="row">
     @forelse($cards as $card)
         <div class="col-6 col-xl-3 mb-4">
-            <div class="metric-card" style="--accent:{{ $card['accent'] }}">
+            <div class="metric-card" style="--accent:{{ $card['accent'] }};cursor:{{ isset($card['target']) ? 'pointer' : 'default' }}" @if(isset($card['target'])) onclick="document.getElementById('{{ $card['target'] }}').classList.toggle('d-none')" @endif>
                 <div class="metric-icon"><i class="fas {{ $card['icon'] }}"></i></div>
                 <div class="metric-value">{{ $card['value'] }}</div>
                 <div class="metric-label">{{ $card['label'] }}</div>
@@ -69,6 +71,14 @@
     @empty
         <div class="col-12"><div class="alert alert-info">No dashboard widgets are available for this role yet.</div></div>
     @endforelse
+</div>
+<div class="row">
+    <div class="col-lg-6 mb-4 d-none" id="salesDueBox">
+        <div class="chart-card"><h5>Sales Due Party Wise</h5><div class="table-responsive"><table class="table"><thead><tr><th>Party</th><th>Invoice</th><th>Due</th></tr></thead><tbody>@forelse($salesDueRows as $row)<tr><td>{{ $row['party'] }}</td><td>{{ $row['invoice'] }}</td><td>Rs {{ number_format($row['due'],2) }}</td></tr>@empty<tr><td colspan="3">No sales due.</td></tr>@endforelse</tbody></table></div></div>
+    </div>
+    <div class="col-lg-6 mb-4 d-none" id="purchaseDueBox">
+        <div class="chart-card"><h5>Purchase Due Party Wise</h5><div class="table-responsive"><table class="table"><thead><tr><th>Party</th><th>Bill</th><th>Due</th></tr></thead><tbody>@forelse($purchaseDueRows as $row)<tr><td>{{ $row['party'] }}</td><td>{{ $row['invoice'] }}</td><td>Rs {{ number_format($row['due'],2) }}</td></tr>@empty<tr><td colspan="3">No purchase due.</td></tr>@endforelse</tbody></table></div></div>
+    </div>
 </div>
 <div class="row">
     <div class="col-lg-7 mb-4"><div class="chart-card"><h5>Quick Actions</h5><div class="quick-grid mt-3">@forelse($quickActions as $action)<a class="quick-action" href="{{ route($action['route']) }}"><i class="fas {{ $action['icon'] }}"></i>{{ $action['label'] }}</a>@empty <span class="text-muted">No actions available for this role.</span>@endforelse</div></div></div>

@@ -13,7 +13,7 @@
     <div class="card-body">
         <div class="table-responsive">
             <table id="paymentsTable" class="table table-hover">
-                <thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Bank/Cash</th><th>Reference</th><th>Amount</th><th>Discount</th><th>Total</th><th>Mode</th><th>Created By</th></tr></thead>
+                <thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Bank/Cash</th><th>Bills</th><th>Reference</th><th>Amount</th><th>Discount</th><th>Total</th><th>Mode</th><th>Created By</th></tr></thead>
                 <tbody>
                 @foreach($payments as $payment)
                     <tr>
@@ -21,6 +21,13 @@
                         <td><span class="{{ $payment->payment_type === 'payment_in' ? 'badge-active' : 'badge-inactive' }}">{{ str_replace('_', ' ', ucfirst($payment->payment_type)) }}</span></td>
                         <td>{{ $payment->party?->display_name }}</td>
                         <td>{{ $payment->bankAccount?->account_name }}</td>
+                        <td>
+                            @forelse($payment->allocations as $allocation)
+                                <div><b>{{ $allocation->bill_no }}</b>: Rs {{ number_format((float) $allocation->amount, 2) }}</div>
+                            @empty
+                                -
+                            @endforelse
+                        </td>
                         <td>{{ $payment->reference_no ?: '-' }}</td>
                         <td>Rs {{ number_format((float) $payment->amount, 2) }}</td>
                         <td>Rs {{ number_format((float) $payment->discount_amount, 2) }}</td>

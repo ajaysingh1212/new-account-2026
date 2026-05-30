@@ -36,11 +36,15 @@ class AuthenticatedSessionController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        $pinUserId = $request->user()?->screen_pin ? $request->user()->id : null;
         Auth::guard('web')->logout();
 
         $request->session()->invalidate();
 
         $request->session()->regenerateToken();
+        if ($pinUserId) {
+            $request->session()->put('pin_login_user_id', $pinUserId);
+        }
 
         return redirect('/');
     }
