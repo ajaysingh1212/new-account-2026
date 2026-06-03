@@ -372,6 +372,7 @@ class SalesInvoiceController extends Controller
 
         $producedUnits = ProductionBatch::with('finishedItem')
             ->where('company_id', $companyId)
+            ->where('status', 'posted')
             ->get()
             ->flatMap(function (ProductionBatch $batch) use ($soldKeys) {
                 return collect($batch->units_data ?? [])->map(function ($unit, $index) use ($batch, $soldKeys) {

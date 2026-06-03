@@ -9,6 +9,7 @@ use App\Models\Item;
 use App\Models\Party;
 use App\Models\ProductionBatch;
 use App\Models\SalesInvoiceItem;
+use App\Models\StockMovement;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
 use Illuminate\Http\Request;
@@ -99,6 +100,7 @@ class ProductionBatchController extends Controller
     public function edit(ProductionBatch $productionBatch, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($productionBatch);
+        abort_if($productionBatch->status === 'reverted', 422, 'Reverted production batch cannot be edited.');
         $productionBatch->load(['finishedItem', 'creator']);
 
         return view('admin.production.edit', [
@@ -190,6 +192,7 @@ class ProductionBatchController extends Controller
                 'cost_per_unit'     => $qty > 0 ? $rawCost / $qty : 0,
                 'notes'             => $data['notes'] ?? null,
                 'units_data'        => $unitsData ?: null,
+                'status'            => 'posted',
                 'created_by'        => auth()->id(),
             ]);
 
@@ -218,6 +221,7 @@ class ProductionBatchController extends Controller
     public function update(Request $request, ProductionBatch $productionBatch, AccountingService $accounting, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($productionBatch);
+        abort_if($productionBatch->status === 'reverted', 422, 'Reverted production batch cannot be edited.');
 
         $data = $request->validate([
             'batch_no' => ['required','max:30'],
@@ -320,6 +324,76 @@ class ProductionBatchController extends Controller
         return redirect()->route('admin.production-batches.show', $productionBatch)->with('success', 'Production batch updated with stock reposted.');
     }
 
+    public function revert(ProductionBatch $productionBatch, AccountingService $accounting, EntryVisibilityService $visibility)
+    {
+        $visibility->authorizeView($productionBatch);
+
+        DB::transaction(function () use ($productionBatch, $accounting) {
+            $productionBatch->refresh()->load('finishedItem');
+
+            abort_if($productionBatch->status === 'reverted', 422, 'Production batch is already reverted.');
+
+            $soldKeys = collect($this->soldUnitKeys($productionBatch->company_id))
+                ->filter(fn($key) => str_starts_with($key, $productionBatch->id . '-'))
+                ->values();
+
+            abort_if($soldKeys->isNotEmpty(), 422, 'This batch has sold finished-goods units. Reverse the related sale first.');
+
+            $netMovements = $this->netProductionMovementsForBatch($productionBatch);
+
+            $finishedNet = $netMovements->first(fn($row) => (int) $row['item_id'] === (int) $productionBatch->finished_item_id);
+            if ($finishedNet && $finishedNet['quantity'] > 0) {
+                $finished = Item::lockForUpdate()->findOrFail($finishedNet['item_id']);
+                abort_if(
+                    (float) $finished->current_stock < $finishedNet['quantity'],
+                    422,
+                    "Insufficient finished goods stock to revert {$finished->name}."
+                );
+
+                $accounting->moveStock($finished, [
+                    'movement_date' => now()->toDateString(),
+                    'movement_type' => 'production_batch_revert_output',
+                    'direction' => 'out',
+                    'quantity' => $finishedNet['quantity'],
+                    'unit_price' => $finishedNet['quantity'] > 0 ? $finishedNet['value'] / $finishedNet['quantity'] : 0,
+                    'total_value' => $finishedNet['value'],
+                    'reference_type' => ProductionBatch::class,
+                    'reference_id' => $productionBatch->id,
+                    'reference_no' => $productionBatch->batch_no,
+                    'description' => 'Production batch reverted - finished goods removed.',
+                ]);
+            }
+
+            foreach ($netMovements as $row) {
+                if ((int) $row['item_id'] === (int) $productionBatch->finished_item_id || $row['quantity'] <= 0) {
+                    continue;
+                }
+
+                $raw = Item::lockForUpdate()->findOrFail($row['item_id']);
+                $accounting->moveStock($raw, [
+                    'movement_date' => now()->toDateString(),
+                    'movement_type' => 'production_batch_revert_raw',
+                    'direction' => 'in',
+                    'quantity' => $row['quantity'],
+                    'unit_price' => $row['quantity'] > 0 ? $row['value'] / $row['quantity'] : 0,
+                    'total_value' => $row['value'],
+                    'reference_type' => ProductionBatch::class,
+                    'reference_id' => $productionBatch->id,
+                    'reference_no' => $productionBatch->batch_no,
+                    'description' => 'Production batch reverted - raw material restored.',
+                ]);
+            }
+
+            $oldValues = $productionBatch->toArray();
+            $productionBatch->update(['status' => 'reverted']);
+            $this->logUpdate($productionBatch, $oldValues, $productionBatch->fresh()->toArray());
+        });
+
+        return redirect()
+            ->route('admin.production-batches.show', $productionBatch)
+            ->with('success', 'Production batch reverted. Finished goods removed and raw material stock restored.');
+    }
+
     private function reverseProductionPosting(ProductionBatch $batch, AccountingService $accounting): void
     {
         $finished = $batch->finishedItem;
@@ -357,6 +431,54 @@ class ProductionBatchController extends Controller
                 'description' => 'Production raw material reversal before update.',
             ]);
         }
+    }
+
+    private function netProductionMovementsForBatch(ProductionBatch $batch)
+    {
+        return StockMovement::query()
+            ->where('company_id', $batch->company_id)
+            ->where('reference_no', $batch->batch_no)
+            ->whereIn('movement_type', [
+                'production_consumption',
+                'production_consumption_reversal',
+                'production_output',
+                'production_output_reversal',
+            ])
+            ->get()
+            ->groupBy('item_id')
+            ->map(function ($movements, $itemId) {
+                $quantity = $movements->sum(function (StockMovement $movement) {
+                    $sign = match ($movement->movement_type) {
+                        'production_consumption' => 1,
+                        'production_consumption_reversal' => -1,
+                        'production_output' => 1,
+                        'production_output_reversal' => -1,
+                        default => 0,
+                    };
+
+                    return $sign * (float) $movement->quantity;
+                });
+
+                $value = $movements->sum(function (StockMovement $movement) {
+                    $sign = match ($movement->movement_type) {
+                        'production_consumption' => 1,
+                        'production_consumption_reversal' => -1,
+                        'production_output' => 1,
+                        'production_output_reversal' => -1,
+                        default => 0,
+                    };
+
+                    return $sign * (float) $movement->total_value;
+                });
+
+                return [
+                    'item_id' => (int) $itemId,
+                    'quantity' => max(0, round($quantity, 3)),
+                    'value' => max(0, round($value, 2)),
+                ];
+            })
+            ->filter(fn($row) => $row['quantity'] > 0)
+            ->values();
     }
 
     private function soldUnitKeys(int $companyId): array

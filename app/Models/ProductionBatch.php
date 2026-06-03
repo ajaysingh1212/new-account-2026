@@ -16,6 +16,7 @@ class ProductionBatch extends Model
         'cost_per_unit',
         'notes',
         'units_data',   // JSON: per-unit serial / batch / sale_price details
+        'status',
         'created_by',
     ];
 
