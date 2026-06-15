@@ -92,7 +92,7 @@
 </div>
 <div class="row">
     <div class="col-lg-7 mb-4"><div class="chart-card"><h5>Quick Actions</h5><div class="quick-grid mt-3">@forelse($quickActions as $action)<a class="quick-action" href="{{ route($action['route']) }}"><i class="fas {{ $action['icon'] }}"></i>{{ $action['label'] }}</a>@empty <span class="text-muted">No actions available for this role.</span>@endforelse</div></div></div>
-    <div class="col-lg-5 mb-4"><div class="chart-card"><h5>Recent Activity</h5>@forelse($recentLogs as $log)<div class="activity-row"><div class="activity-dot"><i class="fas fa-bolt"></i></div><div><b>{{ $log->user?->name ?? 'System' }}</b> {{ $log->action }}<br><span class="text-muted small">{{ \Illuminate\Support\Str::limit($log->description, 54) }} - {{ $log->created_at?->diffForHumans() }}</span></div></div>@empty <div class="text-muted">No activity yet.</div>@endforelse <div class="activity-footer mt-3">{{ $recentLogs->appends(request()->except('activity_page'))->links() }}</div></div></div>
+    <div class="col-lg-5 mb-4"><div class="chart-card"><h5>Recent Activity</h5>@forelse($recentLogs as $log)<div class="activity-row"><div class="activity-dot"><i class="fas fa-bolt"></i></div><div><b>{{ $log->user?->name ?? 'System' }}</b> {{ $log->action }}<br><span class="text-muted small">{{ \Illuminate\Support\Str::limit($log->description, 54) }} - {{ $log->created_at?->diffForHumans() }}</span></div></div>@empty <div class="text-muted">No activity yet.</div>@endforelse <div class="activity-footer mt-3">{{ $recentLogs->appends(request()->except('activity_page'))->links('pagination::bootstrap-5') }}</div></div></div>
 </div>
 <div class="row">
     <div class="col-lg-8 mb-4">
