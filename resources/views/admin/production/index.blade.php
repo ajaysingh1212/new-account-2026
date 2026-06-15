@@ -15,7 +15,10 @@
                     <th>Batch</th>
                     <th>Date</th>
                     <th>Finished Item</th>
+                    <th>SKU</th>
                     <th>Qty</th>
+                    <th>Serial No.</th>
+                    <th>Batch No. (Purchase)</th>
                     <th>VTS/SIM No.</th>
                     <th>Raw Cost</th>
                     <th>Cost/Unit</th>
@@ -30,7 +33,10 @@
                     <td>{{ $batch->batch_no }}</td>
                     <td>{{ $batch->production_date?->format('d M Y') }}</td>
                     <td>{{ $batch->finishedItem?->name }}</td>
+                    <td>{{ $batch->finishedItem?->sku ?: '-' }}</td>
                     <td>{{ $batch->quantity }}</td>
+                    <td>{{ collect($batch->units_data ?? [])->pluck('serial_no')->filter()->join(', ') ?: '-' }}</td>
+                    <td>{{ collect($batch->units_data ?? [])->pluck('batch_no')->filter()->join(', ') ?: '-' }}</td>
                     <td>{{ collect($batch->units_data ?? [])->pluck('vts_sim')->filter()->join(', ') ?: '-' }}</td>
                     <td>Rs {{ number_format((float) $batch->raw_material_cost, 2) }}</td>
                     <td>Rs {{ number_format((float) $batch->cost_per_unit, 2) }}</td>

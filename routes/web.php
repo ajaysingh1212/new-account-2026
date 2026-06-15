@@ -97,7 +97,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::get('stocks', [StockController::class, 'index'])->name('stocks.index');
         Route::get('stocks/history', [StockController::class, 'history'])->name('stocks.history');
     });
-    Route::middleware('permission:production.view')->group(function () {
+    Route::middleware(['permission:production.view', 'crm_access'])->group(function () {
         Route::resource('buyers', BuyerController::class)->only(['index','create','store','edit','update']);
         Route::resource('production-batches', ProductionBatchController::class)->only(['create','store'])->middleware('permission:production.create');
         Route::resource('production-batches', ProductionBatchController::class)->only(['edit','update'])->middleware('permission:production.create');

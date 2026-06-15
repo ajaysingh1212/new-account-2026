@@ -2,11 +2,12 @@
     $user = auth()->user();
     $canAnySale = $user->can('sales.view') || $user->can('estimates.view') || $user->can('delivery_challans.view') || $user->can('party_payments.view');
     $canAnyPurchase = $user->can('purchase.view') || $user->can('party_payments.view');
-    $canAnyInventory = $user->can('items.view') || $user->can('product_types.view') || $user->can('stocks.view') || $user->can('production.view');
     $canAnyBanking = $user->can('banking.view') || $user->can('cost_centers.view');
     $canAnyExpense = $user->can('expenses.view');
     $canAnyReport = $user->can('reports.party') || $user->can('reports.stock') || $user->can('reports.expense') || $user->can('reports.gst') || $user->can('reports.transaction');
     $canManagement = $user->isSuperAdmin() || $user->isAdmin() || $user->can('users.view') || $user->can('roles.view') || $user->can('audit.view') || $user->can('terms.manage');
+    $hasCrmAccess = $user->isSuperAdmin() || (bool) $user->currentCompany?->has_crm_access;
+    $canAnyInventory = $user->can('items.view') || $user->can('product_types.view') || $user->can('stocks.view') || ($hasCrmAccess && $user->can('production.view'));
 @endphp
 
 <aside class="main-sidebar sidebar-dark-primary elevation-4">
@@ -101,7 +102,7 @@
                             @can('product_types.view')<li class="nav-item"><a href="{{ route('admin.product-types.index') }}" class="nav-link {{ request()->routeIs('admin.product-types*') ? 'active' : '' }}"><i class="fas fa-tags nav-icon"></i><p>Product Types</p></a></li>@endcan
                             @can('stocks.view')<li class="nav-item"><a href="{{ route('admin.stocks.index') }}" class="nav-link {{ request()->routeIs('admin.stocks.index') ? 'active' : '' }}"><i class="fas fa-layer-group nav-icon"></i><p>Current Stocks</p></a></li>@endcan
                             @can('stocks.view')<li class="nav-item"><a href="{{ route('admin.stocks.history') }}" class="nav-link {{ request()->routeIs('admin.stocks.history') ? 'active' : '' }}"><i class="fas fa-history nav-icon"></i><p>Stock History</p></a></li>@endcan
-                            @can('production.view')<li class="nav-item"><a href="{{ route('admin.buyers.index') }}" class="nav-link {{ request()->routeIs('admin.buyers*') ? 'active' : '' }}"><i class="fas fa-id-card nav-icon"></i><p>Buyer Master</p></a></li>@endcan
+                            @if($hasCrmAccess) @can('production.view')<li class="nav-item"><a href="{{ route('admin.buyers.index') }}" class="nav-link {{ request()->routeIs('admin.buyers*') ? 'active' : '' }}"><i class="fas fa-id-card nav-icon"></i><p>Buyer Master</p></a></li>@endcan @endif
                             @can('stocks.view')
                                 <li class="nav-item">
                                     <a href="{{ route('admin.stock-transfers.index') }}"
@@ -121,7 +122,7 @@
                                     </a>
                                 </li>
                             @endcan
-                            @can('production.view')<li class="nav-item"><a href="{{ route('admin.production-batches.index') }}" class="nav-link {{ request()->routeIs('admin.production-batches*') ? 'active' : '' }}"><i class="fas fa-industry nav-icon"></i><p>CRM Assembly</p></a></li>@endcan
+                            @if($hasCrmAccess) @can('production.view')<li class="nav-item"><a href="{{ route('admin.production-batches.index') }}" class="nav-link {{ request()->routeIs('admin.production-batches*') ? 'active' : '' }}"><i class="fas fa-industry nav-icon"></i><p>CRM Assembly</p></a></li>@endcan @endif
                         </ul>
                     </li>
                 @endif

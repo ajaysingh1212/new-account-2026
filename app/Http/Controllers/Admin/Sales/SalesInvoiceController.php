@@ -73,6 +73,7 @@ class SalesInvoiceController extends Controller
             'item_id.*' => ['required','exists:items,id'],
             'quantity.*' => ['required','numeric','min:0.001'],
             'unit_price.*' => ['required','numeric','min:0'],
+            'tax_mode.*' => ['nullable','in:with_gst,without_gst'],
             'inter_company_transfer' => ['nullable','boolean'],
             'target_company_ids' => ['nullable','array'],
             'target_company_ids.*' => ['integer'],
@@ -249,6 +250,7 @@ class SalesInvoiceController extends Controller
             'item_id.*' => ['required','exists:items,id'],
             'quantity.*' => ['required','numeric','min:0.001'],
             'unit_price.*' => ['required','numeric','min:0'],
+            'tax_mode.*' => ['nullable','in:with_gst,without_gst'],
             'selected_units.*' => ['nullable','string'],
             'inter_company_transfer' => ['nullable','boolean'],
             'target_company_ids' => ['nullable','array'],
@@ -278,8 +280,12 @@ class SalesInvoiceController extends Controller
             $price = (float) $request->unit_price[$i];
             $base = $qty * $price;
             $discount = (($request->discount_type[$i] ?? 'percent') === 'flat') ? (float) ($request->discount_value[$i] ?? 0) : $base * (float) ($request->discount_value[$i] ?? 0) / 100;
-            $taxAmount = max(0, $base - $discount) * (float) ($request->tax_percent[$i] ?? 0) / 100;
-            $total = max(0, $base - $discount) + $taxAmount;
+            $taxMode = $request->tax_mode[$i] ?? 'with_gst';
+            $taxPercent = $taxMode === 'with_gst' ? (float) ($request->tax_percent[$i] ?? 18) : 0;
+            $grossAfterDiscount = max(0, $base - $discount);
+            $taxAmount = $taxPercent > 0 ? $grossAfterDiscount * $taxPercent / (100 + $taxPercent) : 0;
+            $taxableAmount = $grossAfterDiscount - $taxAmount;
+            $total = $grossAfterDiscount;
             SalesInvoiceItem::create([
                 'sales_invoice_id' => $invoice->id,
                 'item_id' => $item->id,
@@ -290,7 +296,7 @@ class SalesInvoiceController extends Controller
                 'discount_type' => $request->discount_type[$i] ?? 'percent',
                 'discount_value' => $request->discount_value[$i] ?? 0,
                 'discount_amount' => $discount,
-                'tax_percent' => $request->tax_percent[$i] ?? 0,
+                'tax_percent' => $taxPercent,
                 'tax_amount' => $taxAmount,
                 'line_total' => $total,
                 'selected_units' => $selectedUnits,
@@ -308,7 +314,7 @@ class SalesInvoiceController extends Controller
                 'reference_no' => $invoice->invoice_no,
                 'description' => 'Sales stock out.',
             ]);
-            $subtotal += $base;
+            $subtotal += $taxableAmount;
             $tax += $taxAmount;
             $lineDiscount += $discount;
         }
@@ -317,7 +323,7 @@ class SalesInvoiceController extends Controller
             'subtotal' => $subtotal,
             'discount_amount' => $lineDiscount + $overallDiscount,
             'tax_amount' => $tax,
-            'grand_total' => max(0, $subtotal - $lineDiscount - $overallDiscount + $tax),
+            'grand_total' => max(0, $subtotal + $tax - $overallDiscount),
         ];
     }
 

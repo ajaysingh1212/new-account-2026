@@ -63,6 +63,15 @@
                         <input type="file" name="logo" class="form-control" accept="image/*">
                     </div>
                 </div>
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label>CRM Access</label>
+                        <div class="custom-control custom-switch mt-2">
+                            <input type="checkbox" class="custom-control-input" id="hasCrmAccess" name="has_crm_access" value="1" @checked(old('has_crm_access', '1'))>
+                            <label class="custom-control-label" for="hasCrmAccess">Allow CRM Assembly</label>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <h5 class="mt-4 mb-3" style="color:#7C3AED;font-weight:700;border-bottom:2px solid #F0EAF8;padding-bottom:8px;">

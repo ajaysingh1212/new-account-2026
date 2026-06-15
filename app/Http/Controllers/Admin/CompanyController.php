@@ -37,6 +37,7 @@ class CompanyController extends Controller
             'admin_email'     => 'required|email|unique:users,email',
             'admin_password'  => 'required|min:8',
             'logo'            => 'nullable|image|max:2048',
+            'has_crm_access'  => 'nullable|boolean',
         ]);
 
         // Upload logo
@@ -48,7 +49,11 @@ class CompanyController extends Controller
         // Create company
         $company = Company::create(array_merge(
             $request->only('name','email','phone','address','gst_number','pan_number','website','currency'),
-            ['logo' => $logoPath, 'created_by' => auth()->id()]
+            [
+                'logo' => $logoPath,
+                'has_crm_access' => $request->boolean('has_crm_access', true),
+                'created_by' => auth()->id(),
+            ]
         ));
 
         // Create admin user
@@ -76,9 +81,13 @@ class CompanyController extends Controller
 
     public function update(Request $request, Company $company)
     {
-        $request->validate(['name' => 'required|string|max:255']);
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'has_crm_access' => 'nullable|boolean',
+        ]);
 
         $data = $request->only('name','email','phone','address','gst_number','pan_number','website','currency','is_active');
+        $data['has_crm_access'] = $request->boolean('has_crm_access');
 
         if ($request->hasFile('logo')) {
             if ($company->logo) Storage::disk('public')->delete($company->logo);

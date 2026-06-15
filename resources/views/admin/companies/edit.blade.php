@@ -90,6 +90,15 @@
                         <input type="file" name="logo" class="form-control" accept="image/*">
                     </div>
                 </div>
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label>CRM Access</label>
+                        <div class="custom-control custom-switch mt-2">
+                            <input type="checkbox" class="custom-control-input" id="hasCrmAccess" name="has_crm_access" value="1" @checked(old('has_crm_access', $company->has_crm_access))>
+                            <label class="custom-control-label" for="hasCrmAccess">Allow CRM Assembly</label>
+                        </div>
+                    </div>
+                </div>
 
             </div>
 

@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'company_admin' => \App\Http\Middleware\CompanyAdmin::class,
             'permission'    => \App\Http\Middleware\CheckPermission::class,
             'screen_unlocked' => \App\Http\Middleware\EnsureScreenUnlocked::class,
+            'crm_access' => \App\Http\Middleware\EnsureCrmAccess::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

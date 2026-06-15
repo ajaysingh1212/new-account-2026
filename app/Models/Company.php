@@ -11,10 +11,10 @@ class Company extends Model
     protected $fillable = [
         'name','email','phone','address','logo','gst_number','pan_number',
         'cin_number','website','currency','currency_symbol',
-        'financial_year_start','is_active','created_by',
+        'financial_year_start','is_active','has_crm_access','created_by',
     ];
 
-    protected $casts = ['is_active' => 'boolean'];
+    protected $casts = ['is_active' => 'boolean', 'has_crm_access' => 'boolean'];
 
     public function users()
     {

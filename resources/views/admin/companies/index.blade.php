@@ -26,6 +26,11 @@
                 </div>
                 <span class="{{ $company->is_active ? 'badge-active' : 'badge-inactive' }}">{{ $company->is_active ? 'Active' : 'Inactive' }}</span>
             </div>
+            <div class="mb-2">
+                <span class="badge {{ $company->has_crm_access ? 'badge-success' : 'badge-secondary' }}">
+                    <i class="fas fa-industry mr-1"></i>{{ $company->has_crm_access ? 'CRM Access' : 'No CRM Access' }}
+                </span>
+            </div>
 
             <div class="row text-center" style="border-top:1px solid #F0EAF8;border-bottom:1px solid #F0EAF8;padding:12px 0;margin:12px 0;">
                 <div class="col-4">

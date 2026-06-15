@@ -18,6 +18,7 @@ use App\Models\SalesInvoice;
 use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\EntryVisibilityService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
@@ -26,8 +27,7 @@ class DashboardController extends Controller
     {
         $user = auth()->user();
         $companyId = $user->isSuperAdmin() ? $request->integer('company_id') : $user->current_company_id;
-        $from = $request->date('from_date')?->toDateString() ?? now()->startOfMonth()->toDateString();
-        $to = $request->date('to_date')?->toDateString() ?? now()->toDateString();
+        [$period, $from, $to] = $this->dateRange($request);
         $companiesFilter = $user->isSuperAdmin() ? Company::orderBy('name')->get() : collect();
 
         if ($user->isSuperAdmin()) {
@@ -44,7 +44,10 @@ class DashboardController extends Controller
                 'pending_expenses' => $this->scope(Expense::query(), $companyId)->where('status', 'pending_approval')->count(),
             ];
             $recentLogs = AuditLog::with('user','company')
-                ->latest('created_at')->take(15)->get();
+                ->when($companyId, fn($q) => $q->where('company_id', $companyId))
+                ->whereBetween('created_at', [Carbon::parse($from)->startOfDay(), Carbon::parse($to)->endOfDay()])
+                ->latest('created_at')
+                ->paginate(5, ['*'], 'activity_page');
             $companies = Company::withCount(['users','roles'])->latest()->take(6)->get();
         } else {
             $partyQuery = $visibility->scopeForUser(Party::query(), Party::class);
@@ -71,15 +74,17 @@ class DashboardController extends Controller
             ];
             $recentLogs = AuditLog::with('user')
                 ->where('company_id', $companyId)
-                ->latest('created_at')->take(10)->get();
+                ->whereBetween('created_at', [Carbon::parse($from)->startOfDay(), Carbon::parse($to)->endOfDay()])
+                ->latest('created_at')
+                ->paginate(5, ['*'], 'activity_page');
             $companies = collect();
         }
 
-        $salesDueRows = $this->dueRows(SalesInvoice::class, 'sale_type', $companyId, $visibility, $user);
-        $purchaseDueRows = $this->dueRows(PurchaseBill::class, 'purchase_type', $companyId, $visibility, $user);
+        $salesDueRows = $this->dueRows(SalesInvoice::class, 'sale_type', $companyId, $visibility, $user, $from, $to);
+        $purchaseDueRows = $this->dueRows(PurchaseBill::class, 'purchase_type', $companyId, $visibility, $user, $from, $to);
         $stats['sales_due'] = $salesDueRows->sum('due');
         $stats['purchase_due'] = $purchaseDueRows->sum('due');
-        $monthly = $this->monthlySeries($companyId, $visibility, $user);
+        $monthly = $this->monthlySeries($companyId, $visibility, $user, $from, $to);
         $mix = [
             'Sales' => (float) ($stats['sales'] ?? 0),
             'Purchase' => (float) ($stats['purchases'] ?? 0),
@@ -88,7 +93,27 @@ class DashboardController extends Controller
         ];
         $quickActions = $this->quickActions($user);
 
-        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','monthly','mix','quickActions','salesDueRows','purchaseDueRows'));
+        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows'));
+    }
+
+    private function dateRange(Request $request): array
+    {
+        $period = $request->input('period', 'this_month');
+        $today = now();
+
+        return match ($period) {
+            'today' => [$period, $today->toDateString(), $today->toDateString()],
+            'this_week' => [$period, $today->copy()->startOfWeek()->toDateString(), $today->copy()->endOfWeek()->toDateString()],
+            'last_3_months' => [$period, $today->copy()->subMonths(3)->startOfDay()->toDateString(), $today->toDateString()],
+            'one_year' => [$period, $today->copy()->subYear()->startOfDay()->toDateString(), $today->toDateString()],
+            'all' => [$period, '1970-01-01', $today->toDateString()],
+            'custom' => [
+                $period,
+                $request->date('from_date')?->toDateString() ?? $today->copy()->startOfMonth()->toDateString(),
+                $request->date('to_date')?->toDateString() ?? $today->toDateString(),
+            ],
+            default => ['this_month', $today->copy()->startOfMonth()->toDateString(), $today->toDateString()],
+        };
     }
 
     private function scope($query, ?int $companyId)
@@ -96,15 +121,26 @@ class DashboardController extends Controller
         return $companyId ? $query->where('company_id', $companyId) : $query;
     }
 
-    private function monthlySeries(?int $companyId, EntryVisibilityService $visibility, User $user): array
+    private function monthlySeries(?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to): array
 {
-    $labels = collect(range(5, 0))
-        ->map(fn($i) => now()->subMonths($i)->format('M'))
-        ->values();
+    $start = Carbon::parse($from)->startOfMonth();
+    $end = Carbon::parse($to)->startOfMonth();
+    if ($start->diffInMonths($end) > 11) {
+        $start = $end->copy()->subMonths(11);
+    }
+    $months = collect();
+    while ($start <= $end && $months->count() < 12) {
+        $months->push($start->copy());
+        $start->addMonth();
+    }
+    if ($months->isEmpty()) {
+        $months->push(now()->startOfMonth());
+    }
 
-    $sales = collect(range(5, 0))->map(function ($i) use ($companyId, $visibility, $user) {
+    $labels = $months->map(fn($date) => $date->format('M y'))->values();
 
-        $date = now()->subMonths($i);
+    $sales = $months->map(function ($date) use ($companyId, $visibility, $user) {
+
 
         $query = $user->isSuperAdmin()
             ? $this->scope(SalesInvoice::query(), $companyId)
@@ -120,9 +156,7 @@ class DashboardController extends Controller
 
     })->values();
 
-    $purchases = collect(range(5, 0))->map(function ($i) use ($companyId, $visibility, $user) {
-
-        $date = now()->subMonths($i);
+    $purchases = $months->map(function ($date) use ($companyId, $visibility, $user) {
 
         $query = $user->isSuperAdmin()
             ? $this->scope(PurchaseBill::query(), $companyId)
@@ -162,9 +196,9 @@ class DashboardController extends Controller
         return collect($actions)->filter(fn($action) => $user->can($action['can']) || ($user->isSuperAdmin() && $action['route'] === 'admin.companies.create'))->values()->all();
     }
 
-    private function dueRows(string $model, string $typeColumn, ?int $companyId, EntryVisibilityService $visibility, User $user)
+    private function dueRows(string $model, string $typeColumn, ?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to)
     {
-        $query = $model::with('party')->where($typeColumn, 'credit');
+        $query = $model::with('party')->where($typeColumn, 'credit')->whereBetween('billing_date', [$from, $to]);
         $query = $user->isSuperAdmin() ? $this->scope($query, $companyId) : $visibility->scopeForUser($query, $model);
 
         return $query->get()
