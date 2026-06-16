@@ -12,6 +12,7 @@ return new class extends Migration
             $table->id();
             $table->foreignId('company_id')->constrained()->cascadeOnDelete();
             $table->foreignId('party_id')->nullable()->constrained()->nullOnDelete();
+            $table->string('party_name')->nullable();
             $table->string('challan_no', 30);
             $table->date('challan_date');
             $table->string('reference_no')->nullable();

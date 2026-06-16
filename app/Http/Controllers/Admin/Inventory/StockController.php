@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Item;
 use App\Models\ProductType;
 use App\Models\StockMovement;
+use App\Models\StockOutChallan;
 use App\Services\EntryVisibilityService;
 use Illuminate\Http\Request;
 
@@ -60,5 +61,27 @@ class StockController extends Controller
         )->get();
         $items = $visibility->scopeForUser(Item::orderBy('name'), Item::class)->get();
         return view('admin.stocks.history', compact('movements', 'items'));
+    }
+
+    public function specialStockOut(EntryVisibilityService $visibility)
+    {
+        $challans = $visibility->scopeForUser(
+            StockOutChallan::with(['party','creator','items.item'])
+                ->where('status', 'issued')
+                ->latest(),
+            StockOutChallan::class
+        )->get();
+
+        $rows = $challans->flatMap(function (StockOutChallan $challan) {
+            return $challan->items->map(fn($line) => [
+                'challan' => $challan,
+                'item' => $line->item,
+                'quantity' => (float) $line->quantity,
+                'unit' => $line->unit,
+                'value' => (float) $line->line_total,
+            ]);
+        });
+
+        return view('admin.stocks.special-stock-out', compact('rows', 'challans'));
     }
 }

@@ -13,7 +13,10 @@
         <h2><i class="fas fa-boxes mr-2"></i>Current Stock Valuation</h2>
         <small>Overall value, monthly stock movement value and item-level balance.</small>
     </div>
-    <a href="{{ route('admin.stocks.history') }}" class="btn btn-outline-light btn-sm"><i class="fas fa-history mr-1"></i>Movement History</a>
+    <div>
+        <a href="{{ route('admin.stocks.special-stock-out') }}" class="btn btn-warning btn-sm"><i class="fas fa-dolly mr-1"></i>Special Stock Out</a>
+        <a href="{{ route('admin.stocks.history') }}" class="btn btn-outline-light btn-sm"><i class="fas fa-history mr-1"></i>Movement History</a>
+    </div>
 </div>
 
 <div class="metric-grid">
