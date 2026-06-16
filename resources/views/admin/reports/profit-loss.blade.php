@@ -2,15 +2,7 @@
 @section('title','Profit And Loss')
 @section('content')
 @include('admin.reports.partials.styles')
-<div class="report-hero">
-   <h1>Profit And Loss</h1>
-   <form class="report-filter" method="GET">
-      <div><label>Month</label><input type="month" name="month" class="form-control" value="{{ $filters['month'] }}"></div>
-      <div></div>
-      <div></div>
-      <button class="btn btn-info report-btn">Apply</button>
-   </form>
-</div>
+<div class="report-hero"><h1>Profit And Loss</h1><form class="report-filter" method="GET"><div><label>Month</label><input type="month" name="month" class="form-control" value="{{ $filters['month'] }}"></div><div></div><div></div><button class="btn btn-info report-btn">Apply</button></form></div>
 @php($profit = $sales - $purchases - ($expenses ?? 0))
 <div class="metric-strip">
    <div class="metric"><span>Total Sales</span><strong>Rs {{ number_format($sales,2) }}</strong></div>

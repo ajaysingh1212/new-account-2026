@@ -27,6 +27,7 @@
 }
 .dash-hero{position:relative;overflow:hidden;border-radius:18px;background:#0f172a;color:#fff;padding:26px 28px;margin-bottom:22px;box-shadow:0 18px 42px rgba(15,23,42,.18)}.dash-hero:after{content:"";position:absolute;inset:auto -10% -62% -10%;height:170px;background:linear-gradient(90deg,#22d3ee,#2563eb,#22c55e);opacity:.45;border-radius:50%;animation:wave 7s ease-in-out infinite}.dash-hero>*{position:relative;z-index:1}.dash-title{font-size:28px;font-weight:850;margin:0}.dash-sub{color:#cbd5e1;margin-top:6px}.filter-panel{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:14px;margin-bottom:22px}.metric-card{background:#fff;border:1px solid #eef2f7;border-radius:14px;padding:18px;min-height:132px;box-shadow:0 10px 26px rgba(2,6,23,.06);position:relative;overflow:hidden}.metric-card:before{content:"";position:absolute;right:-24px;top:-24px;width:86px;height:86px;border-radius:999px;background:var(--accent);opacity:.12}.metric-icon{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff;background:var(--accent);margin-bottom:12px}.metric-value{font-size:24px;font-weight:850;color:#0f172a}.metric-label{color:#64748b;font-size:12px;text-transform:uppercase;font-weight:800;letter-spacing:.5px}.chart-card{background:#fff;border:1px solid #eef2f7;border-radius:16px;padding:18px;box-shadow:0 10px 26px rgba(2,6,23,.06);height:100%}.wave-chart{height:220px;width:100%}.wave-line{fill:none;stroke-width:4;stroke-linecap:round;stroke-dasharray:800;stroke-dashoffset:800;animation:draw 2.1s ease forwards}.pie{width:180px;height:180px;border-radius:50%;margin:auto;background:conic-gradient(#2563eb 0 var(--sales),#ec4899 var(--sales) var(--purchase),#14b8a6 var(--purchase) var(--bank),#f59e0b var(--bank) 100%);animation:pop .8s ease}.quick-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.quick-action{display:flex;align-items:center;gap:10px;border:1px solid #e5e7eb;border-radius:12px;padding:14px;background:#fff;color:#0f172a;font-weight:750}.quick-action i{color:#2563eb}.activity-row{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #eef2f7}.activity-dot{width:34px;height:34px;border-radius:10px;background:#eff6ff;color:#2563eb;display:flex;align-items:center;justify-content:center;flex:0 0 auto}@keyframes wave{0%,100%{transform:translateY(0)}50%{transform:translateY(-16px)}}@keyframes draw{to{stroke-dashoffset:0}}@keyframes pop{from{transform:scale(.86);opacity:.4}to{transform:scale(1);opacity:1}}
 .period-tabs{display:flex;flex-wrap:wrap;gap:8px}.period-tab{border:1px solid #dbe4f0;background:#fff;color:#334155;border-radius:999px;padding:8px 12px;font-weight:750}.period-tab.active{background:#0f766e;color:#fff;border-color:#0f766e}.wave-chart{background:linear-gradient(180deg,#f8fafc,#fff);border-radius:12px}.wave-line{filter:drop-shadow(0 8px 12px rgba(37,99,235,.18))}.wave-grid{stroke:#e2e8f0;stroke-width:1}.activity-footer .pagination{margin-bottom:0;justify-content:flex-end}.chart-card h5{font-weight:800;color:#0f172a}
+.ops-card{background:#fff;border:1px solid #e7edf5;border-radius:14px;padding:16px;height:100%;box-shadow:0 10px 26px rgba(2,6,23,.06)}.ops-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.ops-kicker{font-size:11px;text-transform:uppercase;font-weight:850;color:#64748b;letter-spacing:.6px}.ops-amount{font-size:24px;font-weight:900;color:#0f172a}.product-row{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #eef2f7;padding:10px 0}.product-row:first-child{border-top:0}.product-name{font-weight:800;color:#172033}.tag-hot{display:inline-flex;align-items:center;gap:5px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;text-transform:uppercase}.tag-low{display:inline-flex;align-items:center;gap:5px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;text-transform:uppercase}.blink-alert{animation:blinkAlert 1s ease-in-out infinite}@keyframes blinkAlert{0%,100%{box-shadow:0 0 0 rgba(220,38,38,0)}50%{box-shadow:0 0 0 4px rgba(220,38,38,.16)}}.ageing-table th{font-size:11px;text-transform:uppercase;color:#64748b;border-top:0}.ageing-table td{vertical-align:middle}.view-detail-btn{border-radius:999px;font-weight:800}.due-action{white-space:nowrap}.modal-metric{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px}.modal-metric span{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:800}.modal-metric b{display:block;font-size:16px;color:#0f172a}
 </style>
 @endpush
 
@@ -80,7 +81,7 @@
         <div class="col-md-{{ $user->isSuperAdmin() ? '8' : '10' }} form-group mb-md-0">
             <label>Date Filter</label>
             <div class="period-tabs">
-                @foreach(['today'=>'Today','this_week'=>'This Week','this_month'=>'This Month','last_3_months'=>'Last 3 Months','one_year'=>'One Year','all'=>'All','custom'=>'Custom Date'] as $value => $label)
+                @foreach(['today'=>'Today','yesterday'=>'Yesterday','week'=>'Week','month'=>'Month','three_months'=>'3 Month','six_months'=>'6 Month','nine_months'=>'9 Month','year'=>'1 Year','all'=>'All','custom'=>'Custom Date'] as $value => $label)
                     <button type="submit" name="period" value="{{ $value }}" class="period-tab {{ $period === $value ? 'active' : '' }}">{{ $label }}</button>
                 @endforeach
             </div>
@@ -104,6 +105,88 @@
         <div class="col-12"><div class="alert alert-info">No dashboard widgets are available for this role yet.</div></div>
     @endforelse
 </div>
+
+<div class="row">
+    @can('reports.transaction')
+    <div class="col-xl-6 mb-4">
+        <div class="ops-card">
+            <div class="ops-head">
+                <div><div class="ops-kicker">Ageing Report</div><div class="ops-amount">Rs {{ number_format(($stats['sales_due'] ?? 0) + ($stats['purchase_due'] ?? 0),2) }}</div></div>
+                <span class="badge badge-light">5 per page</span>
+            </div>
+            <div class="table-responsive">
+                <table class="table ageing-table mb-0">
+                    <thead><tr><th>Type</th><th>Party</th><th>Invoice</th><th>Age</th><th>Due</th><th></th></tr></thead>
+                    <tbody>
+                    @forelse($ageingPaginated as $row)
+                        <tr>
+                            <td><span class="badge {{ $row['kind']==='receivable' ? 'badge-success' : 'badge-warning' }}">{{ $row['kind']==='receivable' ? 'To Receive' : 'To Pay' }}</span></td>
+                            <td>{{ $row['party'] }}</td>
+                            <td>{{ $row['invoice'] }}<br><small class="text-muted">{{ $row['date']?->format('d M Y') }}</small></td>
+                            <td>{{ $row['age'] }} days</td>
+                            <td><b>Rs {{ number_format($row['due'],2) }}</b></td>
+                            <td class="due-action">
+                                <button type="button" class="btn btn-sm btn-outline-primary view-detail-btn" data-invoice='@json($row)'><i class="fas fa-eye mr-1"></i>View Details</button>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="6" class="text-muted text-center py-4">No ageing due found for this filter.</td></tr>
+                    @endforelse
+                    </tbody>
+                </table>
+            </div>
+            <div class="activity-footer mt-3">{{ $ageingPaginated->appends(request()->except('ageing_page'))->links('pagination::bootstrap-5') }}</div>
+        </div>
+    </div>
+    @endcan
+    @can('sales.view')
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="ops-card">
+            <div class="ops-head"><div><div class="ops-kicker">Sales Products</div><div class="ops-amount">Rs {{ number_format($stats['sales'] ?? 0,2) }}</div></div><i class="fas fa-chart-line text-primary"></i></div>
+            @forelse($salesProducts->take(5) as $index => $product)
+                <div class="product-row">
+                    <div><div class="product-name">{{ $product['name'] }}</div><small>{{ number_format($product['qty'],2) }} {{ $product['unit'] }} | Rs {{ number_format($product['amount'],2) }}</small></div>
+                    @if($index === 0)<span class="tag-hot"><i class="fas fa-fire"></i>Most Selling</span>@endif
+                </div>
+            @empty
+                <div class="text-muted">No sales products in this filter.</div>
+            @endforelse
+        </div>
+    </div>
+    @endcan
+    @can('purchase.view')
+    <div class="col-xl-3 col-md-6 mb-4">
+        <div class="ops-card">
+            <div class="ops-head"><div><div class="ops-kicker">Purchase Products</div><div class="ops-amount">Rs {{ number_format($stats['purchases'] ?? 0,2) }}</div></div><i class="fas fa-cart-shopping text-danger"></i></div>
+            @forelse($purchaseProducts->take(5) as $product)
+                <div class="product-row">
+                    <div><div class="product-name">{{ $product['name'] }}</div><small>{{ number_format($product['qty'],2) }} {{ $product['unit'] }} | Rs {{ number_format($product['amount'],2) }}</small></div>
+                </div>
+            @empty
+                <div class="text-muted">No purchase products in this filter.</div>
+            @endforelse
+        </div>
+    </div>
+    @endcan
+</div>
+
+@can('stocks.view')
+<div class="ops-card mb-4">
+    <div class="ops-head"><div><div class="ops-kicker">Low Stock Watch</div><div class="ops-amount">{{ $lowStockProducts->count() }} Items</div></div><i class="fas fa-triangle-exclamation text-danger"></i></div>
+    <div class="row">
+        @forelse($lowStockProducts as $product)
+            <div class="col-md-6 col-xl-4 mb-3">
+                <div class="product-row {{ $product['most_selling'] ? 'blink-alert' : '' }}" style="border:1px solid #eef2f7;border-radius:10px;padding:12px;">
+                    <div><div class="product-name">{{ $product['name'] }}</div><small>Stock {{ number_format($product['stock'],2) }} {{ $product['unit'] }} | Alert {{ number_format($product['low'],2) }}</small></div>
+                    <div>@if($product['most_selling'])<span class="tag-hot">Most Selling</span>@endif <span class="tag-low">Low</span></div>
+                </div>
+            </div>
+        @empty
+            <div class="col-12 text-muted">No low stock products right now.</div>
+        @endforelse
+    </div>
+</div>
+@endcan
 <div class="row">
     <div class="col-lg-6 mb-4 d-none" id="salesDueBox">
         <div class="chart-card"><h5>Sales Due Party Wise</h5><div class="table-responsive"><table class="table"><thead><tr><th>Party</th><th>Invoice</th><th>Due</th></tr></thead><tbody>@forelse($salesDueRows as $row)<tr><td>{{ $row['party'] }}</td><td>{{ $row['invoice'] }}</td><td>Rs {{ number_format($row['due'],2) }}</td></tr>@empty<tr><td colspan="3">No sales due.</td></tr>@endforelse</tbody></table></div></div>
@@ -153,4 +236,61 @@
     <div class="table-responsive mt-3"><table class="table table-hover"><thead><tr><th>Company</th><th>Users</th><th>Roles</th><th>Status</th></tr></thead><tbody>@foreach($companies as $company)<tr><td><b>{{ $company->name }}</b></td><td>{{ $company->users_count }}</td><td>{{ $company->roles_count }}</td><td>{{ $company->is_active ? 'Active' : 'Inactive' }}</td></tr>@endforeach</tbody></table></div>
 </div>
 @endif
+
+<div class="modal fade" id="invoiceDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content" style="border-radius:14px;border:0;overflow:hidden">
+            <div class="modal-header" style="background:#0f172a;color:#fff">
+                <div>
+                    <h5 class="modal-title mb-0" id="detailTitle">Invoice Details</h5>
+                    <small id="detailSub" style="color:#cbd5e1"></small>
+                </div>
+                <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-3"><div class="modal-metric"><span>Total</span><b id="detailTotal">Rs 0.00</b></div></div>
+                    <div class="col-md-3"><div class="modal-metric"><span>Received / Paid</span><b id="detailPaid">Rs 0.00</b></div></div>
+                    <div class="col-md-3"><div class="modal-metric"><span>Due</span><b id="detailDue">Rs 0.00</b></div></div>
+                    <div class="col-md-3"><div class="modal-metric"><span>Age</span><b id="detailAge">0 days</b></div></div>
+                </div>
+                <div class="row">
+                    <div class="col-lg-7">
+                        <h6 class="font-weight-bold">Invoice Items</h6>
+                        <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody id="detailItems"></tbody></table></div>
+                    </div>
+                    <div class="col-lg-5">
+                        <h6 class="font-weight-bold">Payment Details</h6>
+                        <div class="table-responsive"><table class="table table-sm"><thead><tr><th>Date</th><th>Bank</th><th>Mode</th><th>Amount</th></tr></thead><tbody id="detailPayments"></tbody></table></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <small class="text-muted">Payment In/Out button opens the existing payment screen with bill context.</small>
+                <a id="detailPaymentAction" href="#" class="btn btn-primary"><i class="fas fa-money-bill-wave mr-1"></i>Payment</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+@push('scripts')
+<script>
+function dashMoney(value){return 'Rs '+(Number(value)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});}
+$(document).on('click','.view-detail-btn',function(){
+    const row = $(this).data('invoice');
+    $('#detailTitle').text((row.kind === 'receivable' ? 'Sales Invoice ' : 'Purchase Bill ') + row.invoice);
+    $('#detailSub').text(`${row.party} | ${row.date || '-'} | ${row.kind === 'receivable' ? 'Amount to receive' : 'Amount to pay'}`);
+    $('#detailTotal').text(dashMoney(row.total));
+    $('#detailPaid').text(dashMoney(row.paid));
+    $('#detailDue').text(dashMoney(row.due));
+    $('#detailAge').text((row.age || 0) + ' days');
+    $('#detailItems').html((row.items || []).map(item => `<tr><td>${item.name}</td><td>${Number(item.qty||0).toFixed(2)} ${item.unit||''}</td><td>${dashMoney(item.rate)}</td><td>${dashMoney(item.amount)}</td></tr>`).join('') || '<tr><td colspan="4" class="text-muted">No item lines.</td></tr>');
+    $('#detailPayments').html((row.payments || []).map(payment => `<tr><td>${payment.date}</td><td>${payment.bank}<br><small>${payment.reference}</small></td><td>${payment.mode}</td><td>${dashMoney(payment.amount)}</td></tr>`).join('') || '<tr><td colspan="4" class="text-muted">No payment received yet.</td></tr>');
+    const type = row.kind === 'receivable' ? 'payment_in' : 'payment_out';
+    $('#detailPaymentAction').attr('href', `{{ route('admin.party-payments.create') }}?type=${type}&party_id=${row.party_id || ''}&bill_id=${row.bill_id || ''}`);
+    $('#detailPaymentAction').html(row.kind === 'receivable' ? '<i class="fas fa-money-bill-wave mr-1"></i>Payment In' : '<i class="fas fa-hand-holding-usd mr-1"></i>Payment Out');
+    $('#invoiceDetailModal').modal('show');
+});
+</script>
+@endpush
 @endsection

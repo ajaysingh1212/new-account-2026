@@ -22,6 +22,7 @@ use App\Http\Controllers\Admin\Sales\DeliveryChallanController;
 use App\Http\Controllers\Admin\Sales\EstimateController;
 use App\Http\Controllers\Admin\Sales\SalesInvoiceController;
 use App\Http\Controllers\Admin\Sales\SalesReturnController;
+use App\Http\Controllers\Admin\Sales\StockOutChallanController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
@@ -96,9 +97,12 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
     Route::middleware('permission:stocks.view')->group(function () {
         Route::get('stocks', [StockController::class, 'index'])->name('stocks.index');
         Route::get('stocks/history', [StockController::class, 'history'])->name('stocks.history');
+        Route::get('stocks/special-stock-out', [StockController::class, 'specialStockOut'])->name('stocks.special-stock-out');
     });
     Route::middleware(['permission:production.view', 'crm_access'])->group(function () {
         Route::resource('buyers', BuyerController::class)->only(['index','create','store','edit','update']);
+        Route::get('production-reverts', [ProductionBatchController::class, 'revertTool'])->middleware('permission:production_reverts.view')->name('production-reverts.index');
+        Route::post('production-reverts', [ProductionBatchController::class, 'revertSelected'])->middleware('permission:production_reverts.manage')->name('production-reverts.store');
         Route::resource('production-batches', ProductionBatchController::class)->only(['create','store'])->middleware('permission:production.create');
         Route::resource('production-batches', ProductionBatchController::class)->only(['edit','update'])->middleware('permission:production.create');
         Route::post('production-batches/{productionBatch}/revert', [ProductionBatchController::class, 'revert'])->middleware('permission:production.create')->name('production-batches.revert');
@@ -134,6 +138,14 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('delivery-challans', DeliveryChallanController::class)->only(['edit','update'])->middleware('permission:delivery_challans.edit');
         Route::resource('delivery-challans', DeliveryChallanController::class)->only(['destroy'])->middleware('permission:delivery_challans.delete');
         Route::resource('delivery-challans', DeliveryChallanController::class)->only(['index','show']);
+    });
+    Route::middleware('permission:stock_out_challans.view')->group(function () {
+        Route::get('stock-out-challans/{stockOutChallan}/print', [StockOutChallanController::class, 'print'])->middleware('permission:stock_out_challans.print')->name('stock-out-challans.print');
+        Route::patch('stock-out-challans/{stockOutChallan}/cancel', [StockOutChallanController::class, 'cancel'])->middleware('permission:stock_out_challans.edit')->name('stock-out-challans.cancel');
+        Route::resource('stock-out-challans', StockOutChallanController::class)->parameters(['stock-out-challans' => 'stockOutChallan'])->only(['create','store'])->middleware('permission:stock_out_challans.create');
+        Route::resource('stock-out-challans', StockOutChallanController::class)->parameters(['stock-out-challans' => 'stockOutChallan'])->only(['edit','update'])->middleware('permission:stock_out_challans.edit');
+        Route::resource('stock-out-challans', StockOutChallanController::class)->parameters(['stock-out-challans' => 'stockOutChallan'])->only(['destroy'])->middleware('permission:stock_out_challans.delete');
+        Route::resource('stock-out-challans', StockOutChallanController::class)->parameters(['stock-out-challans' => 'stockOutChallan'])->only(['index','show']);
     });
 
     Route::middleware('permission:reports.gst')->group(function () {

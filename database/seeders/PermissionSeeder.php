@@ -44,6 +44,12 @@ class PermissionSeeder extends Seeder
             ['name'=>'Delete Delivery Challans', 'slug'=>'delivery_challans.delete', 'module'=>'delivery_challans'],
             ['name'=>'Print Delivery Challans', 'slug'=>'delivery_challans.print', 'module'=>'delivery_challans'],
 
+            ['name'=>'View Special Stock Out', 'slug'=>'stock_out_challans.view', 'module'=>'stock_out_challans'],
+            ['name'=>'Create Special Stock Out', 'slug'=>'stock_out_challans.create', 'module'=>'stock_out_challans'],
+            ['name'=>'Edit Special Stock Out', 'slug'=>'stock_out_challans.edit', 'module'=>'stock_out_challans'],
+            ['name'=>'Delete Special Stock Out', 'slug'=>'stock_out_challans.delete', 'module'=>'stock_out_challans'],
+            ['name'=>'Print Special Stock Out', 'slug'=>'stock_out_challans.print', 'module'=>'stock_out_challans'],
+
             ['name'=>'View Purchase', 'slug'=>'purchase.view', 'module'=>'purchase'],
             ['name'=>'Create Purchase', 'slug'=>'purchase.create', 'module'=>'purchase'],
             ['name'=>'Edit Purchase', 'slug'=>'purchase.edit', 'module'=>'purchase'],
@@ -64,6 +70,8 @@ class PermissionSeeder extends Seeder
 
             ['name'=>'View Production', 'slug'=>'production.view', 'module'=>'production'],
             ['name'=>'Create Production', 'slug'=>'production.create', 'module'=>'production'],
+            ['name'=>'View CRM Reverts', 'slug'=>'production_reverts.view', 'module'=>'production_reverts'],
+            ['name'=>'Manage CRM Reverts', 'slug'=>'production_reverts.manage', 'module'=>'production_reverts'],
 
             ['name'=>'View Expenses', 'slug'=>'expenses.view', 'module'=>'expenses'],
             ['name'=>'Create Expenses', 'slug'=>'expenses.create', 'module'=>'expenses'],

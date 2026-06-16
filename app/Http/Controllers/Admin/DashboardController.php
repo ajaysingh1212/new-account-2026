@@ -13,8 +13,10 @@ use App\Models\Item;
 use App\Models\Party;
 use App\Models\PartyPaymentAllocation;
 use App\Models\PurchaseBill;
+use App\Models\PurchaseBillItem;
 use App\Models\Role;
 use App\Models\SalesInvoice;
+use App\Models\SalesInvoiceItem;
 use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\EntryVisibilityService;
@@ -84,6 +86,19 @@ class DashboardController extends Controller
         $purchaseDueRows = $this->dueRows(PurchaseBill::class, 'purchase_type', $companyId, $visibility, $user, $from, $to);
         $stats['sales_due'] = $salesDueRows->sum('due');
         $stats['purchase_due'] = $purchaseDueRows->sum('due');
+        $ageingRows = $salesDueRows->merge($purchaseDueRows)->sortByDesc('date')->values();
+        $ageingPage = max(1, $request->integer('ageing_page', 1));
+        $ageingPaginated = new \Illuminate\Pagination\LengthAwarePaginator(
+            $ageingRows->forPage($ageingPage, 5)->values(),
+            $ageingRows->count(),
+            5,
+            $ageingPage,
+            ['pageName' => 'ageing_page', 'path' => $request->url(), 'query' => $request->query()]
+        );
+        $salesProducts = $this->productSummary(SalesInvoiceItem::class, 'salesInvoice', 'billing_date', $companyId, $visibility, $user, $from, $to);
+        $purchaseProducts = $this->productSummary(PurchaseBillItem::class, 'purchaseBill', 'billing_date', $companyId, $visibility, $user, $from, $to);
+        $topSellingItemIds = $salesProducts->take(3)->pluck('item_id')->filter()->all();
+        $lowStockProducts = $this->lowStockProducts($companyId, $visibility, $user, $topSellingItemIds);
         $monthly = $this->monthlySeries($companyId, $visibility, $user, $from, $to);
         $mix = [
             'Sales' => (float) ($stats['sales'] ?? 0),
@@ -93,26 +108,30 @@ class DashboardController extends Controller
         ];
         $quickActions = $this->quickActions($user);
 
-        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows'));
+        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingPaginated','salesProducts','purchaseProducts','lowStockProducts'));
     }
 
     private function dateRange(Request $request): array
     {
-        $period = $request->input('period', 'this_month');
+        $period = $request->input('period', 'this_week');
         $today = now();
 
         return match ($period) {
             'today' => [$period, $today->toDateString(), $today->toDateString()],
-            'this_week' => [$period, $today->copy()->startOfWeek()->toDateString(), $today->copy()->endOfWeek()->toDateString()],
-            'last_3_months' => [$period, $today->copy()->subMonths(3)->startOfDay()->toDateString(), $today->toDateString()],
-            'one_year' => [$period, $today->copy()->subYear()->startOfDay()->toDateString(), $today->toDateString()],
+            'yesterday' => [$period, $today->copy()->subDay()->toDateString(), $today->copy()->subDay()->toDateString()],
+            'week', 'this_week' => ['week', $today->copy()->startOfWeek()->toDateString(), $today->copy()->endOfWeek()->toDateString()],
+            'month', 'this_month' => ['month', $today->copy()->startOfMonth()->toDateString(), $today->copy()->endOfMonth()->toDateString()],
+            'three_months', 'last_3_months' => ['three_months', $today->copy()->subMonths(3)->startOfDay()->toDateString(), $today->toDateString()],
+            'six_months' => [$period, $today->copy()->subMonths(6)->startOfDay()->toDateString(), $today->toDateString()],
+            'nine_months' => [$period, $today->copy()->subMonths(9)->startOfDay()->toDateString(), $today->toDateString()],
+            'one_year', 'year' => ['year', $today->copy()->subYear()->startOfDay()->toDateString(), $today->toDateString()],
             'all' => [$period, '1970-01-01', $today->toDateString()],
             'custom' => [
                 $period,
                 $request->date('from_date')?->toDateString() ?? $today->copy()->startOfMonth()->toDateString(),
                 $request->date('to_date')?->toDateString() ?? $today->toDateString(),
             ],
-            default => ['this_month', $today->copy()->startOfMonth()->toDateString(), $today->toDateString()],
+            default => ['week', $today->copy()->startOfWeek()->toDateString(), $today->copy()->endOfWeek()->toDateString()],
         };
     }
 
@@ -198,16 +217,93 @@ class DashboardController extends Controller
 
     private function dueRows(string $model, string $typeColumn, ?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to)
     {
-        $query = $model::with('party')->where($typeColumn, 'credit')->whereBetween('billing_date', [$from, $to]);
+        $query = $model::with(['party', 'items.item'])->where($typeColumn, 'credit')->whereBetween('billing_date', [$from, $to]);
         $query = $user->isSuperAdmin() ? $this->scope($query, $companyId) : $visibility->scopeForUser($query, $model);
 
         return $query->get()
             ->map(function ($bill) use ($model) {
-                $paid = (float) PartyPaymentAllocation::where('bill_model', $model)->where('bill_id', $bill->id)->sum('amount');
+                $allocations = PartyPaymentAllocation::with('payment.bankAccount')
+                    ->where('bill_model', $model)
+                    ->where('bill_id', $bill->id)
+                    ->get();
+                $paid = (float) $allocations->sum('amount');
                 $due = max(0, (float) $bill->grand_total - $paid);
-                return ['party' => $bill->party?->display_name ?: 'Cash / Walk-in', 'invoice' => $bill->invoice_no, 'date' => $bill->billing_date, 'total' => (float) $bill->grand_total, 'paid' => $paid, 'due' => $due];
+                return [
+                    'kind' => $model === SalesInvoice::class ? 'receivable' : 'payable',
+                    'bill_id' => $bill->id,
+                    'party_id' => $bill->party_id,
+                    'party' => $bill->party?->display_name ?: 'Cash / Walk-in',
+                    'invoice' => $bill->invoice_no,
+                    'date' => $bill->billing_date,
+                    'age' => $bill->billing_date ? $bill->billing_date->diffInDays(now()) : 0,
+                    'total' => (float) $bill->grand_total,
+                    'paid' => $paid,
+                    'due' => $due,
+                    'items' => $bill->items->map(fn($line) => [
+                        'name' => $line->item?->name ?: 'Item',
+                        'qty' => (float) $line->quantity,
+                        'unit' => $line->unit,
+                        'rate' => (float) $line->unit_price,
+                        'amount' => (float) $line->line_total,
+                    ])->values(),
+                    'payments' => $allocations->map(fn($allocation) => [
+                        'date' => $allocation->payment?->payment_date?->format('d M Y') ?: '-',
+                        'amount' => (float) $allocation->amount,
+                        'mode' => $allocation->payment?->payment_mode ?: '-',
+                        'bank' => $allocation->payment?->bankAccount?->account_name ?: $allocation->payment?->bankAccount?->bank_name ?: '-',
+                        'reference' => $allocation->payment?->reference_no ?: '-',
+                    ])->values(),
+                ];
             })
             ->filter(fn($row) => $row['due'] > 0)
             ->values();
+    }
+
+    private function productSummary(string $lineModel, string $invoiceRelation, string $dateColumn, ?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to)
+    {
+        $query = $lineModel::with(['item', $invoiceRelation])
+            ->whereHas($invoiceRelation, fn($q) => $q->whereBetween($dateColumn, [$from, $to]));
+
+        if ($user->isSuperAdmin()) {
+            $query->whereHas($invoiceRelation, fn($q) => $this->scope($q, $companyId));
+        } else {
+            $invoiceModel = $lineModel === SalesInvoiceItem::class ? SalesInvoice::class : PurchaseBill::class;
+            $visibleIds = $visibility->scopeForUser($invoiceModel::query(), $invoiceModel)->pluck('id');
+            $foreignKey = $lineModel === SalesInvoiceItem::class ? 'sales_invoice_id' : 'purchase_bill_id';
+            $query->whereIn($foreignKey, $visibleIds);
+        }
+
+        return $query->get()
+            ->groupBy('item_id')
+            ->map(function ($rows, $itemId) {
+                $first = $rows->first();
+                return [
+                    'item_id' => $itemId,
+                    'name' => $first->item?->name ?: 'Item',
+                    'qty' => (float) $rows->sum('quantity'),
+                    'amount' => (float) $rows->sum('line_total'),
+                    'unit' => $first->unit ?: $first->item?->unit,
+                ];
+            })
+            ->sortByDesc('qty')
+            ->values();
+    }
+
+    private function lowStockProducts(?int $companyId, EntryVisibilityService $visibility, User $user, array $topSellingItemIds)
+    {
+        $query = Item::with('productType')
+            ->whereNotNull('low_stock_qty')
+            ->whereColumn('current_stock', '<=', 'low_stock_qty')
+            ->orderBy('current_stock');
+        $query = $user->isSuperAdmin() ? $this->scope($query, $companyId) : $visibility->scopeForUser($query, Item::class);
+
+        return $query->take(10)->get()->map(fn(Item $item) => [
+            'id' => $item->id,
+            'name' => $item->name,
+            'stock' => (float) $item->current_stock,
+            'low' => (float) $item->low_stock_qty,
+            'unit' => $item->unit,
+            'most_selling' => in_array($item->id, $topSellingItemIds, true),
+        ]);
     }
 }

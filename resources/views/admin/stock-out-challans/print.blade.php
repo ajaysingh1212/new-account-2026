@@ -1,0 +1,18 @@
+@include('admin.partials.print-document', [
+    'title' => 'Special Stock Out',
+    'docNo' => $stockOutChallan->challan_no,
+    'docDate' => $stockOutChallan->challan_date,
+    'status' => $stockOutChallan->status,
+    'party' => $stockOutChallan->party,
+    'lines' => $stockOutChallan->items,
+    'billingAddress' => $stockOutChallan->billing_address ?: $stockOutChallan->party_name,
+    'shippingAddress' => $stockOutChallan->shipping_address,
+    'subtotal' => $stockOutChallan->subtotal,
+    'discount' => 0,
+    'tax' => 0,
+    'grandTotal' => $stockOutChallan->grand_total,
+    'terms' => "Stock issued without party ledger posting.\nReceiver: ".$stockOutChallan->display_party,
+    'company' => auth()->user()?->currentCompany,
+    'bankAccount' => null,
+    'accent' => '#0f766e',
+])
