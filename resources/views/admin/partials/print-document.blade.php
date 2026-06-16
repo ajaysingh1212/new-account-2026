@@ -148,7 +148,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--te
 }
 .header::after{
   content:'';position:absolute;right:40px;bottom:-80px;
-  width:160px;height:160px;border-radius:50%;
+  width:160px;height:160px;border-radius:50%; 
   background:rgba(255,255,255,.05);
 }
 .header-inner{display:flex;justify-content:space-between;align-items:flex-start;gap:20px;position:relative;z-index:1}
@@ -208,7 +208,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--te
 .party-info{font-size:12.5px;color:var(--muted);line-height:1.7}
 
 /* ── ITEMS TABLE ── */
-.items-wrap{padding:20px 24px}
+.items-wrap{padding:20px 24px} 
 .items-lbl{
   font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
   color:var(--accent);margin-bottom:12px;display:flex;align-items:center;gap:6px;
@@ -526,8 +526,8 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
 
       <!-- Signature -->
       <div class="footer-cell" style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end">
-            <div class="amount-words">
-                <strong>Amount in Words</strong>
+            <div class=""  >
+                <strong>Amount in Words</strong><br>
                 {{ $amountInWords }}
             </div>
         <div class="seal-circle">Company<br>Seal</div>

@@ -36,7 +36,7 @@
     <!-- SweetAlert -->
     <link rel="stylesheet"
     href="https://cdn.jsdelivr.net/npm/sweetalert2@11/dist/sweetalert2.min.css">
-
+    
     <style>
         :root {
             --primary: #7C3AED;
