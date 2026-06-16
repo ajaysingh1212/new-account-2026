@@ -7,7 +7,7 @@
     $canAnyReport = $user->can('reports.party') || $user->can('reports.stock') || $user->can('reports.expense') || $user->can('reports.gst') || $user->can('reports.transaction');
     $canManagement = $user->isSuperAdmin() || $user->isAdmin() || $user->can('users.view') || $user->can('roles.view') || $user->can('audit.view') || $user->can('terms.manage');
     $hasCrmAccess = $user->isSuperAdmin() || (bool) $user->currentCompany?->has_crm_access;
-    $canAnyInventory = $user->can('items.view') || $user->can('product_types.view') || $user->can('stocks.view') || ($hasCrmAccess && $user->can('production.view'));
+    $canAnyInventory = $user->can('items.view') || $user->can('product_types.view') || $user->can('stocks.view') || ($hasCrmAccess && ($user->can('production.view') || $user->can('production_reverts.view')));
 @endphp
 
 <aside class="main-sidebar sidebar-dark-primary elevation-4">
@@ -95,8 +95,8 @@
 
                 @if($canAnyInventory)
                     <li class="nav-header">INVENTORY</li>
-                    <li class="nav-item has-treeview {{ request()->routeIs('admin.items*','admin.product-types*','admin.stocks*','admin.production-batches*','admin.buyers*') ? 'menu-open' : '' }}">
-                        <a href="#" class="nav-link {{ request()->routeIs('admin.items*','admin.product-types*','admin.stocks*','admin.production-batches*','admin.buyers*') ? 'active' : '' }}"><i class="nav-icon fas fa-boxes" style="color:#F59E0B"></i><p>Inventory <i class="right fas fa-angle-left"></i></p></a>
+                    <li class="nav-item has-treeview {{ request()->routeIs('admin.items*','admin.product-types*','admin.stocks*','admin.production-batches*','admin.production-reverts*','admin.buyers*') ? 'menu-open' : '' }}">
+                        <a href="#" class="nav-link {{ request()->routeIs('admin.items*','admin.product-types*','admin.stocks*','admin.production-batches*','admin.production-reverts*','admin.buyers*') ? 'active' : '' }}"><i class="nav-icon fas fa-boxes" style="color:#F59E0B"></i><p>Inventory <i class="right fas fa-angle-left"></i></p></a>
                         <ul class="nav nav-treeview">
                             @can('items.view')<li class="nav-item"><a href="{{ route('admin.items.index') }}" class="nav-link {{ request()->routeIs('admin.items*') ? 'active' : '' }}"><i class="fas fa-box nav-icon"></i><p>Item Master</p></a></li>@endcan
                             @can('product_types.view')<li class="nav-item"><a href="{{ route('admin.product-types.index') }}" class="nav-link {{ request()->routeIs('admin.product-types*') ? 'active' : '' }}"><i class="fas fa-tags nav-icon"></i><p>Product Types</p></a></li>@endcan
@@ -123,6 +123,7 @@
                                 </li>
                             @endcan
                             @if($hasCrmAccess) @can('production.view')<li class="nav-item"><a href="{{ route('admin.production-batches.index') }}" class="nav-link {{ request()->routeIs('admin.production-batches*') ? 'active' : '' }}"><i class="fas fa-industry nav-icon"></i><p>CRM Assembly</p></a></li>@endcan @endif
+                            @if($hasCrmAccess) @can('production_reverts.view')<li class="nav-item"><a href="{{ route('admin.production-reverts.index') }}" class="nav-link {{ request()->routeIs('admin.production-reverts*') ? 'active' : '' }}"><i class="fas fa-undo-alt nav-icon"></i><p>CRM Revert</p></a></li>@endcan @endif
                         </ul>
                     </li>
                 @endif

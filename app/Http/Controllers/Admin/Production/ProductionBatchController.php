@@ -394,6 +394,101 @@ class ProductionBatchController extends Controller
             ->with('success', 'Production batch reverted. Finished goods removed and raw material stock restored.');
     }
 
+    public function revertTool(Request $request, EntryVisibilityService $visibility)
+    {
+        $mode = $request->input('mode', 'batch');
+        $term = trim((string) $request->input('q', ''));
+        $result = null;
+
+        if ($term !== '') {
+            if ($mode === 'serial') {
+                $result = $this->findUnitBySerial($term, $visibility);
+            } else {
+                $batch = $visibility->scopeForUser(
+                    ProductionBatch::with('finishedItem.bomMaterials.rawItem')->where('batch_no', $term),
+                    ProductionBatch::class
+                )->first();
+                $result = $batch ? ['batch' => $batch, 'raw' => $this->rawMaterialRows($batch, (float) $batch->quantity)] : null;
+            }
+        }
+
+        return view('admin.production.revert-tool', compact('mode', 'term', 'result'));
+    }
+
+    public function revertSelected(Request $request, AccountingService $accounting, EntryVisibilityService $visibility)
+    {
+        $data = $request->validate([
+            'mode' => ['required','in:batch,serial'],
+            'q' => ['required','string'],
+        ]);
+
+        if ($data['mode'] === 'batch') {
+            $batch = $visibility->scopeForUser(
+                ProductionBatch::where('batch_no', $data['q']),
+                ProductionBatch::class
+            )->firstOrFail();
+
+            return $this->revert($batch, $accounting, $visibility);
+        }
+
+        $match = $this->findUnitBySerial($data['q'], $visibility);
+        abort_if(!$match, 404, 'Serial number not found.');
+
+        DB::transaction(function () use ($match, $accounting) {
+            /** @var ProductionBatch $batch */
+            $batch = $match['batch']->fresh('finishedItem.bomMaterials.rawItem');
+            $unitIndex = (int) $match['index'];
+            $units = $batch->units_data ?? [];
+            abort_if(!empty($units[$unitIndex]['reverted_at']), 422, 'This serial is already reverted.');
+            abort_if(in_array($batch->id . '-' . $unitIndex, $this->soldUnitKeys($batch->company_id), true), 422, 'This serial is already sold. Reverse sale first.');
+
+            $finished = Item::lockForUpdate()->findOrFail($batch->finished_item_id);
+            abort_if((float) $finished->current_stock < 1, 422, "Insufficient finished goods stock to revert {$finished->name}.");
+
+            $accounting->moveStock($finished, [
+                'movement_date' => now()->toDateString(),
+                'movement_type' => 'production_serial_revert_output',
+                'direction' => 'out',
+                'quantity' => 1,
+                'unit_price' => $batch->cost_per_unit,
+                'total_value' => $batch->cost_per_unit,
+                'reference_type' => ProductionBatch::class,
+                'reference_id' => $batch->id,
+                'reference_no' => $batch->batch_no,
+                'description' => 'Production serial reverted - finished goods removed: ' . ($units[$unitIndex]['serial_no'] ?? $unitIndex),
+            ]);
+
+            foreach ($batch->finishedItem?->bomMaterials ?? [] as $bom) {
+                if (!$bom->rawItem) {
+                    continue;
+                }
+                $raw = Item::lockForUpdate()->findOrFail($bom->raw_item_id);
+                $qty = (float) $bom->qty_per_unit;
+                $accounting->moveStock($raw, [
+                    'movement_date' => now()->toDateString(),
+                    'movement_type' => 'production_serial_revert_raw',
+                    'direction' => 'in',
+                    'quantity' => $qty,
+                    'unit_price' => $raw->purchase_price,
+                    'total_value' => $qty * (float) $raw->purchase_price,
+                    'reference_type' => ProductionBatch::class,
+                    'reference_id' => $batch->id,
+                    'reference_no' => $batch->batch_no,
+                    'description' => 'Production serial reverted - raw material restored.',
+                ]);
+            }
+
+            $oldValues = $batch->toArray();
+            $units[$unitIndex]['reverted_at'] = now()->toDateTimeString();
+            $units[$unitIndex]['reverted_by'] = auth()->id();
+            $batch->update(['units_data' => $units]);
+            $this->logUpdate($batch, $oldValues, $batch->fresh()->toArray());
+        });
+
+        return redirect()->route('admin.production-reverts.index', ['mode' => 'serial', 'q' => $data['q']])
+            ->with('success', 'Selected serial reverted. Raw materials restored and finished goods stock adjusted.');
+    }
+
     private function reverseProductionPosting(ProductionBatch $batch, AccountingService $accounting): void
     {
         $finished = $batch->finishedItem;
@@ -489,6 +584,44 @@ class ProductionBatchController extends Controller
             ->filter()
             ->values()
             ->all();
+    }
+
+    private function findUnitBySerial(string $term, EntryVisibilityService $visibility): ?array
+    {
+        $batches = $visibility->scopeForUser(
+            ProductionBatch::with('finishedItem.bomMaterials.rawItem')->where('status', 'posted'),
+            ProductionBatch::class
+        )->get();
+
+        foreach ($batches as $batch) {
+            foreach (($batch->units_data ?? []) as $index => $unit) {
+                if (in_array($term, array_filter([
+                    $unit['serial_no'] ?? null,
+                    $unit['buyer_code'] ?? null,
+                    $unit['batch_no'] ?? null,
+                    $unit['vts_sim'] ?? null,
+                ]), true)) {
+                    return [
+                        'batch' => $batch,
+                        'index' => $index,
+                        'unit' => $unit,
+                        'key' => $batch->id . '-' . $index,
+                        'raw' => $this->rawMaterialRows($batch, 1),
+                    ];
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function rawMaterialRows(ProductionBatch $batch, float $qty): array
+    {
+        return collect($batch->finishedItem?->bomMaterials ?? [])->map(fn($bom) => [
+            'name' => $bom->rawItem?->name ?: 'Raw material',
+            'qty' => (float) $bom->qty_per_unit * $qty,
+            'unit' => $bom->rawItem?->unit,
+        ])->values()->all();
     }
 
     private function logUpdate(ProductionBatch $batch, array $oldValues, array $newValues): void

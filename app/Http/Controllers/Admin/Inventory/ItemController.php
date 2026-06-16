@@ -131,6 +131,7 @@ class ItemController extends Controller
             'sale_gst_percent'     => ['nullable','numeric','min:0'],
             'opening_stock'        => ['nullable','numeric','min:0'],
             'low_stock_qty'        => ['nullable','numeric','min:0'],
+            'per_quantity_weight'  => ['nullable','numeric','min:0'],
             'status'               => ['required', Rule::in(['active','inactive'])],
         ]);
     }

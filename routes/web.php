@@ -99,6 +99,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
     });
     Route::middleware(['permission:production.view', 'crm_access'])->group(function () {
         Route::resource('buyers', BuyerController::class)->only(['index','create','store','edit','update']);
+        Route::get('production-reverts', [ProductionBatchController::class, 'revertTool'])->middleware('permission:production_reverts.view')->name('production-reverts.index');
+        Route::post('production-reverts', [ProductionBatchController::class, 'revertSelected'])->middleware('permission:production_reverts.manage')->name('production-reverts.store');
         Route::resource('production-batches', ProductionBatchController::class)->only(['create','store'])->middleware('permission:production.create');
         Route::resource('production-batches', ProductionBatchController::class)->only(['edit','update'])->middleware('permission:production.create');
         Route::post('production-batches/{productionBatch}/revert', [ProductionBatchController::class, 'revert'])->middleware('permission:production.create')->name('production-batches.revert');

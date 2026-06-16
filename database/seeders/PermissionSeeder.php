@@ -64,6 +64,8 @@ class PermissionSeeder extends Seeder
 
             ['name'=>'View Production', 'slug'=>'production.view', 'module'=>'production'],
             ['name'=>'Create Production', 'slug'=>'production.create', 'module'=>'production'],
+            ['name'=>'View CRM Reverts', 'slug'=>'production_reverts.view', 'module'=>'production_reverts'],
+            ['name'=>'Manage CRM Reverts', 'slug'=>'production_reverts.manage', 'module'=>'production_reverts'],
 
             ['name'=>'View Expenses', 'slug'=>'expenses.view', 'module'=>'expenses'],
             ['name'=>'Create Expenses', 'slug'=>'expenses.create', 'module'=>'expenses'],

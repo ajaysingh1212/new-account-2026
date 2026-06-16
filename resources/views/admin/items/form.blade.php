@@ -311,6 +311,11 @@
                     value="{{ old('low_stock_qty',$item->low_stock_qty) }}" placeholder="e.g. 10">
             </div>
             <div class="col-md-3 form-group">
+                <label>Weight / Qty</label>
+                <input type="number" step="0.001" name="per_quantity_weight" class="form-control"
+                    value="{{ old('per_quantity_weight',$item->per_quantity_weight) }}" placeholder="Optional kg per qty">
+            </div>
+            <div class="col-md-3 form-group">
                 <label>Status</label>
                 <select name="status" class="form-control">
                     <option value="active"   @selected(old('status',$item->status)==='active')>Active</option>

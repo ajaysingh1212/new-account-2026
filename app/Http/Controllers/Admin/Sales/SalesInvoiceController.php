@@ -215,7 +215,7 @@ class SalesInvoiceController extends Controller
             'invoiceNo' => $invoice?->invoice_no ?? $this->nextNo(),
             'unitPool' => $this->finishedGoodsUnitPool($companyId, $invoice?->id),
             'itemMeta' => $items->mapWithKeys(fn(Item $item) => [
-                $item->id => ['requires_gps' => $this->isGpsItem($item)],
+                $item->id => ['requires_gps' => $this->isGpsItem($item), 'weight' => (float) ($item->per_quantity_weight ?? 0)],
             ])->all(),
             'mergedCompanies' => $mergedCompanies,
             'interCompanyVisibility' => $this->interCompanyVisibilityData($mergedCompanies),
@@ -262,7 +262,7 @@ class SalesInvoiceController extends Controller
 
     private function storeLines(Request $request, SalesInvoice $invoice, AccountingService $accounting): array
     {
-        $subtotal = $tax = $lineDiscount = 0;
+        $subtotal = $tax = $lineDiscount = $totalWeight = 0;
         $unitPool = $this->finishedGoodsUnitPool($invoice->company_id, $invoice->id);
         foreach ($request->item_id as $i => $itemId) {
             $item = Item::with('productType')->findOrFail($itemId);
@@ -286,6 +286,7 @@ class SalesInvoiceController extends Controller
             $taxAmount = $taxPercent > 0 ? $grossAfterDiscount * $taxPercent / (100 + $taxPercent) : 0;
             $taxableAmount = $grossAfterDiscount - $taxAmount;
             $total = $grossAfterDiscount;
+            $lineWeight = $qty * (float) ($item->per_quantity_weight ?? 0);
             SalesInvoiceItem::create([
                 'sales_invoice_id' => $invoice->id,
                 'item_id' => $item->id,
@@ -299,6 +300,7 @@ class SalesInvoiceController extends Controller
                 'tax_percent' => $taxPercent,
                 'tax_amount' => $taxAmount,
                 'line_total' => $total,
+                'line_weight' => $lineWeight,
                 'selected_units' => $selectedUnits,
             ]);
             $accounting->moveStock($item, [
@@ -317,6 +319,7 @@ class SalesInvoiceController extends Controller
             $subtotal += $taxableAmount;
             $tax += $taxAmount;
             $lineDiscount += $discount;
+            $totalWeight += $lineWeight;
         }
         $overallDiscount = (float) ($request->discount_amount ?? 0);
         return [
@@ -324,6 +327,7 @@ class SalesInvoiceController extends Controller
             'discount_amount' => $lineDiscount + $overallDiscount,
             'tax_amount' => $tax,
             'grand_total' => max(0, $subtotal + $tax - $overallDiscount),
+            'total_weight' => $totalWeight,
         ];
     }
 
@@ -381,7 +385,9 @@ class SalesInvoiceController extends Controller
             ->where('status', 'posted')
             ->get()
             ->flatMap(function (ProductionBatch $batch) use ($soldKeys) {
-                return collect($batch->units_data ?? [])->map(function ($unit, $index) use ($batch, $soldKeys) {
+                return collect($batch->units_data ?? [])
+                    ->filter(fn($unit) => empty($unit['reverted_at']))
+                    ->map(function ($unit, $index) use ($batch, $soldKeys) {
                     $key = $batch->id . '-' . $index;
                     return array_merge($unit, [
                         'key' => $key,
@@ -750,6 +756,7 @@ class SalesInvoiceController extends Controller
             'sale_price' => $sourceItem->sale_price,
             'sale_tax_inclusive' => $sourceItem->sale_tax_inclusive,
             'sale_gst_percent' => $sourceItem->sale_gst_percent,
+            'per_quantity_weight' => $sourceItem->per_quantity_weight,
             'track_stock' => true,
             'status' => 'active',
             'created_by' => auth()->id(),

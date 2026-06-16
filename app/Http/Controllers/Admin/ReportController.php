@@ -321,15 +321,45 @@ class ReportController extends Controller
 
     private function filters(Request $request): array
     {
+        if ($request->filled('period')) {
+            [$from, $to] = $this->periodRange($request->input('period'));
+            return [
+                'month' => now()->format('Y-m'),
+                'period' => $request->input('period'),
+                'from' => $request->input('from_date', $from),
+                'to' => $request->input('to_date', $to),
+                'partyId' => $request->integer('party_id') ?: null,
+                'withoutGst' => $request->boolean('without_gst'),
+            ];
+        }
+
         $month = $request->input('month', now()->format('Y-m'));
         $date = Carbon::createFromFormat('Y-m', $month)->startOfMonth();
         return [
             'month' => $month,
+            'period' => 'month',
             'from' => $request->input('from_date', $date->toDateString()),
             'to' => $request->input('to_date', $date->copy()->endOfMonth()->toDateString()),
             'partyId' => $request->integer('party_id') ?: null,
             'withoutGst' => $request->boolean('without_gst'),
         ];
+    }
+
+    private function periodRange(string $period): array
+    {
+        $today = now();
+
+        return match ($period) {
+            'today' => [$today->toDateString(), $today->toDateString()],
+            'yesterday' => [$today->copy()->subDay()->toDateString(), $today->copy()->subDay()->toDateString()],
+            'week' => [$today->copy()->startOfWeek()->toDateString(), $today->copy()->endOfWeek()->toDateString()],
+            'three_months' => [$today->copy()->subMonths(3)->startOfDay()->toDateString(), $today->toDateString()],
+            'six_months' => [$today->copy()->subMonths(6)->startOfDay()->toDateString(), $today->toDateString()],
+            'nine_months' => [$today->copy()->subMonths(9)->startOfDay()->toDateString(), $today->toDateString()],
+            'year' => [$today->copy()->subYear()->startOfDay()->toDateString(), $today->toDateString()],
+            'all' => ['1970-01-01', $today->toDateString()],
+            default => [$today->copy()->startOfMonth()->toDateString(), $today->copy()->endOfMonth()->toDateString()],
+        };
     }
 
     private function ageingRow($bill, string $model, string $kind): array

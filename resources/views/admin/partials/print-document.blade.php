@@ -10,6 +10,7 @@
     $discount     = (float)($discount   ?? 0);
     $tax          = (float)($tax        ?? 0);
     $grandTotal   = (float)($grandTotal ?? 0);
+    $totalWeight  = (float)($totalWeight ?? 0);
     $terms        = $terms        ?? '';
     $status       = $status       ?? 'posted';
     $title        = $title        ?? 'INVOICE';
@@ -473,6 +474,12 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
           <span class="sum-label">GST / Tax</span>
           <b>₹ {{ number_format($tax,2) }}</b>
         </div>
+        @if($totalWeight > 0)
+        <div class="sum-line">
+          <span class="sum-label">Total Weight</span>
+          <b>{{ number_format($totalWeight,3) }} kg</b>
+        </div>
+        @endif
         <div class="sum-line" style="border-top:1.5px solid var(--border)">
           <span class="sum-label">Round Off</span>
           <b>₹ {{ number_format($grandTotal - floor($grandTotal),2) }}</b>
@@ -526,8 +533,8 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
 
       <!-- Signature -->
       <div class="footer-cell" style="display:flex;flex-direction:column;align-items:center;justify-content:flex-end">
-            <div class="amount-words">
-                <strong>Amount in Words</strong>
+            <div class="">
+                <strong>Amount in Words</strong><br>
                 {{ $amountInWords }}
             </div>
         <div class="seal-circle">Company<br>Seal</div>
