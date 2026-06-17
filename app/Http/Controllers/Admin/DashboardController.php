@@ -97,6 +97,9 @@ class DashboardController extends Controller
         );
         $salesProducts = $this->productSummary(SalesInvoiceItem::class, 'salesInvoice', 'billing_date', $companyId, $visibility, $user, $from, $to);
         $purchaseProducts = $this->productSummary(PurchaseBillItem::class, 'purchaseBill', 'billing_date', $companyId, $visibility, $user, $from, $to);
+        $profitRows = $this->profitRows($companyId, $visibility, $user, $from, $to);
+        $stats['total_profit'] = $profitRows->sum('profit');
+        $salesSegments = $this->salesSegments($companyId, $visibility, $user, $from, $to);
         $topSellingItemIds = $salesProducts->take(3)->pluck('item_id')->filter()->all();
         $lowStockProducts = $this->lowStockProducts($companyId, $visibility, $user, $topSellingItemIds);
         $monthly = $this->monthlySeries($companyId, $visibility, $user, $from, $to);
@@ -108,7 +111,7 @@ class DashboardController extends Controller
         ];
         $quickActions = $this->quickActions($user);
 
-        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingPaginated','salesProducts','purchaseProducts','lowStockProducts'));
+        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingPaginated','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments'));
     }
 
     private function dateRange(Request $request): array
@@ -287,6 +290,95 @@ class DashboardController extends Controller
             })
             ->sortByDesc('qty')
             ->values();
+    }
+
+    private function profitRows(?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to)
+    {
+        $query = SalesInvoice::with(['party','items.item'])
+            ->whereBetween('billing_date', [$from, $to]);
+        $query = $user->isSuperAdmin() ? $this->scope($query, $companyId) : $visibility->scopeForUser($query, SalesInvoice::class);
+
+        return $query->latest('billing_date')->get()->map(function (SalesInvoice $bill) {
+            $cost = $bill->items->sum(function ($line) {
+                $unitCost = collect($line->selected_units ?? [])->avg('cost_per_unit');
+                $unitCost = $unitCost ?: (float) ($line->item?->purchase_price ?? 0);
+                return $unitCost * (float) $line->quantity;
+            });
+
+            return [
+                'invoice' => $bill->invoice_no,
+                'party' => $bill->party?->display_name ?: 'Cash / Walk-in',
+                'date' => $bill->billing_date?->format('d M Y'),
+                'cost' => (float) $cost,
+                'sale' => (float) $bill->grand_total,
+                'profit' => (float) $bill->grand_total - (float) $cost,
+            ];
+        })->values();
+    }
+
+    private function salesSegments(?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to)
+    {
+        $query = SalesInvoiceItem::with(['item.productType','salesInvoice'])
+            ->whereHas('salesInvoice', fn($q) => $q->whereBetween('billing_date', [$from, $to]));
+
+        if ($user->isSuperAdmin()) {
+            $query->whereHas('salesInvoice', fn($q) => $this->scope($q, $companyId));
+        } else {
+            $visibleIds = $visibility->scopeForUser(SalesInvoice::query(), SalesInvoice::class)->pluck('id');
+            $query->whereIn('sales_invoice_id', $visibleIds);
+        }
+
+        $segments = collect([
+            'gps' => ['label' => 'GPS', 'icon' => 'fa-map-marker-alt'],
+            'gps_android' => ['label' => 'GPS Android', 'icon' => 'fa-mobile-alt'],
+            'led_light' => ['label' => 'LED Light', 'icon' => 'fa-lightbulb'],
+            'horn' => ['label' => 'Horn', 'icon' => 'fa-bullhorn'],
+            'speaker' => ['label' => 'Speaker', 'icon' => 'fa-volume-up'],
+            'other' => ['label' => 'Other', 'icon' => 'fa-boxes'],
+        ])->map(fn($meta) => $meta + ['qty' => 0.0, 'amount' => 0.0, 'items' => collect()]);
+
+        $query->get()->each(function (SalesInvoiceItem $line) use ($segments) {
+            $key = $this->segmentKey($line->item);
+            $row = $segments->get($key);
+            $row['qty'] += (float) $line->quantity;
+            $row['amount'] += (float) $line->line_total;
+            $row['items']->push([
+                'invoice' => $line->salesInvoice?->invoice_no,
+                'date' => $line->salesInvoice?->billing_date?->format('d M Y'),
+                'name' => $line->item?->name ?: 'Item',
+                'product_type' => $line->item?->productType?->name ?: '-',
+                'qty' => (float) $line->quantity,
+                'amount' => (float) $line->line_total,
+            ]);
+            $segments->put($key, $row);
+        });
+
+        return $segments->map(function ($segment) {
+            $segment['items'] = $segment['items']->values();
+            return $segment;
+        });
+    }
+
+    private function segmentKey(?Item $item): string
+    {
+        $text = strtolower(implode(' ', array_filter([
+            $item?->name,
+            $item?->item_code,
+            $item?->sku,
+            $item?->brand,
+            $item?->model,
+            $item?->description,
+            $item?->productType?->name,
+        ])));
+
+        if (str_contains($text, 'gps') && (str_contains($text, 'android') || str_contains($text, 'androide'))) {
+            return 'gps_android';
+        }
+        if (str_contains($text, 'gps')) return 'gps';
+        if (str_contains($text, 'led') || str_contains($text, 'light')) return 'led_light';
+        if (str_contains($text, 'horn')) return 'horn';
+        if (str_contains($text, 'speaker')) return 'speaker';
+        return 'other';
     }
 
     private function lowStockProducts(?int $companyId, EntryVisibilityService $visibility, User $user, array $topSellingItemIds)

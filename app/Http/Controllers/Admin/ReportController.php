@@ -182,7 +182,13 @@ class ReportController extends Controller
                     return $unitCost * (float) $line->quantity;
                 });
                 $sale = (float) $bill->grand_total;
-                return ['bill' => $bill, 'cost' => $cost, 'sale' => $sale, 'profit' => $sale - $cost];
+                return [
+                    'bill' => $bill,
+                    'cost' => $cost,
+                    'sale' => $sale,
+                    'profit' => $sale - $cost,
+                    'detail' => $this->salesInvoiceDetail($bill, $cost, $sale),
+                ];
             });
 
         return view('admin.reports.bill-wise-profit', compact('filters','parties','bills'));
@@ -360,6 +366,50 @@ class ReportController extends Controller
             'all' => ['1970-01-01', $today->toDateString()],
             default => [$today->copy()->startOfMonth()->toDateString(), $today->copy()->endOfMonth()->toDateString()],
         };
+    }
+
+    private function salesInvoiceDetail(SalesInvoice $bill, float $cost, float $sale): array
+    {
+        return [
+            'invoice' => $bill->invoice_no,
+            'date' => $bill->billing_date?->format('d M Y'),
+            'sale_type' => ucfirst((string) $bill->sale_type),
+            'reference' => $bill->reference_no ?: '-',
+            'phone' => $bill->phone ?: ($bill->party?->phone ?: '-'),
+            'billing_address' => $bill->billing_address ?: ($bill->party?->billing_address ?: '-'),
+            'shipping_address' => $bill->shipping_address ?: ($bill->party?->shipping_address ?: '-'),
+            'party' => [
+                'name' => $bill->party?->display_name ?: 'Cash / Walk-in',
+                'legal_name' => $bill->party?->legal_name ?: '-',
+                'phone' => $bill->party?->phone ?: '-',
+                'email' => $bill->party?->email ?: '-',
+                'gstin' => $bill->party?->gstin ?: '-',
+                'city' => trim(collect([$bill->party?->city, $bill->party?->state, $bill->party?->pincode])->filter()->implode(', ')) ?: '-',
+            ],
+            'amounts' => [
+                'subtotal' => (float) $bill->subtotal,
+                'discount' => (float) $bill->discount_amount,
+                'tax' => (float) $bill->tax_amount,
+                'total' => (float) $bill->grand_total,
+                'cost' => $cost,
+                'profit' => $sale - $cost,
+            ],
+            'items' => $bill->items->map(function ($line) {
+                $unitCost = collect($line->selected_units ?? [])->avg('cost_per_unit');
+                $unitCost = $unitCost ?: (float) ($line->item?->purchase_price ?? 0);
+                return [
+                    'name' => $line->item?->name ?: 'Item',
+                    'description' => $line->description ?: '-',
+                    'hsn' => $line->item?->hsn_code ?: '-',
+                    'qty' => (float) $line->quantity,
+                    'unit' => $line->unit ?: $line->item?->unit,
+                    'rate' => (float) $line->unit_price,
+                    'tax' => (float) $line->tax_amount,
+                    'amount' => (float) $line->line_total,
+                    'cost' => $unitCost * (float) $line->quantity,
+                ];
+            })->values(),
+        ];
     }
 
     private function ageingRow($bill, string $model, string $kind): array

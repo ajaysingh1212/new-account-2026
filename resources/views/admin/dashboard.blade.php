@@ -28,6 +28,7 @@
 .dash-hero{position:relative;overflow:hidden;border-radius:18px;background:#0f172a;color:#fff;padding:26px 28px;margin-bottom:22px;box-shadow:0 18px 42px rgba(15,23,42,.18)}.dash-hero:after{content:"";position:absolute;inset:auto -10% -62% -10%;height:170px;background:linear-gradient(90deg,#22d3ee,#2563eb,#22c55e);opacity:.45;border-radius:50%;animation:wave 7s ease-in-out infinite}.dash-hero>*{position:relative;z-index:1}.dash-title{font-size:28px;font-weight:850;margin:0}.dash-sub{color:#cbd5e1;margin-top:6px}.filter-panel{background:#fff;border:1px solid #e5e7eb;border-radius:14px;padding:14px;margin-bottom:22px}.metric-card{background:#fff;border:1px solid #eef2f7;border-radius:14px;padding:18px;min-height:132px;box-shadow:0 10px 26px rgba(2,6,23,.06);position:relative;overflow:hidden}.metric-card:before{content:"";position:absolute;right:-24px;top:-24px;width:86px;height:86px;border-radius:999px;background:var(--accent);opacity:.12}.metric-icon{width:42px;height:42px;border-radius:12px;display:flex;align-items:center;justify-content:center;color:#fff;background:var(--accent);margin-bottom:12px}.metric-value{font-size:24px;font-weight:850;color:#0f172a}.metric-label{color:#64748b;font-size:12px;text-transform:uppercase;font-weight:800;letter-spacing:.5px}.chart-card{background:#fff;border:1px solid #eef2f7;border-radius:16px;padding:18px;box-shadow:0 10px 26px rgba(2,6,23,.06);height:100%}.wave-chart{height:220px;width:100%}.wave-line{fill:none;stroke-width:4;stroke-linecap:round;stroke-dasharray:800;stroke-dashoffset:800;animation:draw 2.1s ease forwards}.pie{width:180px;height:180px;border-radius:50%;margin:auto;background:conic-gradient(#2563eb 0 var(--sales),#ec4899 var(--sales) var(--purchase),#14b8a6 var(--purchase) var(--bank),#f59e0b var(--bank) 100%);animation:pop .8s ease}.quick-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}.quick-action{display:flex;align-items:center;gap:10px;border:1px solid #e5e7eb;border-radius:12px;padding:14px;background:#fff;color:#0f172a;font-weight:750}.quick-action i{color:#2563eb}.activity-row{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid #eef2f7}.activity-dot{width:34px;height:34px;border-radius:10px;background:#eff6ff;color:#2563eb;display:flex;align-items:center;justify-content:center;flex:0 0 auto}@keyframes wave{0%,100%{transform:translateY(0)}50%{transform:translateY(-16px)}}@keyframes draw{to{stroke-dashoffset:0}}@keyframes pop{from{transform:scale(.86);opacity:.4}to{transform:scale(1);opacity:1}}
 .period-tabs{display:flex;flex-wrap:wrap;gap:8px}.period-tab{border:1px solid #dbe4f0;background:#fff;color:#334155;border-radius:999px;padding:8px 12px;font-weight:750}.period-tab.active{background:#0f766e;color:#fff;border-color:#0f766e}.wave-chart{background:linear-gradient(180deg,#f8fafc,#fff);border-radius:12px}.wave-line{filter:drop-shadow(0 8px 12px rgba(37,99,235,.18))}.wave-grid{stroke:#e2e8f0;stroke-width:1}.activity-footer .pagination{margin-bottom:0;justify-content:flex-end}.chart-card h5{font-weight:800;color:#0f172a}
 .ops-card{background:#fff;border:1px solid #e7edf5;border-radius:14px;padding:16px;height:100%;box-shadow:0 10px 26px rgba(2,6,23,.06)}.ops-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.ops-kicker{font-size:11px;text-transform:uppercase;font-weight:850;color:#64748b;letter-spacing:.6px}.ops-amount{font-size:24px;font-weight:900;color:#0f172a}.product-row{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #eef2f7;padding:10px 0}.product-row:first-child{border-top:0}.product-name{font-weight:800;color:#172033}.tag-hot{display:inline-flex;align-items:center;gap:5px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;text-transform:uppercase}.tag-low{display:inline-flex;align-items:center;gap:5px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;text-transform:uppercase}.blink-alert{animation:blinkAlert 1s ease-in-out infinite}@keyframes blinkAlert{0%,100%{box-shadow:0 0 0 rgba(220,38,38,0)}50%{box-shadow:0 0 0 4px rgba(220,38,38,.16)}}.ageing-table th{font-size:11px;text-transform:uppercase;color:#64748b;border-top:0}.ageing-table td{vertical-align:middle}.view-detail-btn{border-radius:999px;font-weight:800}.due-action{white-space:nowrap}.modal-metric{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px}.modal-metric span{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:800}.modal-metric b{display:block;font-size:16px;color:#0f172a}
+.dash-card-button{border:0;text-align:left;width:100%;height:100%}.pro-modal .modal-content{border:0;border-radius:18px;overflow:hidden;box-shadow:0 26px 80px rgba(15,23,42,.28)}.pro-modal .modal-header{background:linear-gradient(135deg,#101827,#0f766e);color:#fff;border:0;padding:20px 24px}.pro-modal .modal-body{background:#f8fafc}.segment-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.segment-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;box-shadow:0 10px 24px rgba(15,23,42,.07)}.segment-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.segment-icon{width:40px;height:40px;border-radius:12px;background:#e0f2fe;color:#0369a1;display:flex;align-items:center;justify-content:center}.modal-table-wrap{max-height:340px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff}.quick-drawer-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.36);z-index:1040;display:none}.quick-drawer{position:fixed;top:0;right:-420px;width:min(420px,100vw);height:100vh;background:#fff;z-index:1041;box-shadow:-24px 0 60px rgba(15,23,42,.22);transition:right .24s ease;display:flex;flex-direction:column}.quick-drawer.open{right:0}.quick-drawer-backdrop.open{display:block}.quick-drawer-head{padding:20px 22px;background:#0f172a;color:#fff;display:flex;justify-content:space-between;align-items:center}.quick-drawer-body{padding:18px;overflow:auto}.quick-section-title{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:900;letter-spacing:.6px;margin:16px 0 8px}.quick-side-link{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #e5e7eb;border-radius:10px;color:#0f172a;font-weight:800;margin-bottom:8px}.quick-side-link i{width:24px;color:#0f766e}.quick-open-btn{border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);color:#fff;border-radius:10px;padding:10px 14px;font-weight:800}
 </style>
 @endpush
 
@@ -42,8 +43,8 @@
         $cards[] = ['label'=>'Company Admins','value'=>$stats['admins'] ?? 0,'icon'=>'fa-user-shield','accent'=>'#ec4899'];
         $cards[] = ['label'=>'Active Companies','value'=>$stats['active_companies'] ?? 0,'icon'=>'fa-check-circle','accent'=>'#22c55e'];
     }
-    if ($user->can('sales.view')) $cards[] = ['label'=>'Sales','value'=>'Rs '.number_format($stats['sales'] ?? 0,2),'icon'=>'fa-file-invoice-dollar','accent'=>'#2563eb'];
-    if ($user->can('sales.view')) $cards[] = ['label'=>'Sales Due','value'=>'Rs '.number_format($stats['sales_due'] ?? 0,2),'icon'=>'fa-hand-holding-dollar','accent'=>'#dc2626','target'=>'salesDueBox'];
+    if ($user->can('sales.view')) $cards[] = ['label'=>'Sales','value'=>'Rs '.number_format($stats['sales'] ?? 0,2),'icon'=>'fa-file-invoice-dollar','accent'=>'#2563eb','modal'=>'salesSegmentModal'];
+    if ($user->can('sales.view')) $cards[] = ['label'=>'Sales Due','value'=>'Rs '.number_format($stats['sales_due'] ?? 0,2),'icon'=>'fa-hand-holding-dollar','accent'=>'#dc2626','modal'=>'salesDueModal'];
     if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase','value'=>'Rs '.number_format($stats['purchases'] ?? 0,2),'icon'=>'fa-shopping-cart','accent'=>'#ec4899'];
     if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase Due','value'=>'Rs '.number_format($stats['purchase_due'] ?? 0,2),'icon'=>'fa-file-circle-exclamation','accent'=>'#f59e0b','target'=>'purchaseDueBox'];
     if ($user->can('parties.view')) $cards[] = ['label'=>'Parties','value'=>$stats['parties'] ?? 0,'icon'=>'fa-users','accent'=>'#8b5cf6'];
@@ -53,6 +54,7 @@
     if ($user->can('estimates.view')) $cards[] = ['label'=>'Estimates','value'=>$stats['estimates'] ?? 0,'icon'=>'fa-file-contract','accent'=>'#4338ca'];
     if ($user->can('delivery_challans.view')) $cards[] = ['label'=>'Challans','value'=>$stats['challans'] ?? 0,'icon'=>'fa-truck','accent'=>'#0f766e'];
     if ($user->can('expenses.view')) $cards[] = ['label'=>'Pending Expenses','value'=>$stats['pending_expenses'] ?? 0,'icon'=>'fa-clipboard-check','accent'=>'#10b981'];
+    if ($user->can('reports.transaction')) $cards[] = ['label'=>'Total Profit','value'=>'Rs '.number_format($stats['total_profit'] ?? 0,2),'icon'=>'fa-chart-line','accent'=>'#0f766e','modal'=>'profitModal'];
     $sales = max(0, (float)($mix['Sales'] ?? 0)); $purchase = max(0, (float)($mix['Purchase'] ?? 0)); $bank = max(0, (float)($mix['Bank'] ?? 0)); $cash = max(0, (float)($mix['Cash'] ?? 0));
     $totalMix = max(1, $sales + $purchase + $bank + $cash);
     $salesEnd = round($sales / $totalMix * 100, 2);
@@ -69,6 +71,7 @@
         <div class="text-right mt-2 mt-md-0">
             <div style="font-size:12px;color:#cbd5e1;text-transform:uppercase;font-weight:800;">Signed in as</div>
             <div style="font-weight:800;font-size:18px;">{{ $user->name }}</div>
+            <button type="button" class="quick-open-btn mt-3" id="openQuickDrawer"><i class="fas fa-bolt mr-1"></i> Quick Links</button>
         </div>
     </div>
 </div>
@@ -95,7 +98,7 @@
 <div class="row">
     @forelse($cards as $card)
         <div class="col-6 col-xl-3 mb-4">
-            <div class="metric-card" style="--accent:{{ $card['accent'] }};cursor:{{ isset($card['target']) ? 'pointer' : 'default' }}" @if(isset($card['target'])) onclick="document.getElementById('{{ $card['target'] }}').classList.toggle('d-none')" @endif>
+            <div class="metric-card" style="--accent:{{ $card['accent'] }};cursor:{{ isset($card['modal']) ? 'pointer' : 'default' }}" @if(isset($card['modal'])) data-toggle="modal" data-target="#{{ $card['modal'] }}" @endif>
                 <div class="metric-icon"><i class="fas {{ $card['icon'] }}"></i></div>
                 <div class="metric-value">{{ $card['value'] }}</div>
                 <div class="metric-label">{{ $card['label'] }}</div>
@@ -188,14 +191,6 @@
 </div>
 @endcan
 <div class="row">
-    <div class="col-lg-6 mb-4 d-none" id="salesDueBox">
-        <div class="chart-card"><h5>Sales Due Party Wise</h5><div class="table-responsive"><table class="table"><thead><tr><th>Party</th><th>Invoice</th><th>Due</th></tr></thead><tbody>@forelse($salesDueRows as $row)<tr><td>{{ $row['party'] }}</td><td>{{ $row['invoice'] }}</td><td>Rs {{ number_format($row['due'],2) }}</td></tr>@empty<tr><td colspan="3">No sales due.</td></tr>@endforelse</tbody></table></div></div>
-    </div>
-    <div class="col-lg-6 mb-4 d-none" id="purchaseDueBox">
-        <div class="chart-card"><h5>Purchase Due Party Wise</h5><div class="table-responsive"><table class="table"><thead><tr><th>Party</th><th>Bill</th><th>Due</th></tr></thead><tbody>@forelse($purchaseDueRows as $row)<tr><td>{{ $row['party'] }}</td><td>{{ $row['invoice'] }}</td><td>Rs {{ number_format($row['due'],2) }}</td></tr>@empty<tr><td colspan="3">No purchase due.</td></tr>@endforelse</tbody></table></div></div>
-    </div>
-</div>
-<div class="row">
     <div class="col-lg-7 mb-4"><div class="chart-card"><h5>Quick Actions</h5><div class="quick-grid mt-3">@forelse($quickActions as $action)<a class="quick-action" href="{{ route($action['route']) }}"><i class="fas {{ $action['icon'] }}"></i>{{ $action['label'] }}</a>@empty <span class="text-muted">No actions available for this role.</span>@endforelse</div></div></div>
     <div class="col-lg-5 mb-4"><div class="chart-card"><h5>Recent Activity</h5>@forelse($recentLogs as $log)<div class="activity-row"><div class="activity-dot"><i class="fas fa-bolt"></i></div><div><b>{{ $log->user?->name ?? 'System' }}</b> {{ $log->action }}<br><span class="text-muted small">{{ \Illuminate\Support\Str::limit($log->description, 54) }} - {{ $log->created_at?->diffForHumans() }}</span></div></div>@empty <div class="text-muted">No activity yet.</div>@endforelse <div class="activity-footer mt-3">{{ $recentLogs->appends(request()->except('activity_page'))->links('pagination::bootstrap-5') }}</div></div></div>
 </div>
@@ -237,6 +232,119 @@
 </div>
 @endif
 
+<div class="quick-drawer-backdrop" id="quickDrawerBackdrop"></div>
+<aside class="quick-drawer" id="quickDrawer" aria-hidden="true">
+    <div class="quick-drawer-head">
+        <div>
+            <div style="font-size:12px;color:#cbd5e1;text-transform:uppercase;font-weight:900">Command Center</div>
+            <h5 class="m-0 font-weight-bold">Quick Links</h5>
+        </div>
+        <button type="button" class="close text-white" id="closeQuickDrawer" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+    </div>
+    <div class="quick-drawer-body">
+        <div class="quick-section-title">Sales</div>
+        @can('sales.create')<a class="quick-side-link" href="{{ route('admin.sales.create') }}"><i class="fas fa-file-invoice-dollar"></i>New Sale</a>@endcan
+        @can('party_payments.view')<a class="quick-side-link" href="{{ route('admin.party-payments.create') }}?type=payment_in"><i class="fas fa-hand-holding-usd"></i>Payment In</a>@endcan
+        @can('estimates.create')<a class="quick-side-link" href="{{ route('admin.estimates.create') }}"><i class="fas fa-file-contract"></i>Estimate</a>@endcan
+        @can('delivery_challans.create')<a class="quick-side-link" href="{{ route('admin.delivery-challans.create') }}"><i class="fas fa-truck"></i>Delivery Challan</a>@endcan
+        <div class="quick-section-title">Purchase</div>
+        @can('purchase.create')<a class="quick-side-link" href="{{ route('admin.purchases.create') }}"><i class="fas fa-shopping-cart"></i>New Purchase</a>@endcan
+        @can('party_payments.view')<a class="quick-side-link" href="{{ route('admin.party-payments.create') }}?type=payment_out"><i class="fas fa-money-check-alt"></i>Payment Out</a>@endcan
+        <div class="quick-section-title">Inventory</div>
+        @can('items.create')<a class="quick-side-link" href="{{ route('admin.items.create') }}"><i class="fas fa-box"></i>Add Item</a>@endcan
+        @can('stocks.view')<a class="quick-side-link" href="{{ route('admin.stocks.index') }}"><i class="fas fa-warehouse"></i>Stock Dashboard</a>@endcan
+        @can('stocks.view')<a class="quick-side-link" href="{{ route('admin.stock-transfers.create') }}"><i class="fas fa-random"></i>Stock Transfer</a>@endcan
+        <div class="quick-section-title">Important Reports</div>
+        @can('reports.transaction')<a class="quick-side-link" href="{{ route('admin.reports.bill-wise-profit') }}"><i class="fas fa-chart-line"></i>Bill Wise Profit</a>@endcan
+        @can('reports.transaction')<a class="quick-side-link" href="{{ route('admin.reports.ageing') }}"><i class="fas fa-hourglass-half"></i>Ageing Report</a>@endcan
+        @can('reports.transaction')<a class="quick-side-link" href="{{ route('admin.reports.profit-loss') }}"><i class="fas fa-balance-scale"></i>Profit / Loss</a>@endcan
+        @can('reports.party')<a class="quick-side-link" href="{{ route('admin.reports.party-statement') }}"><i class="fas fa-address-book"></i>Party Statement</a>@endcan
+    </div>
+</aside>
+
+<div class="modal fade pro-modal" id="profitModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div><h5 class="modal-title mb-0">Invoice Wise Profit</h5><small>Filter: {{ $from }} to {{ $to }}</small></div>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-4"><div class="modal-metric"><span>Total Sale</span><b>Rs {{ number_format($profitRows->sum('sale'),2) }}</b></div></div>
+                    <div class="col-md-4"><div class="modal-metric"><span>Total Cost</span><b>Rs {{ number_format($profitRows->sum('cost'),2) }}</b></div></div>
+                    <div class="col-md-4"><div class="modal-metric"><span>Total Profit</span><b>Rs {{ number_format($profitRows->sum('profit'),2) }}</b></div></div>
+                </div>
+                <div class="modal-table-wrap"><table class="table mb-0"><thead><tr><th>Date</th><th>Invoice</th><th>Party</th><th>Sale</th><th>Cost</th><th>Profit</th></tr></thead><tbody>
+                    @forelse($profitRows as $row)<tr><td>{{ $row['date'] }}</td><td>{{ $row['invoice'] }}</td><td>{{ $row['party'] }}</td><td>Rs {{ number_format($row['sale'],2) }}</td><td>Rs {{ number_format($row['cost'],2) }}</td><td><b class="{{ $row['profit'] >= 0 ? 'text-success' : 'text-danger' }}">Rs {{ number_format($row['profit'],2) }}</b></td></tr>@empty
+                    <tr><td colspan="6" class="text-center text-muted py-4">No invoice profit found for this filter.</td></tr>@endforelse
+                </tbody></table></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade pro-modal" id="salesSegmentModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div><h5 class="modal-title mb-0">Segment Wise Sales</h5><small>Filter: {{ $from }} to {{ $to }}</small></div>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="segment-grid">
+                    @foreach($salesSegments as $segment)
+                        <div class="segment-card">
+                            <div class="segment-top">
+                                <div class="d-flex align-items-center" style="gap:10px"><div class="segment-icon"><i class="fas {{ $segment['icon'] }}"></i></div><div><b>{{ $segment['label'] }}</b><br><small>{{ number_format($segment['qty'],2) }} qty</small></div></div>
+                                <strong>Rs {{ number_format($segment['amount'],2) }}</strong>
+                            </div>
+                            <div class="modal-table-wrap" style="max-height:220px"><table class="table table-sm mb-0"><thead><tr><th>Item</th><th>Type</th><th>Sale</th></tr></thead><tbody>
+                                @forelse($segment['items'] as $item)<tr><td>{{ $item['name'] }}<br><small>{{ $item['invoice'] }} | {{ $item['date'] }}</small></td><td>{{ $item['product_type'] }}</td><td>Rs {{ number_format($item['amount'],2) }}</td></tr>@empty
+                                <tr><td colspan="3" class="text-muted text-center">No sales.</td></tr>@endforelse
+                            </tbody></table></div>
+                        </div>
+                    @endforeach
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade pro-modal" id="salesDueModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div><h5 class="modal-title mb-0">Sales Due Details</h5><small>Party, invoice age, due amount and payment history for {{ $from }} to {{ $to }}</small></div>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="modal-table-wrap"><table class="table mb-0"><thead><tr><th>Party</th><th>Invoice</th><th>Age</th><th>Total</th><th>Paid</th><th>Due</th><th>Payment History</th></tr></thead><tbody>
+                    @forelse($salesDueRows as $row)
+                        <tr>
+                            <td><b>{{ $row['party'] }}</b></td>
+                            <td>{{ $row['invoice'] }}<br><small>{{ $row['date']?->format('d M Y') }}</small></td>
+                            <td>{{ $row['age'] }} days</td>
+                            <td>Rs {{ number_format($row['total'],2) }}</td>
+                            <td>Rs {{ number_format($row['paid'],2) }}</td>
+                            <td><b class="text-danger">Rs {{ number_format($row['due'],2) }}</b></td>
+                            <td>
+                                @forelse($row['payments'] as $payment)
+                                    <div><b>Rs {{ number_format($payment['amount'],2) }}</b> on {{ $payment['date'] }} <small>({{ $payment['mode'] }} / {{ $payment['reference'] }})</small></div>
+                                @empty
+                                    <span class="text-muted">No payment yet.</span>
+                                @endforelse
+                            </td>
+                        </tr>
+                    @empty
+                        <tr><td colspan="7" class="text-center text-muted py-4">No sales due for this filter.</td></tr>
+                    @endforelse
+                </tbody></table></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="invoiceDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
         <div class="modal-content" style="border-radius:14px;border:0;overflow:hidden">
@@ -276,6 +384,14 @@
 @push('scripts')
 <script>
 function dashMoney(value){return 'Rs '+(Number(value)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});}
+$('#openQuickDrawer').on('click',function(){
+    $('#quickDrawer,#quickDrawerBackdrop').addClass('open');
+    $('#quickDrawer').attr('aria-hidden','false');
+});
+$('#closeQuickDrawer,#quickDrawerBackdrop').on('click',function(){
+    $('#quickDrawer,#quickDrawerBackdrop').removeClass('open');
+    $('#quickDrawer').attr('aria-hidden','true');
+});
 $(document).on('click','.view-detail-btn',function(){
     const row = $(this).data('invoice');
     $('#detailTitle').text((row.kind === 'receivable' ? 'Sales Invoice ' : 'Purchase Bill ') + row.invoice);
