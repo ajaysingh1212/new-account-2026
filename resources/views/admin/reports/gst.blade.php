@@ -22,6 +22,7 @@
     </form>
 </div>
 
+
 <div class="metric-strip">
     <div class="metric"><span>Taxable Amount</span><strong>Rs {{ number_format($totals['taxable'], 2) }}</strong></div>
     <div class="metric"><span>GST Amount</span><strong class="text-purple">Rs {{ number_format($totals['gst'], 2) }}</strong></div>

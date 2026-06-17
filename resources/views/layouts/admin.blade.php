@@ -196,9 +196,8 @@
                                     <img
                                         src="{{ Storage::url(auth()->user()->currentCompany->logo) }}"
                                         alt="Company Logo"
-                                        style="height:60px;width:auto;"
+                                        style="height:40px;width:auto;"
                                     >
-
                         {{ auth()->user()->currentCompany->name }}
                     @endif
                 </span>

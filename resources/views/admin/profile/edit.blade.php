@@ -20,7 +20,7 @@
                     <img src="{{ $user->profile_pic_url }}" id="profilePicPreview" width="96" height="96" style="border-radius:20px;object-fit:cover;border:4px solid #fff;box-shadow:0 4px 16px rgba(0,0,0,0.15);">
                 @else
                     <div id="profilePicPreview" style="width:96px;height:96px;border-radius:20px;background:linear-gradient(135deg,#7C3AED,#06B6D4);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:32px;border:4px solid #fff;box-shadow:0 4px 16px rgba(0,0,0,0.15);">
-                        {{ substr($user->name,0,1) }}
+                        {{ substr($user->name,0,1) }} 
                     </div>
                 @endif
                 <label for="profilePicInput" style="position:absolute;bottom:-4px;right:-4px;width:28px;height:28px;background:#7C3AED;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;font-size:11px;box-shadow:0 2px 8px rgba(124,58,237,0.4);">
