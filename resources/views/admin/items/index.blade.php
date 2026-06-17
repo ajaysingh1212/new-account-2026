@@ -212,6 +212,9 @@
                         @if($item->productType)
                             <div style="font-weight:600;font-size:13px;color:#374151;margin-bottom:4px">{{ $item->productType->name }}</div>
                         @endif
+                        @if($item->productCategory)
+                            <div class="item-sub mb-1"><i class="fas fa-layer-group"></i> {{ $item->productCategory->name }}</div>
+                        @endif
                         @if($nm)
                             <span class="nb {{ $nm['cls'] }}"><i class="fas {{ $nm['icon'] }}" style="font-size:9px"></i> {{ $nm['label'] }}</span>
                         @elseif($item->item_type === 'service')

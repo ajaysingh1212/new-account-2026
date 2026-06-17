@@ -12,6 +12,7 @@ use App\Models\Expense;
 use App\Models\Item;
 use App\Models\Party;
 use App\Models\PartyPaymentAllocation;
+use App\Models\ProductCategory;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseBillItem;
 use App\Models\Role;
@@ -318,7 +319,7 @@ class DashboardController extends Controller
 
     private function salesSegments(?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to)
     {
-        $query = SalesInvoiceItem::with(['item.productType','salesInvoice'])
+        $query = SalesInvoiceItem::with(['item.productType.productCategory','item.productCategory','salesInvoice'])
             ->whereHas('salesInvoice', fn($q) => $q->whereBetween('billing_date', [$from, $to]));
 
         if ($user->isSuperAdmin()) {
@@ -328,18 +329,52 @@ class DashboardController extends Controller
             $query->whereIn('sales_invoice_id', $visibleIds);
         }
 
-        $segments = collect([
-            'gps' => ['label' => 'GPS', 'icon' => 'fa-map-marker-alt'],
-            'gps_android' => ['label' => 'GPS Android', 'icon' => 'fa-mobile-alt'],
-            'led_light' => ['label' => 'LED Light', 'icon' => 'fa-lightbulb'],
-            'horn' => ['label' => 'Horn', 'icon' => 'fa-bullhorn'],
-            'speaker' => ['label' => 'Speaker', 'icon' => 'fa-volume-up'],
-            'other' => ['label' => 'Other', 'icon' => 'fa-boxes'],
-        ])->map(fn($meta) => $meta + ['qty' => 0.0, 'amount' => 0.0, 'items' => collect()]);
+        $palette = ['#2563eb','#14b8a6','#f59e0b','#ec4899','#7c3aed','#22c55e','#ef4444','#0f766e'];
+        $iconMap = [
+            'gps' => 'fa-map-marker-alt',
+            'android' => 'fa-mobile-alt',
+            'led' => 'fa-lightbulb',
+            'horn' => 'fa-bullhorn',
+            'speaker' => 'fa-volume-up',
+        ];
+
+        $categoryQuery = ProductCategory::where('status', 'active')->orderBy('name');
+        if ($companyId) {
+            $categoryQuery->where('company_id', $companyId);
+        } elseif (!$user->isSuperAdmin()) {
+            $categoryQuery->where('company_id', $user->current_company_id);
+        }
+
+        $segments = $categoryQuery->get()->values()->mapWithKeys(function (ProductCategory $category, int $index) use ($palette, $iconMap) {
+            $lower = strtolower($category->name);
+            $icon = collect($iconMap)->first(fn($class, $needle) => str_contains($lower, $needle)) ?: 'fa-boxes';
+            return [(string) $category->id => [
+                'label' => $category->name,
+                'icon' => $icon,
+                'color' => $palette[$index % count($palette)],
+                'qty' => 0.0,
+                'amount' => 0.0,
+                'percent' => 0.0,
+                'items' => collect(),
+            ]];
+        });
+        $segments->put('uncategorized', [
+            'label' => 'Uncategorized',
+            'icon' => 'fa-box-open',
+            'color' => '#64748b',
+            'qty' => 0.0,
+            'amount' => 0.0,
+            'percent' => 0.0,
+            'items' => collect(),
+        ]);
 
         $query->get()->each(function (SalesInvoiceItem $line) use ($segments) {
-            $key = $this->segmentKey($line->item);
+            $category = $line->item?->productCategory ?: $line->item?->productType?->productCategory;
+            $key = $category ? (string) $category->id : 'uncategorized';
             $row = $segments->get($key);
+            if (!$row) {
+                return;
+            }
             $row['qty'] += (float) $line->quantity;
             $row['amount'] += (float) $line->line_total;
             $row['items']->push([
@@ -347,38 +382,20 @@ class DashboardController extends Controller
                 'date' => $line->salesInvoice?->billing_date?->format('d M Y'),
                 'name' => $line->item?->name ?: 'Item',
                 'product_type' => $line->item?->productType?->name ?: '-',
+                'category' => $category?->name ?: 'Uncategorized',
                 'qty' => (float) $line->quantity,
                 'amount' => (float) $line->line_total,
             ]);
             $segments->put($key, $row);
         });
 
-        return $segments->map(function ($segment) {
+        $total = max(0.01, (float) $segments->sum('amount'));
+
+        return $segments->map(function ($segment) use ($total) {
+            $segment['percent'] = round(((float) $segment['amount'] / $total) * 100, 2);
             $segment['items'] = $segment['items']->values();
             return $segment;
-        });
-    }
-
-    private function segmentKey(?Item $item): string
-    {
-        $text = strtolower(implode(' ', array_filter([
-            $item?->name,
-            $item?->item_code,
-            $item?->sku,
-            $item?->brand,
-            $item?->model,
-            $item?->description,
-            $item?->productType?->name,
-        ])));
-
-        if (str_contains($text, 'gps') && (str_contains($text, 'android') || str_contains($text, 'androide'))) {
-            return 'gps_android';
-        }
-        if (str_contains($text, 'gps')) return 'gps';
-        if (str_contains($text, 'led') || str_contains($text, 'light')) return 'led_light';
-        if (str_contains($text, 'horn')) return 'horn';
-        if (str_contains($text, 'speaker')) return 'speaker';
-        return 'other';
+        })->sortByDesc('amount')->values();
     }
 
     private function lowStockProducts(?int $companyId, EntryVisibilityService $visibility, User $user, array $topSellingItemIds)

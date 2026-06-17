@@ -86,6 +86,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
     });
     Route::middleware('permission:product_types.view')->group(function () {
         Route::resource('product-types', ProductTypeController::class)->only(['index']);
+        Route::post('product-types/categories', [ProductTypeController::class, 'storeCategory'])->middleware('permission:product_types.manage')->name('product-types.categories.store');
         Route::resource('product-types', ProductTypeController::class)->only(['create','store','edit','update','destroy'])->middleware('permission:product_types.manage');
     });
     Route::middleware('permission:items.view')->group(function () {

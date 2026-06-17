@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin\Inventory;
 use App\Http\Controllers\Controller;
 use App\Models\Item;
 use App\Models\ItemBom;
+use App\Models\ProductCategory;
 use App\Models\ProductType;
 use App\Services\EntryVisibilityService;
 use Illuminate\Http\Request;
@@ -16,7 +17,7 @@ class ItemController extends Controller
     public function index(EntryVisibilityService $visibility)
     {
         $items = $visibility->scopeForUser(
-            Item::with(['productType','creator'])->latest(),
+            Item::with(['productType','productCategory','creator'])->latest(),
             Item::class
         )->get();
         return view('admin.items.index', compact('items'));
@@ -101,17 +102,26 @@ class ItemController extends Controller
     private function formData(Item $item): array
     {
         $companyId = auth()->user()->current_company_id;
+        foreach (['GPS','GPS Inbuilt Android','Simple Android','LED Light','Horn','Speaker'] as $name) {
+            ProductCategory::firstOrCreate(
+                ['company_id' => $companyId, 'name' => $name],
+                ['status' => 'active', 'created_by' => auth()->id()]
+            );
+        }
+
         return [
             'item'     => $item,
-            'types'    => ProductType::where('company_id', $companyId)->where('status', 'active')->orderBy('name')->get(),
+            'types'    => ProductType::with('productCategory')->where('company_id', $companyId)->where('status', 'active')->orderBy('name')->get(),
+            'categories' => ProductCategory::where('company_id', $companyId)->where('status', 'active')->orderBy('name')->get(),
             'rawItems' => Item::where('company_id', $companyId)->where('item_type', 'product')->where('id', '!=', $item->id)->orderBy('name')->get(),
         ];
     }
 
     private function validated(Request $request, int $companyId, ?int $id = null): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'product_type_id'      => ['nullable', Rule::exists('product_types', 'id')->where('company_id', $companyId)],
+            'product_category_id'  => ['nullable', Rule::exists('product_categories', 'id')->where('company_id', $companyId)],
             'item_type'            => ['required', Rule::in(['product','service'])],
             'item_code'            => ['required','max:40', Rule::unique('items')->where('company_id', $companyId)->ignore($id)],
             'hsn_code'             => ['nullable','max:20'],
@@ -134,6 +144,22 @@ class ItemController extends Controller
             'per_quantity_weight'  => ['nullable','numeric','min:0'],
             'status'               => ['required', Rule::in(['active','inactive'])],
         ]);
+
+        $type = !empty($data['product_type_id'])
+            ? ProductType::where('company_id', $companyId)->find($data['product_type_id'])
+            : null;
+
+        if (($data['item_type'] ?? null) === 'product' && $type?->nature === 'finished_goods' && empty($data['product_category_id'])) {
+            validator([], [])->after(function ($validator) {
+                $validator->errors()->add('product_category_id', 'Product category is required for finished goods.');
+            })->validate();
+        }
+
+        if ($type?->nature !== 'finished_goods') {
+            $data['product_category_id'] = null;
+        }
+
+        return $data;
     }
 
     private function syncBom(Request $request, Item $item): void

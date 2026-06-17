@@ -1,6 +1,11 @@
 @php
     $isEdit    = $item->exists;
-    $typesJson = $types->keyBy('id')->map(fn($t) => ['nature' => $t->nature, 'name' => $t->name])->toJson();
+    $typesJson = $types->keyBy('id')->map(fn($t) => [
+        'nature' => $t->nature,
+        'name' => $t->name,
+        'category_id' => $t->product_category_id,
+        'category_name' => $t->productCategory?->name,
+    ])->toJson();
 @endphp
 
 @push('styles')
@@ -87,6 +92,20 @@
 .stock-info-card small{font-size:10px;text-transform:uppercase;letter-spacing:.6px;color:#9ca3af;font-weight:700;display:block;margin-bottom:4px}
 .stock-info-card b{font-size:18px;color:#1f2937;font-weight:800}
 .stock-notice{background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 16px;font-size:12px;color:#92400e;display:flex;gap:8px;align-items:flex-start;margin-top:12px}
+.item-carry{display:flex;align-items:center;gap:10px;background:#f8fafc;border-bottom:1px solid #eef2f7;padding:12px 28px;color:#64748b;font-size:12px;font-weight:700}
+.item-carry b{color:#111827;font-size:14px}
+.tax-mode{display:flex;gap:8px;flex-wrap:wrap}
+.tax-pill{display:flex;align-items:center;gap:6px;border:1px solid #e5e7eb;background:#fff;border-radius:10px;padding:8px 10px;font-size:12px;font-weight:700;color:#374151;cursor:pointer}
+.tax-pill input{margin:0}
+.tax-breakdown{font-size:11px;color:#c7d2fe;margin-top:4px;line-height:1.45}
+.bom-cost-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px;margin-top:14px}
+.bom-cost-card{background:#fff;border:1px solid #e9d5ff;border-radius:12px;padding:12px}
+.bom-cost-card small{display:block;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#9ca3af;font-weight:800}
+.bom-cost-card b{font-size:18px;color:#1f2937}
+.bom-apply-cost{border:0;border-radius:10px;background:#111827;color:#fff;font-size:12px;font-weight:800;padding:9px 14px;display:inline-flex;align-items:center;gap:7px}
+.bom-apply-cost:hover{color:#fff;opacity:.92}
+.price-mode-note{font-size:11px;color:#64748b;margin-top:5px;font-weight:700}
+.finished-category-hint{font-size:11px;color:#7c3aed;margin-top:4px;font-weight:700}
 </style>
 @endpush
 
@@ -116,6 +135,12 @@
     </div>
 
     {{-- ══════════════ PANE 1: Identity ══════════════ --}}
+    <div class="item-carry">
+        <i class="fas fa-box-open text-primary"></i>
+        <span>Current Item:</span>
+        <b id="carryItemName">{{ old('name',$item->name) ?: 'New item' }}</b>
+    </div>
+
     <div class="iw-pane active" data-pane="1">
         <div class="iw-section">
             <div class="iw-section-icon"><i class="fas fa-tag"></i></div>
@@ -137,6 +162,7 @@
                     @foreach($types as $type)
                         <option value="{{ $type->id }}"
                             data-nature="{{ $type->nature }}"
+                            data-category-id="{{ $type->product_category_id }}"
                             @selected(old('product_type_id',$item->product_type_id)==$type->id)>
                             {{ $type->name }}
                         </option>
@@ -146,6 +172,17 @@
                 <div id="natureBadgeWrap" style="margin-top:6px;display:none">
                     <span id="natureBadge" class="nature-badge"></span>
                 </div>
+            </div>
+            <div class="col-md-3 form-group" id="finishedCategoryBox" style="display:none">
+                <label>Product Category</label>
+                <select name="product_category_id" id="product_category_id" class="form-control select2">
+                    <option value="">Select Product Category</option>
+                    @foreach($categories as $category)
+                        <option value="{{ $category->id }}" @selected(old('product_category_id',$item->product_category_id)==$category->id)>{{ $category->name }}</option>
+                    @endforeach
+                </select>
+                @error('product_category_id')<small class="text-danger">{{ $message }}</small>@enderror
+                <div class="finished-category-hint">Required only for Finished Goods.</div>
             </div>
             <div class="col-md-2 form-group">
                 <label>Item Code</label>
@@ -163,7 +200,7 @@
 
         <div class="form-group">
             <label>Item Name</label>
-            <input name="name" class="form-control" style="font-size:15px;font-weight:600" value="{{ old('name',$item->name) }}" required placeholder="Enter full item name…">
+            <input name="name" id="itemNameInput" class="form-control" style="font-size:15px;font-weight:600" value="{{ old('name',$item->name) }}" required placeholder="Enter full item name...">
         </div>
 
         <div class="row">
@@ -232,6 +269,7 @@
                 <div class="col-md-2 form-group mb-md-0">
                     <label>GST %</label>
                     <input type="number" step="0.01" name="purchase_gst_percent" id="purchase_gst" class="form-control" value="{{ old('purchase_gst_percent',$item->purchase_gst_percent ?? 0) }}">
+                    <div class="price-mode-note" id="purchaseModeNote"></div>
                 </div>
                 <div class="col-md-3 form-group mb-md-0">
                     <div class="iw-switch mt-2">
@@ -245,7 +283,7 @@
                     <div class="calc-card">
                         <small>Taxable / Base Cost</small>
                         <div class="calc-val" id="purchaseCalc">₹ 0.00</div>
-                        <div class="calc-sub">Amount before/after removing GST</div>
+                        <div class="calc-sub" id="purchaseTaxBreakdown">Amount before/after removing GST</div>
                     </div>
                 </div>
             </div>
@@ -264,6 +302,7 @@
                 <div class="col-md-2 form-group mb-md-0">
                     <label>GST %</label>
                     <input type="number" step="0.01" name="sale_gst_percent" id="sale_gst" class="form-control" value="{{ old('sale_gst_percent',$item->sale_gst_percent ?? 0) }}">
+                    <div class="price-mode-note" id="saleModeNote"></div>
                 </div>
                 <div class="col-md-3 form-group mb-md-0">
                     <div class="iw-switch mt-2">
@@ -277,7 +316,7 @@
                     <div class="calc-card" style="background:linear-gradient(135deg,#064e3b,#065f46)">
                         <small style="color:#6ee7b7">Taxable / Base Sale</small>
                         <div class="calc-val" id="saleCalc" style="color:#34d399">₹ 0.00</div>
-                        <div class="calc-sub" style="color:#6ee7b7">Amount before/after removing GST</div>
+                        <div class="calc-sub" id="saleTaxBreakdown" style="color:#6ee7b7">Amount before/after removing GST</div>
                     </div>
                 </div>
             </div>
@@ -386,9 +425,10 @@
                     <table class="bom-table" id="bomTable">
                         <thead>
                             <tr>
-                                <th style="width:50%">Raw Material</th>
-                                <th style="width:20%">Qty / Finished Unit</th>
-                                <th style="width:20%">Available Stock</th>
+                                <th style="width:42%">Raw Material</th>
+                                <th style="width:16%">Qty / Finished Unit</th>
+                                <th style="width:18%">Purchase Cost</th>
+                                <th style="width:16%">Available Stock</th>
                                 <th style="width:10%"></th>
                             </tr>
                         </thead>
@@ -403,6 +443,7 @@
                                                 data-stock="{{ $raw->current_stock }}"
                                                 data-unit="{{ $raw->unit }}"
                                                 data-low="{{ $raw->low_stock_qty ?? 0 }}"
+                                                data-cost="{{ $raw->purchase_price ?? 0 }}"
                                                 @selected($bom->raw_item_id==$raw->id)>
                                                 {{ $raw->name }} ({{ $raw->unit }})
                                             </option>
@@ -411,7 +452,10 @@
                                 </td>
                                 <td>
                                     <input type="number" step="0.001" min="0.001" name="bom_qty_per_unit[]"
-                                        class="form-control" value="{{ $bom->qty_per_unit }}" placeholder="1">
+                                        class="form-control bom-qty" value="{{ $bom->qty_per_unit }}" placeholder="1">
+                                </td>
+                                <td>
+                                    <span class="bom-cost-display" style="font-size:12px;color:#374151">-</span>
                                 </td>
                                 <td>
                                     <span class="bom-stock-display" style="font-size:12px;color:#9ca3af">
@@ -434,6 +478,19 @@
                 <button type="button" id="addBom" class="bom-add-btn mt-3">
                     <i class="fas fa-plus"></i> Add Raw Material
                 </button>
+                <div class="bom-cost-summary">
+                    <div class="bom-cost-card">
+                        <small>Raw Material Total Cost</small>
+                        <b id="bomTotalCost">Rs 0.00</b>
+                    </div>
+                    <div class="bom-cost-card">
+                        <small>Finished Goods Cost</small>
+                        <b id="finishedPurchaseCost">Rs 0.00</b>
+                    </div>
+                    <div class="bom-cost-card d-flex align-items-center">
+                        <button type="button" id="applyBomCost" class="bom-apply-cost"><i class="fas fa-check"></i> Use BOM Cost</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -474,14 +531,18 @@
                 <option value="{{ $raw->id }}"
                     data-stock="{{ $raw->current_stock }}"
                     data-unit="{{ $raw->unit }}"
-                    data-low="{{ $raw->low_stock_qty ?? 0 }}">
+                    data-low="{{ $raw->low_stock_qty ?? 0 }}"
+                    data-cost="{{ $raw->purchase_price ?? 0 }}">
                     {{ $raw->name }} ({{ $raw->unit }})
                 </option>
             @endforeach
         </select>
     </td>
     <td>
-        <input type="number" step="0.001" min="0.001" name="bom_qty_per_unit[]" class="form-control" value="1" placeholder="1">
+        <input type="number" step="0.001" min="0.001" name="bom_qty_per_unit[]" class="form-control bom-qty" value="1" placeholder="1">
+    </td>
+    <td>
+        <span class="bom-cost-display" style="font-size:12px;color:#374151">-</span>
     </td>
     <td>
         <span class="bom-stock-display" style="font-size:12px;color:#9ca3af">—</span>
@@ -497,7 +558,7 @@
 
 @push('scripts')
 <script>
-const TYPES = @json($types->keyBy('id')->map(fn($t) => ['nature'=>$t->nature,'name'=>$t->name]));
+const TYPES = @json($types->keyBy('id')->map(fn($t) => ['nature'=>$t->nature,'name'=>$t->name,'category_id'=>$t->product_category_id]));
 
 // ── State ─────────────────────────────────────────────────────
 let step = 1;
@@ -508,6 +569,10 @@ function itemType(){ return $('#item_type').val(); }
 function selectedNature(){
     const id = $('#product_type_id').val();
     return id && TYPES[id] ? TYPES[id].nature : null;
+}
+function selectedType(){
+    const id = $('#product_type_id').val();
+    return id && TYPES[id] ? TYPES[id] : null;
 }
 
 // ── Step nav ──────────────────────────────────────────────────
@@ -543,6 +608,7 @@ const natureMeta = {
 
 function updateNatureBadge(){
     const nature = selectedNature();
+    updateFinishedCategory();
     if(!nature){ $('#natureBadgeWrap').hide(); return; }
     const meta = natureMeta[nature] || { cls:'nature-raw', icon:'fa-tag', label: nature };
     $('#natureBadge')
@@ -559,6 +625,20 @@ function updateNatureBadge(){
 function toggleProductOnly(){
     const isProduct = itemType() === 'product';
     $('.product-only').toggle(isProduct);
+    updateFinishedCategory();
+}
+
+function updateFinishedCategory(){
+    const isFinished = itemType() === 'product' && selectedNature() === 'finished_goods';
+    const type = selectedType();
+    $('#finishedCategoryBox').toggle(isFinished);
+    $('#product_category_id').prop('required', isFinished);
+    if(isFinished && type && type.category_id && !$('#product_category_id').val()){
+        $('#product_category_id').val(String(type.category_id)).trigger('change');
+    }
+    if(!isFinished){
+        $('#product_category_id').val('').trigger('change');
+    }
 }
 
 // ── BOM pane logic ────────────────────────────────────────────
@@ -589,8 +669,21 @@ function calc(){
     const pg = +$('#purchase_gst').val()||0;
     const sp = +$('#sale_price').val()||0;
     const sg = +$('#sale_gst').val()||0;
-    $('#purchaseCalc').text(money($('#purchase_tax_inclusive').is(':checked') ? pp/(1+pg/100) : pp));
-    $('#saleCalc').text(money($('#sale_tax_inclusive').is(':checked') ? sp/(1+sg/100) : sp));
+    const purchaseInclusive = $('#purchase_tax_inclusive').is(':checked');
+    const saleInclusive = $('#sale_tax_inclusive').is(':checked');
+    const purchaseBase = purchaseInclusive && pg > 0 ? pp/(1+pg/100) : pp;
+    const purchaseTax = purchaseInclusive ? pp - purchaseBase : pp * pg / 100;
+    const purchaseGross = purchaseInclusive ? pp : pp + purchaseTax;
+    const saleBase = saleInclusive && sg > 0 ? sp/(1+sg/100) : sp;
+    const saleTax = saleInclusive ? sp - saleBase : sp * sg / 100;
+    const saleGross = saleInclusive ? sp : sp + saleTax;
+    $('#purchaseCalc').text(money(purchaseBase));
+    $('#purchaseTaxBreakdown').text('GST '+money(purchaseTax)+' | Total '+money(purchaseGross));
+    $('#purchaseModeNote').text(purchaseInclusive ? 'With tax: GST amount entered cost ke andar hai.' : 'Without tax: GST cost ke upar add hoga.');
+    $('#saleCalc').text(money(saleBase));
+    $('#saleTaxBreakdown').text('GST '+money(saleTax)+' | Total '+money(saleGross));
+    $('#saleModeNote').text(saleInclusive ? 'With tax: GST amount entered price ke andar hai.' : 'Without tax: GST price ke upar add hoga.');
+    updateBomCostSummary();
 }
 
 // ── BOM stock display ─────────────────────────────────────────
@@ -605,9 +698,27 @@ function updateBomStockDisplay($select){
     if(stock <= 0)    { cls = 'stock-zero'; icon = '✗'; }
     else if(stock <= low) { cls = 'stock-low'; icon = '⚠'; }
     $td.html(`<span class="${cls}">${icon} ${stock} ${unit}</span>`);
+    updateBomCostSummary();
+}
+
+function updateBomCostSummary(){
+    let total = 0;
+    $('#bomTable tbody tr').each(function(){
+        const $row = $(this);
+        const $opt = $row.find('.select2-bom option:selected');
+        const cost = parseFloat($opt.data('cost')) || 0;
+        const qty = parseFloat($row.find('.bom-qty').val()) || 0;
+        const lineTotal = cost * qty;
+        total += lineTotal;
+        const unit = $opt.data('unit') || '';
+        $row.find('.bom-cost-display').text($opt.val() ? `${money(cost)} / ${unit || 'unit'} = ${money(lineTotal)}` : '-');
+    });
+    $('#bomTotalCost').text(money(total));
+    $('#finishedPurchaseCost').text(money($('#purchase_price').val()));
 }
 
 $(document).on('change','.select2-bom', function(){ updateBomStockDisplay($(this)); });
+$(document).on('input change','.bom-qty', updateBomCostSummary);
 
 // ── Add BOM row ───────────────────────────────────────────────
 $('#addBom').click(function(){
@@ -619,7 +730,20 @@ $('#addBom').click(function(){
 });
 
 // ── Remove BOM row ────────────────────────────────────────────
-$(document).on('click','.remove-row', function(){ $(this).closest('tr').remove(); });
+$(document).on('click','.remove-row', function(){ $(this).closest('tr').remove(); updateBomCostSummary(); });
+
+$('#applyBomCost').on('click', function(){
+    let total = 0;
+    $('#bomTable tbody tr').each(function(){
+        const $opt = $(this).find('.select2-bom option:selected');
+        total += (parseFloat($opt.data('cost')) || 0) * (parseFloat($(this).find('.bom-qty').val()) || 0);
+    });
+    $('#purchase_price').val(total.toFixed(2)).trigger('input');
+});
+
+$('#itemNameInput').on('input', function(){
+    $('#carryItemName').text($(this).val().trim() || 'New item');
+});
 
 // ── Event bindings ────────────────────────────────────────────
 $('#product_type_id').on('change', updateNatureBadge);
@@ -637,5 +761,7 @@ $('.select2-bom').select2({ width:'100%', placeholder:'— Select raw material �
 
 // Update stock display for pre-filled BOM rows
 $('.select2-bom').each(function(){ updateBomStockDisplay($(this)); });
+updateFinishedCategory();
+updateBomCostSummary();
 </script>
 @endpush

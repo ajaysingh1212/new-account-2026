@@ -5,13 +5,13 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class ProductType extends Model
+class ProductCategory extends Model
 {
     use SoftDeletes;
 
-    protected $fillable = ['company_id','code','name','nature','product_category_id','status','description','created_by'];
+    protected $fillable = ['company_id', 'name', 'status', 'created_by'];
 
+    public function productTypes() { return $this->hasMany(ProductType::class); }
     public function items() { return $this->hasMany(Item::class); }
-    public function productCategory() { return $this->belongsTo(ProductCategory::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
 }

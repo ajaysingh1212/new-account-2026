@@ -29,6 +29,7 @@
 .period-tabs{display:flex;flex-wrap:wrap;gap:8px}.period-tab{border:1px solid #dbe4f0;background:#fff;color:#334155;border-radius:999px;padding:8px 12px;font-weight:750}.period-tab.active{background:#0f766e;color:#fff;border-color:#0f766e}.wave-chart{background:linear-gradient(180deg,#f8fafc,#fff);border-radius:12px}.wave-line{filter:drop-shadow(0 8px 12px rgba(37,99,235,.18))}.wave-grid{stroke:#e2e8f0;stroke-width:1}.activity-footer .pagination{margin-bottom:0;justify-content:flex-end}.chart-card h5{font-weight:800;color:#0f172a}
 .ops-card{background:#fff;border:1px solid #e7edf5;border-radius:14px;padding:16px;height:100%;box-shadow:0 10px 26px rgba(2,6,23,.06)}.ops-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.ops-kicker{font-size:11px;text-transform:uppercase;font-weight:850;color:#64748b;letter-spacing:.6px}.ops-amount{font-size:24px;font-weight:900;color:#0f172a}.product-row{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #eef2f7;padding:10px 0}.product-row:first-child{border-top:0}.product-name{font-weight:800;color:#172033}.tag-hot{display:inline-flex;align-items:center;gap:5px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;text-transform:uppercase}.tag-low{display:inline-flex;align-items:center;gap:5px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;text-transform:uppercase}.blink-alert{animation:blinkAlert 1s ease-in-out infinite}@keyframes blinkAlert{0%,100%{box-shadow:0 0 0 rgba(220,38,38,0)}50%{box-shadow:0 0 0 4px rgba(220,38,38,.16)}}.ageing-table th{font-size:11px;text-transform:uppercase;color:#64748b;border-top:0}.ageing-table td{vertical-align:middle}.view-detail-btn{border-radius:999px;font-weight:800}.due-action{white-space:nowrap}.modal-metric{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px}.modal-metric span{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:800}.modal-metric b{display:block;font-size:16px;color:#0f172a}
 .dash-card-button{border:0;text-align:left;width:100%;height:100%}.pro-modal .modal-content{border:0;border-radius:18px;overflow:hidden;box-shadow:0 26px 80px rgba(15,23,42,.28)}.pro-modal .modal-header{background:linear-gradient(135deg,#101827,#0f766e);color:#fff;border:0;padding:20px 24px}.pro-modal .modal-body{background:#f8fafc}.segment-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.segment-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;box-shadow:0 10px 24px rgba(15,23,42,.07)}.segment-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.segment-icon{width:40px;height:40px;border-radius:12px;background:#e0f2fe;color:#0369a1;display:flex;align-items:center;justify-content:center}.modal-table-wrap{max-height:340px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff}.quick-drawer-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.36);z-index:1040;display:none}.quick-drawer{position:fixed;top:0;right:-420px;width:min(420px,100vw);height:100vh;background:#fff;z-index:1041;box-shadow:-24px 0 60px rgba(15,23,42,.22);transition:right .24s ease;display:flex;flex-direction:column}.quick-drawer.open{right:0}.quick-drawer-backdrop.open{display:block}.quick-drawer-head{padding:20px 22px;background:#0f172a;color:#fff;display:flex;justify-content:space-between;align-items:center}.quick-drawer-body{padding:18px;overflow:auto}.quick-section-title{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:900;letter-spacing:.6px;margin:16px 0 8px}.quick-side-link{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #e5e7eb;border-radius:10px;color:#0f172a;font-weight:800;margin-bottom:8px}.quick-side-link i{width:24px;color:#0f766e}.quick-open-btn{border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);color:#fff;border-radius:10px;padding:10px 14px;font-weight:800}
+.sales-viz-shell{background:#08111f;border-radius:16px;padding:18px;color:#fff;box-shadow:0 18px 42px rgba(8,17,31,.2)}.sales-viz-tabs{display:flex;gap:8px;flex-wrap:wrap}.sales-viz-tab{border:1px solid rgba(255,255,255,.18);background:rgba(255,255,255,.08);color:#dbeafe;border-radius:10px;padding:8px 11px;font-size:12px;font-weight:900}.sales-viz-tab.active{background:#fff;color:#0f172a}.sales-viz-pane{display:none;min-height:360px}.sales-viz-pane.active{display:block}.category-pie-wrap{display:grid;grid-template-columns:minmax(240px,360px) 1fr;gap:22px;align-items:center}.category-pie{width:min(340px,72vw);aspect-ratio:1;border-radius:50%;background:var(--pie-gradient);position:relative;margin:auto;animation:categorySpin 1s cubic-bezier(.2,.9,.2,1);box-shadow:inset 0 0 0 18px rgba(255,255,255,.08),0 26px 70px rgba(0,0,0,.3)}.category-pie:after{content:"";position:absolute;inset:27%;border-radius:50%;background:#08111f;box-shadow:inset 0 0 22px rgba(255,255,255,.08)}.category-pie-center{position:absolute;inset:34%;display:flex;align-items:center;justify-content:center;text-align:center;z-index:2;font-weight:900;font-size:22px}.category-legend{display:grid;gap:9px}.category-legend-row{display:grid;grid-template-columns:14px 1fr auto;gap:9px;align-items:center;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:9px 11px}.category-dot{width:12px;height:12px;border-radius:50%;background:var(--c)}.category-meter{height:8px;background:rgba(255,255,255,.1);border-radius:999px;overflow:hidden;margin-top:4px}.category-meter span{display:block;height:100%;width:var(--w);background:var(--c);animation:growBar 1.1s ease}.candle-stage,.bar-stage{display:flex;align-items:flex-end;gap:14px;height:300px;padding:20px;background:rgba(255,255,255,.04);border-radius:14px}.candle-stick{flex:1;min-width:36px;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:8px}.candle-line{width:3px;height:var(--wick);background:rgba(255,255,255,.35);border-radius:99px}.candle-body{width:34px;height:var(--h);background:var(--c);border-radius:7px;box-shadow:0 8px 22px color-mix(in srgb,var(--c),transparent 55%);animation:riseBar 1s ease}.bar-col{flex:1;display:flex;flex-direction:column;justify-content:flex-end;gap:8px;align-items:center;min-width:44px}.bar-fill{width:100%;max-width:64px;height:var(--h);background:linear-gradient(180deg,var(--c),rgba(255,255,255,.18));border-radius:10px 10px 4px 4px;animation:riseBar 1s ease}.chart-label{font-size:11px;color:#cbd5e1;text-align:center;max-width:92px}.wave-pro{width:100%;height:330px;background:rgba(255,255,255,.04);border-radius:14px}.wave-pro path{fill:none;stroke-width:5;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1100;stroke-dashoffset:1100;animation:draw 1.8s ease forwards}.content-sales-row{display:grid;grid-template-columns:42px 1fr auto;gap:12px;align-items:center;background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:12px;margin-bottom:10px;color:#0f172a}.content-sales-row .segment-icon{background:var(--soft);color:var(--c)}@keyframes categorySpin{from{transform:scale(.86) rotate(-26deg);opacity:.45}to{transform:scale(1) rotate(0);opacity:1}}@keyframes growBar{from{width:0}to{width:var(--w)}}@keyframes riseBar{from{height:0;opacity:.3}to{height:var(--h);opacity:1}}@media(max-width:768px){.category-pie-wrap{grid-template-columns:1fr}.sales-viz-pane{min-height:auto}.candle-stage,.bar-stage{overflow-x:auto;align-items:flex-end}}
 </style>
 @endpush
 
@@ -288,15 +289,101 @@
     <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <div><h5 class="modal-title mb-0">Segment Wise Sales</h5><small>Filter: {{ $from }} to {{ $to }}</small></div>
+                <div><h5 class="modal-title mb-0">Product Category Wise Sales</h5><small>Filter: {{ $from }} to {{ $to }}</small></div>
                 <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
             </div>
             <div class="modal-body">
+                @php
+                    $chartSegments = collect($salesSegments);
+                    $salesCategoryTotal = max(0.01, (float) $chartSegments->sum('amount'));
+                    $maxCategoryAmount = max(1, (float) $chartSegments->max('amount'));
+                    $cursor = 0;
+                    $pieParts = [];
+                    foreach ($chartSegments as $segment) {
+                        $share = ((float) $segment['amount'] / $salesCategoryTotal) * 100;
+                        if ($share <= 0) continue;
+                        $pieParts[] = ($segment['color'] ?? '#64748b') . ' ' . $cursor . '% ' . min(100, $cursor + $share) . '%';
+                        $cursor += $share;
+                    }
+                    $pieGradient = count($pieParts) ? 'conic-gradient(' . implode(',', $pieParts) . ')' : 'conic-gradient(#e2e8f0 0 100%)';
+                    $labelCount = max(1, $chartSegments->count() - 1);
+                    $wavePoints = $chartSegments->values()->map(function ($segment, $index) use ($labelCount, $maxCategoryAmount) {
+                        $x = 35 + ($index * (690 / $labelCount));
+                        $y = 285 - (((float) $segment['amount'] / $maxCategoryAmount) * 220);
+                        return $x . ',' . $y;
+                    })->implode(' ');
+                @endphp
+                <div class="sales-viz-shell mb-3">
+                    <div class="d-flex justify-content-between align-items-center flex-wrap mb-3" style="gap:10px">
+                        <div>
+                            <div style="font-size:12px;color:#93c5fd;text-transform:uppercase;font-weight:900;letter-spacing:.6px">Total Category Sales</div>
+                            <div style="font-size:26px;font-weight:950">Rs {{ number_format($chartSegments->sum('amount'),2) }}</div>
+                        </div>
+                        <div class="sales-viz-tabs">
+                            <button type="button" class="sales-viz-tab active" data-sales-viz="pie"><i class="fas fa-chart-pie mr-1"></i>Pie</button>
+                            <button type="button" class="sales-viz-tab" data-sales-viz="candle"><i class="fas fa-chart-simple mr-1"></i>Candle</button>
+                            <button type="button" class="sales-viz-tab" data-sales-viz="wave"><i class="fas fa-water mr-1"></i>Wave</button>
+                            <button type="button" class="sales-viz-tab" data-sales-viz="bar"><i class="fas fa-chart-bar mr-1"></i>Bar</button>
+                            <button type="button" class="sales-viz-tab" data-sales-viz="content"><i class="fas fa-list mr-1"></i>Content</button>
+                        </div>
+                    </div>
+                    <div class="sales-viz-pane active" data-sales-pane="pie">
+                        <div class="category-pie-wrap">
+                            <div class="category-pie" style="--pie-gradient:{{ $pieGradient }}"><div class="category-pie-center">100%<br><span style="font-size:11px;color:#93c5fd">Sales</span></div></div>
+                            <div class="category-legend">
+                                @foreach($chartSegments as $segment)
+                                    <div class="category-legend-row" style="--c:{{ $segment['color'] }};--w:{{ min(100, $segment['percent']) }}%">
+                                        <span class="category-dot"></span>
+                                        <div><b>{{ $segment['label'] }}</b><div class="category-meter"><span></span></div></div>
+                                        <div class="text-right"><b>{{ number_format($segment['percent'],2) }}%</b><br><small>Rs {{ number_format($segment['amount'],2) }}</small></div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    </div>
+                    <div class="sales-viz-pane" data-sales-pane="candle">
+                        <div class="candle-stage">
+                            @foreach($chartSegments as $segment)
+                                @php $h = max(8, ((float)$segment['amount'] / $maxCategoryAmount) * 210); @endphp
+                                <div class="candle-stick" style="--c:{{ $segment['color'] }};--h:{{ $h }}px;--wick:{{ min(260, $h + 46) }}px">
+                                    <div class="candle-line"></div><div class="candle-body"></div><div class="chart-label">{{ $segment['label'] }}<br>{{ number_format($segment['percent'],1) }}%</div>
+                                </div>
+                            @endforeach
+                        </div>
+                    </div>
+                    <div class="sales-viz-pane" data-sales-pane="wave">
+                        <svg class="wave-pro" viewBox="0 0 760 330" preserveAspectRatio="none">
+                            @foreach(range(0,4) as $line)<line x1="25" x2="735" y1="{{ 55 + ($line * 52) }}" y2="{{ 55 + ($line * 52) }}" stroke="rgba(255,255,255,.1)"/>@endforeach
+                            <path d="M {{ $wavePoints }}" stroke="#38bdf8"/>
+                            @foreach($chartSegments->values() as $index => $segment)
+                                @php $x = 35 + ($index * (690 / $labelCount)); $y = 285 - (((float)$segment['amount'] / $maxCategoryAmount) * 220); @endphp
+                                <circle cx="{{ $x }}" cy="{{ $y }}" r="5" fill="{{ $segment['color'] }}"/><text x="{{ $x }}" y="315" text-anchor="middle" font-size="11" fill="#cbd5e1">{{ \Illuminate\Support\Str::limit($segment['label'], 10) }}</text>
+                            @endforeach
+                        </svg>
+                    </div>
+                    <div class="sales-viz-pane" data-sales-pane="bar">
+                        <div class="bar-stage">
+                            @foreach($chartSegments as $segment)
+                                @php $h = max(8, ((float)$segment['amount'] / $maxCategoryAmount) * 230); @endphp
+                                <div class="bar-col" style="--c:{{ $segment['color'] }};--h:{{ $h }}px"><div class="bar-fill"></div><div class="chart-label">{{ $segment['label'] }}<br>Rs {{ number_format($segment['amount'],0) }}</div></div>
+                            @endforeach
+                        </div>
+                    </div>
+                    <div class="sales-viz-pane" data-sales-pane="content">
+                        @foreach($chartSegments as $segment)
+                            <div class="content-sales-row" style="--c:{{ $segment['color'] }};--soft:{{ $segment['color'] }}22">
+                                <div class="segment-icon"><i class="fas {{ $segment['icon'] }}"></i></div>
+                                <div><b>{{ $segment['label'] }}</b><br><small>{{ number_format($segment['qty'],2) }} qty | {{ number_format($segment['percent'],2) }}% of total sales</small></div>
+                                <strong>Rs {{ number_format($segment['amount'],2) }}</strong>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
                 <div class="segment-grid">
-                    @foreach($salesSegments as $segment)
+                    @foreach($chartSegments as $segment)
                         <div class="segment-card">
                             <div class="segment-top">
-                                <div class="d-flex align-items-center" style="gap:10px"><div class="segment-icon"><i class="fas {{ $segment['icon'] }}"></i></div><div><b>{{ $segment['label'] }}</b><br><small>{{ number_format($segment['qty'],2) }} qty</small></div></div>
+                                <div class="d-flex align-items-center" style="gap:10px"><div class="segment-icon" style="background:{{ $segment['color'] }}22;color:{{ $segment['color'] }}"><i class="fas {{ $segment['icon'] }}"></i></div><div><b>{{ $segment['label'] }}</b><br><small>{{ number_format($segment['qty'],2) }} qty | {{ number_format($segment['percent'],2) }}%</small></div></div>
                                 <strong>Rs {{ number_format($segment['amount'],2) }}</strong>
                             </div>
                             <div class="modal-table-wrap" style="max-height:220px"><table class="table table-sm mb-0"><thead><tr><th>Item</th><th>Type</th><th>Sale</th></tr></thead><tbody>
@@ -391,6 +478,13 @@ $('#openQuickDrawer').on('click',function(){
 $('#closeQuickDrawer,#quickDrawerBackdrop').on('click',function(){
     $('#quickDrawer,#quickDrawerBackdrop').removeClass('open');
     $('#quickDrawer').attr('aria-hidden','true');
+});
+$(document).on('click','.sales-viz-tab',function(){
+    const pane = $(this).data('sales-viz');
+    $('.sales-viz-tab').removeClass('active');
+    $(this).addClass('active');
+    $('.sales-viz-pane').removeClass('active');
+    $(`[data-sales-pane="${pane}"]`).addClass('active');
 });
 $(document).on('click','.view-detail-btn',function(){
     const row = $(this).data('invoice');

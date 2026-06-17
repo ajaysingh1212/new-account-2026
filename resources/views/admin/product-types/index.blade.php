@@ -8,7 +8,7 @@
     </div>
     <div class="card-body table-responsive">
         <table id="typesTable" class="table table-hover">
-            <thead><tr><th>Code</th><th>Name</th><th>Nature</th><th>Created By</th><th>Status</th><th>Action</th></tr></thead>
+            <thead><tr><th>Code</th><th>Name</th><th>Nature</th><th>Product Category</th><th>Created By</th><th>Status</th><th>Action</th></tr></thead>
             <tbody>
             @foreach($types as $type)
                 @php($canManage = app(\App\Services\EntryVisibilityService::class)->canManage(auth()->user(), $type))
@@ -16,6 +16,7 @@
                     <td><b>{{ $type->code }}</b></td>
                     <td>{{ $type->name }}</td>
                     <td>{{ str_replace('_',' ',ucfirst($type->nature)) }}</td>
+                    <td>{{ $type->productCategory?->name ?? '-' }}</td>
                     <td><strong>{{ $type->creator?->name ?? 'System' }}</strong><br><small class="text-muted">{{ $type->creator?->rolesForCompany($type->company_id)->pluck('name')->join(', ') ?: 'No role' }}</small></td>
                     <td><span class="{{ $type->status==='active'?'badge-active':'badge-inactive' }}">{{ ucfirst($type->status) }}</span></td>
                     <td>
@@ -33,4 +34,4 @@
     </div>
 </div>
 @endsection
-@push('scripts')<script>$('#typesTable').DataTable({columnDefs:[{orderable:false, targets:5}]});</script>@endpush
+@push('scripts')<script>$('#typesTable').DataTable({columnDefs:[{orderable:false, targets:6}]});</script>@endpush

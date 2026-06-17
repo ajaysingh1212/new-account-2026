@@ -10,7 +10,7 @@ class Item extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'company_id','product_type_id','item_type','item_code','hsn_code','barcode','qr_code',
+        'company_id','product_type_id','product_category_id','item_type','item_code','hsn_code','barcode','qr_code',
         'name','sku','unit','brand','model','size','color','description','purchase_price',
         'purchase_tax_inclusive','purchase_gst_percent','sale_price','sale_tax_inclusive',
         'sale_gst_percent','opening_stock','current_stock','stock_value','low_stock_qty','per_quantity_weight',
@@ -32,6 +32,7 @@ class Item extends Model
     ];
 
     public function productType() { return $this->belongsTo(ProductType::class); }
+    public function productCategory() { return $this->belongsTo(ProductCategory::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
     public function bomMaterials() { return $this->hasMany(ItemBom::class, 'finished_item_id'); }
     public function stockMovements() { return $this->hasMany(StockMovement::class); }
