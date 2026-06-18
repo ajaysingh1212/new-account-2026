@@ -187,7 +187,7 @@
         <ul class="navbar-nav">
             <li class="nav-item">
                 <a class="nav-link" data-widget="pushmenu" href="#" role="button">
-                    <i class="fas fa-bars"></i>
+                    <i class="fas fa-bars p-2"></i>
                 </a>
             </li>
             <li class="nav-item d-none d-sm-inline-block">
@@ -208,7 +208,7 @@
             <!-- Search -->
             <li class="nav-item">
                 @if(auth()->user()->screen_pin)
-                    <button type="button" class="btn btn-sm btn-outline-primary mt-1" id="screenLockBtn"><i class="fas fa-lock"></i> Screen Lock</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary mt-1" id="screenLockBtn"><i class="fas fa-lock p-2"></i> Screen Lock</button>
                 @else
                     <button type="button" class="btn btn-sm btn-outline-primary mt-1" data-toggle="modal" data-target="#pinSetupModal"><i class="fas fa-key"></i> Set PIN</button>
                 @endif
@@ -217,21 +217,21 @@
                 <a class="nav-link" href="{{ route('admin.profile.edit') }}" title="Profile">
                     @if(auth()->user()->profile_pic)
                         <img src="{{ auth()->user()->profile_pic_url }}" class="user-avatar" alt="avatar">
-                    @else
+                    @else 
                         <div class="user-avatar">{{ substr(auth()->user()->name, 0, 1) }}</div>
-                    @endif
+                    @endif 
                 </a>
             </li>
             <li class="nav-item dropdown">
                 <a class="nav-link dropdown-toggle" href="#" id="userDropdown" data-toggle="dropdown">
-                    <span class="d-none d-md-inline" style="font-size:13px;font-weight:600;color:#1A0A3D;">
-                        {{ auth()->user()->name }}
+                    <span class="d-none d-md-inline" style="font-size:15px;font-weight:600;color:#1A0A3D;">
+                        {{ auth()->user()->name }} 
                     </span>
                 </a>
                 <div class="dropdown-menu dropdown-menu-right" style="border-radius:12px;border:1px solid #F0EAF8;box-shadow:0 8px 24px rgba(124,58,237,0.12);">
                     <a href="{{ route('admin.profile.edit') }}" class="dropdown-item">
                         <i class="fas fa-user-edit me-2 text-purple"></i> My Profile
-                    </a>
+                    </a> 
                     <div class="dropdown-divider"></div>
                     <form method="POST" action="{{ route('logout') }}">
                         @csrf

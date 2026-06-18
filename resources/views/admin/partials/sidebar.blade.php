@@ -19,10 +19,10 @@
                 <img
                     src="{{ Storage::url(auth()->user()->currentCompany->logo) }}"
                     alt="Company Logo"
-                    style="height:60px;width:auto;"
+                    style="height:40px;width:auto;"
                 >
 
-            @else
+            @else 
 
                 <i class="fas fa-building me-1" style="color:#7C3AED"></i>
 
