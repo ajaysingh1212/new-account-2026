@@ -2,27 +2,27 @@
     $isEdit = isset($invoice);
     $lines = old('item_id')
         ? collect(old('item_id'))->map(fn($id, $i) => [
-            'item_id' => $id,
-            'description' => old("description.$i"),
-            'quantity' => old("quantity.$i", 1),
-            'unit' => old("unit.$i"),
-            'unit_price' => old("unit_price.$i", 0),
-            'discount_type' => old("discount_type.$i", 'percent'),
+            'item_id'        => $id,
+            'description'    => old("description.$i"),
+            'quantity'       => old("quantity.$i", 1),
+            'unit'           => old("unit.$i"),
+            'unit_price'     => old("unit_price.$i", 0),
+            'discount_type'  => old("discount_type.$i", 'percent'),
             'discount_value' => old("discount_value.$i", 0),
-            'tax_mode' => old("tax_mode.$i", 'with_gst'),
-            'tax_percent' => old("tax_percent.$i", 0),
+            'tax_mode'       => old("tax_mode.$i", 'with_gst'),
+            'tax_percent'    => old("tax_percent.$i", 0),
             'selected_units' => json_decode(old("selected_units.$i", '[]'), true) ?: [],
         ])
         : ($isEdit ? $invoice->items->map(fn($line) => [
-            'item_id' => $line->item_id,
-            'description' => $line->description,
-            'quantity' => (float) $line->quantity,
-            'unit' => $line->unit,
-            'unit_price' => (float) $line->unit_price,
-            'discount_type' => $line->discount_type,
+            'item_id'        => $line->item_id,
+            'description'    => $line->description,
+            'quantity'       => (float) $line->quantity,
+            'unit'           => $line->unit,
+            'unit_price'     => (float) $line->unit_price,
+            'discount_type'  => $line->discount_type,
             'discount_value' => (float) $line->discount_value,
-            'tax_mode' => (float) $line->tax_percent > 0 ? 'with_gst' : 'without_gst',
-            'tax_percent' => (float) $line->tax_percent,
+            'tax_mode'       => (float) $line->tax_percent > 0 ? 'with_gst' : 'without_gst',
+            'tax_percent'    => (float) $line->tax_percent,
             'selected_units' => $line->selected_units ?? [],
         ]) : collect());
 @endphp
@@ -152,35 +152,311 @@
 
 @push('scripts')
 <script>
-const UNIT_POOL = @json($unitPool);
+// ─────────────────────────────────────────────────────────────────────────────
+// UNIT_POOL from server.
+// On the edit page, formData() passes $invoice->id so the current invoice's
+// own units appear as sold:false (available for re-selection).
+// ─────────────────────────────────────────────────────────────────────────────
+const UNIT_POOL  = @json($unitPool);
+const ITEM_META  = @json($itemMeta);
+
+// PREFILL_LINES: for edit, $lines contains the saved selected_units from DB.
+// We mark those unit keys as "available" in our local pool copy so they show
+// up correctly in the drawer even before the user touches the form.
 const PREFILL_LINES = @json($lines->values());
-const ITEM_META = @json($itemMeta);
-let activeRow = null;
+
+// Deep-clone the pool so we can mutate sold flags locally without touching
+// the original (needed for multi-line same-item scenarios).
+let localPool = JSON.parse(JSON.stringify(UNIT_POOL));
+
+let activeRow    = null;
 let activeFilter = 'available';
 
-function money(n){return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
-function rowSelected($row){try{return JSON.parse($row.find('.selected-units-json').val()||'[]')}catch(e){return []}}
-function setRowSelected($row, units){$row.find('.selected-units-json').val(JSON.stringify(units));$row.find('.selected-units').html(units.map(u=>`<span class="selected-pill">${u.serial_no||'No serial'}${u.vts_sim?' / '+u.vts_sim:''} <small>${u.production_batch_no||''}</small></span>`).join(''));calc()}
-function autoSelectUnits($row){let itemId=$row.find('[name="item_id[]"]').val(),qty=parseInt($row.find('[name="quantity[]"]').val())||1;if(!itemId)return;let used=[];$('#lineTable tbody tr').not($row).each(function(){used=used.concat(rowSelected($(this)).map(u=>u.key))});let requiresGps=ITEM_META[itemId]&&ITEM_META[itemId].requires_gps;let units=(UNIT_POOL[itemId]||[]).filter(u=>!u.sold&&!used.includes(u.key)&&(!requiresGps||u.vts_sim)).slice(0,qty);setRowSelected($row,units)}
-function syncTaxMode($row){let mode=$row.find('[name="tax_mode[]"]').val(),$tax=$row.find('[name="tax_percent[]"]');if(mode==='without_gst'){$tax.val(0)}else if($tax.val()===''){let itemTax=+$row.find('.item-select option:selected').data('tax')||18;$tax.val(itemTax)}}
-function calc(){let sub=0,tax=0,weight=0;$('#lineTable tbody tr').each(function(){let r=$(this);let q=+r.find('[name="quantity[]"]').val()||0,p=+r.find('[name="unit_price[]"]').val()||0,d=+r.find('[name="discount_value[]"]').val()||0,dt=r.find('[name="discount_type[]"]').val(),tx=r.find('[name="tax_mode[]"]').val()==='without_gst'?0:(+r.find('[name="tax_percent[]"]').val()||0),itemWeight=+r.find('.item-select option:selected').data('weight')||0,b=q*p,da=dt==='flat'?d:b*d/100,g=Math.max(0,b-da),ta=tx>0?g*tx/(100+tx):0;sub+=g-ta;tax+=ta;weight+=q*itemWeight});let od=+$('[name="discount_amount"]').val()||0;$('#uiSubtotal').text(money(sub));$('#uiTax').text(money(tax));$('#uiWeight').text(weight.toLocaleString('en-IN',{minimumFractionDigits:3,maximumFractionDigits:3})+' kg');$('#uiTotal').text(money(Math.max(0,sub+tax-od)))}
-function addLine(data={}){let $row=$($('#lineTpl').html());$('#lineTable tbody').append($row);if(data.item_id){$row.find('[name="item_id[]"]').val(data.item_id).trigger('change')}['description','quantity','unit','unit_price','discount_type','discount_value','tax_mode','tax_percent'].forEach(k=>$row.find(`[name="${k}[]"]`).val(data[k]??$row.find(`[name="${k}[]"]`).val()));syncTaxMode($row);setRowSelected($row,data.selected_units||[]);calc()}
-function renderDrawer(){if(!activeRow)return;let itemId=activeRow.find('[name="item_id[]"]').val(),qty=parseInt(activeRow.find('[name="quantity[]"]').val())||1,selected=rowSelected(activeRow),selectedKeys=selected.map(u=>u.key),units=UNIT_POOL[itemId]||[];$('#drawerTitle').text(activeRow.find('.item-select option:selected').text()||'Finished Goods Units');$('#drawerHint').text(`Select ${qty} unit(s). ${selected.length} selected.`);let filtered=units.filter(u=>activeFilter==='all'||(activeFilter==='sold'&&u.sold)||(activeFilter==='selected'&&selectedKeys.includes(u.key))||(activeFilter==='available'&&!u.sold));$('#unitList').html(filtered.map(u=>{let checked=selectedKeys.includes(u.key),disabled=u.sold&&!checked;return `<label class="unit-card ${u.sold?'sold':''} ${checked?'selected':''}"><input type="checkbox" class="unit-check" data-key="${u.key}" ${checked?'checked':''} ${disabled?'disabled':''}><span><b>${u.serial_no||'No serial'} / ${u.batch_no||'No purchase batch'}</b><div class="unit-meta">VTS/SIM ${u.vts_sim||'-'} | Buyer ${u.buyer_code||'-'} | Production ${u.production_batch_no||'-'} | ${u.production_date||'-'}</div><div class="unit-meta">${u.sold?'Sold':'Available'} | Warehouse ${u.warehouse||'-'} | Cost ${money(u.cost_per_unit)}</div></span></label>`}).join('')||'<div class="text-muted p-3">No units found for this filter.</div>')}
-function openDrawer($row){activeRow=$row;activeFilter='available';$('.unit-filter').removeClass('btn-primary').addClass('btn-outline-secondary');$('.unit-filter[data-filter="available"]').addClass('btn-primary').removeClass('btn-outline-secondary');$('#unitDrawer,#unitBackdrop').addClass('open');renderDrawer()}
+// ─── helpers ─────────────────────────────────────────────────────────────────
+function money(n){
+    return 'Rs ' + (Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
 
-$('#addLine').click(()=>addLine());
-$(document).on('input change','#lineTable input,#lineTable select,[name="discount_amount"]',calc);
-$(document).on('click','.remove-row',function(){$(this).closest('tr').remove();calc()});
-$(document).on('change','.item-select',function(){let o=$(this).find(':selected'),r=$(this).closest('tr');r.find('[name="unit[]"]').val(o.data('unit'));r.find('[name="unit_price[]"]').val(o.data('price'));if(r.find('[name="tax_mode[]"]').val()!=='without_gst'){r.find('[name="tax_percent[]"]').val(o.data('tax')||18)}autoSelectUnits(r);calc()});
-$(document).on('change','.tax-mode',function(){syncTaxMode($(this).closest('tr'));calc()});
-$(document).on('click','.choose-units',function(){openDrawer($(this).closest('tr'))});
-$(document).on('change','.line-qty',function(){autoSelectUnits($(this).closest('tr'));});
-$(document).on('change','.unit-check',function(){let selected=rowSelected(activeRow),itemId=activeRow.find('[name="item_id[]"]').val(),units=UNIT_POOL[itemId]||[],unit=units.find(u=>u.key===$(this).data('key')),qty=parseInt(activeRow.find('[name="quantity[]"]').val())||1;if(this.checked){if(selected.length>=qty){this.checked=false;alert(`You can select only ${qty} unit(s).`);return}if(ITEM_META[itemId]&&ITEM_META[itemId].requires_gps&&!unit.vts_sim&&!confirm('Aap GPS product select kiye hain, lekin is unit me SIM/VTS number nahi hai. Kya aap isko select karna chahte hain?')){this.checked=false;return}selected.push(unit)}else{selected=selected.filter(u=>u.key!==$(this).data('key'))}setRowSelected(activeRow,selected);renderDrawer()});
-$('#interCompanyTransfer').on('change',function(){$('#mergedCompanyBox').toggle(this.checked)}).trigger('change');
-$('.unit-filter').click(function(){activeFilter=$(this).data('filter');$('.unit-filter').removeClass('btn-primary').addClass('btn-outline-secondary');$(this).addClass('btn-primary').removeClass('btn-outline-secondary');renderDrawer()});
-$('#closeDrawer,#unitBackdrop').click(()=>$('#unitDrawer,#unitBackdrop').removeClass('open'));
-$('#termsTemplate').on('change',function(){if(this.value){$('#termsBox').val(this.value)}});
+function rowSelected($row){
+    try { return JSON.parse($row.find('.selected-units-json').val() || '[]'); }
+    catch(e){ return []; }
+}
 
-if(PREFILL_LINES.length){PREFILL_LINES.forEach(addLine)}else{addLine()}
+function setRowSelected($row, units){
+    $row.find('.selected-units-json').val(JSON.stringify(units));
+    $row.find('.selected-units').html(
+        units.map(u =>
+            `<span class="selected-pill">${u.serial_no||'No serial'}${u.vts_sim?' / '+u.vts_sim:''} <small>${u.production_batch_no||''}</small></span>`
+        ).join('')
+    );
+    calc();
+}
+
+// Collect all keys currently selected across ALL rows EXCEPT $excludeRow
+function globalUsedKeys($excludeRow){
+    let used = [];
+    $('#lineTable tbody tr').each(function(){
+        if($(this).is($excludeRow)) return;
+        used = used.concat(rowSelected($(this)).map(u => u.key));
+    });
+    return used;
+}
+
+// Auto-select the first N available units for a row when item/qty changes.
+// "available" means: not sold globally AND not used by another row.
+function autoSelectUnits($row){
+    const itemId = $row.find('[name="item_id[]"]').val();
+    const qty    = parseInt($row.find('[name="quantity[]"]').val()) || 1;
+    if (!itemId) return;
+
+    const used         = globalUsedKeys($row);
+    const requiresGps  = ITEM_META[itemId] && ITEM_META[itemId].requires_gps;
+    const pool         = localPool[itemId] || [];
+
+    const units = pool
+        .filter(u => !u.sold && !used.includes(u.key) && (!requiresGps || u.vts_sim))
+        .slice(0, qty);
+
+    setRowSelected($row, units);
+}
+
+function syncTaxMode($row){
+    const mode  = $row.find('[name="tax_mode[]"]').val();
+    const $tax  = $row.find('[name="tax_percent[]"]');
+    if(mode === 'without_gst'){
+        $tax.val(0);
+    } else if($tax.val() === '' || $tax.val() === '0'){
+        const itemTax = +$row.find('.item-select option:selected').data('tax') || 18;
+        $tax.val(itemTax);
+    }
+}
+
+function calc(){
+    let sub = 0, tax = 0, weight = 0;
+    $('#lineTable tbody tr').each(function(){
+        const r  = $(this);
+        const q  = +r.find('[name="quantity[]"]').val()      || 0;
+        const p  = +r.find('[name="unit_price[]"]').val()    || 0;
+        const d  = +r.find('[name="discount_value[]"]').val()|| 0;
+        const dt = r.find('[name="discount_type[]"]').val();
+        const tx = r.find('[name="tax_mode[]"]').val() === 'without_gst'
+                   ? 0 : (+r.find('[name="tax_percent[]"]').val() || 0);
+        const iw = +r.find('.item-select option:selected').data('weight') || 0;
+        const b  = q * p;
+        const da = dt === 'flat' ? d : b * d / 100;
+        const g  = Math.max(0, b - da);
+        const ta = tx > 0 ? g * tx / (100 + tx) : 0;
+        sub    += g - ta;
+        tax    += ta;
+        weight += q * iw;
+    });
+    const od = +$('[name="discount_amount"]').val() || 0;
+    $('#uiSubtotal').text(money(sub));
+    $('#uiTax').text(money(tax));
+    $('#uiWeight').text(weight.toLocaleString('en-IN',{minimumFractionDigits:3,maximumFractionDigits:3}) + ' kg');
+    $('#uiTotal').text(money(Math.max(0, sub + tax - od)));
+}
+
+function addLine(data = {}){
+    const $row = $($('#lineTpl').html());
+    $('#lineTable tbody').append($row);
+
+    if(data.item_id){
+        $row.find('[name="item_id[]"]').val(data.item_id);
+        // Populate unit/price/tax from item option without triggering auto-select yet
+        const $opt = $row.find('[name="item_id[]"] option[value="' + data.item_id + '"]');
+        $row.find('[name="unit[]"]').val(data.unit || $opt.data('unit') || '');
+        $row.find('[name="unit_price[]"]').val(data.unit_price !== undefined ? data.unit_price : ($opt.data('price') || 0));
+        if($row.find('[name="tax_mode[]"]').val() !== 'without_gst'){
+            $row.find('[name="tax_percent[]"]').val(data.tax_percent !== undefined ? data.tax_percent : ($opt.data('tax') || 18));
+        }
+    }
+
+    ['description','quantity','discount_type','discount_value','tax_mode'].forEach(k => {
+        if(data[k] !== undefined) $row.find(`[name="${k}[]"]`).val(data[k]);
+    });
+
+    syncTaxMode($row);
+
+    // If prefill has selected_units, restore them directly (don't auto-select).
+    // Otherwise auto-select for a new blank row.
+    if(data.selected_units && data.selected_units.length){
+        // Validate & restore: only keep units that exist in the pool as unsold
+        const itemId    = data.item_id;
+        const pool      = localPool[itemId] || [];
+        const restored  = [];
+
+        data.selected_units.forEach(su => {
+            // 1. Exact key match that is NOT sold
+            let match = pool.find(u => u.key === su.key && !u.sold);
+
+            // 2. Fallback: find unsold unit by identifying fields
+            if(!match){
+                const idFields = ['serial_no','vts_sim','buyer_code','batch_no','production_batch_no'];
+                match = pool.find(u => {
+                    if(u.sold) return false;
+                    let hasMatch = false;
+                    for(const f of idFields){
+                        if(su[f] && u[f]){
+                            if(String(su[f]) !== String(u[f])) return false;
+                            hasMatch = true;
+                        }
+                    }
+                    return hasMatch;
+                });
+            }
+
+            if(match){
+                restored.push(Object.assign({}, su, {key: match.key, sold: false}));
+            }
+            // If no match found (truly invalid/sold-elsewhere), skip it silently
+        });
+
+        setRowSelected($row, restored);
+    } else if(data.item_id){
+        autoSelectUnits($row);
+    }
+
+    calc();
+}
+
+// ─── drawer ──────────────────────────────────────────────────────────────────
+function renderDrawer(){
+    if(!activeRow) return;
+
+    const itemId       = activeRow.find('[name="item_id[]"]').val();
+    const qty          = parseInt(activeRow.find('[name="quantity[]"]').val()) || 1;
+    const selected     = rowSelected(activeRow);
+    const selectedKeys = selected.map(u => u.key);
+    const usedElsewhere= globalUsedKeys(activeRow);
+    const units        = localPool[itemId] || [];
+
+    $('#drawerTitle').text(activeRow.find('.item-select option:selected').text() || 'Finished Goods Units');
+    $('#drawerHint').text(`Select ${qty} unit(s). ${selected.length} selected.`);
+
+    const filtered = units.filter(u => {
+        if(activeFilter === 'all')      return true;
+        if(activeFilter === 'sold')     return u.sold && !selectedKeys.includes(u.key);
+        if(activeFilter === 'selected') return selectedKeys.includes(u.key);
+        // 'available': not globally sold AND not used by another row
+        return !u.sold && !usedElsewhere.includes(u.key);
+    });
+
+    $('#unitList').html(
+        filtered.map(u => {
+            const isSelected = selectedKeys.includes(u.key);
+            const isSold     = u.sold && !isSelected;   // sold elsewhere
+            const isUsed     = !isSelected && usedElsewhere.includes(u.key);
+            const disabled   = isSold || isUsed;
+            return `<label class="unit-card ${isSold?'sold':''} ${isSelected?'selected':''}">
+                <input type="checkbox" class="unit-check" data-key="${u.key}"
+                    ${isSelected?'checked':''} ${disabled?'disabled':''}>
+                <span>
+                    <b>${u.serial_no||'No serial'} / ${u.batch_no||'No batch'}</b>
+                    <div class="unit-meta">VTS/SIM ${u.vts_sim||'-'} | Buyer ${u.buyer_code||'-'} | Prod ${u.production_batch_no||'-'} | ${u.production_date||'-'}</div>
+                    <div class="unit-meta">${isSold?'Sold elsewhere':(isUsed?'Used in another row':(isSelected?'Selected':'Available'))} | Warehouse ${u.warehouse||'-'} | Cost ${money(u.cost_per_unit)}</div>
+                </span>
+            </label>`;
+        }).join('') || '<div class="text-muted p-3">No units found for this filter.</div>'
+    );
+}
+
+function openDrawer($row){
+    activeRow    = $row;
+    activeFilter = 'available';
+    $('.unit-filter').removeClass('btn-primary').addClass('btn-outline-secondary');
+    $('.unit-filter[data-filter="available"]').addClass('btn-primary').removeClass('btn-outline-secondary');
+    $('#unitDrawer,#unitBackdrop').addClass('open');
+    renderDrawer();
+}
+
+// ─── event bindings ───────────────────────────────────────────────────────────
+$('#addLine').click(() => addLine());
+
+$(document).on('input change','#lineTable input,#lineTable select,[name="discount_amount"]', calc);
+
+$(document).on('click','.remove-row', function(){
+    $(this).closest('tr').remove();
+    calc();
+});
+
+$(document).on('change','.item-select', function(){
+    const $opt = $(this).find(':selected');
+    const $row = $(this).closest('tr');
+    $row.find('[name="unit[]"]').val($opt.data('unit'));
+    $row.find('[name="unit_price[]"]').val($opt.data('price'));
+    if($row.find('[name="tax_mode[]"]').val() !== 'without_gst'){
+        $row.find('[name="tax_percent[]"]').val($opt.data('tax') || 18);
+    }
+    setRowSelected($row, []);   // clear old selection when item changes
+    autoSelectUnits($row);
+    calc();
+});
+
+$(document).on('change','.tax-mode', function(){
+    syncTaxMode($(this).closest('tr'));
+    calc();
+});
+
+$(document).on('click','.choose-units', function(){
+    openDrawer($(this).closest('tr'));
+});
+
+$(document).on('change','.line-qty', function(){
+    autoSelectUnits($(this).closest('tr'));
+});
+
+$(document).on('change','.unit-check', function(){
+    const $chk        = $(this);
+    const key         = $chk.data('key');
+    const itemId      = activeRow.find('[name="item_id[]"]').val();
+    const units       = localPool[itemId] || [];
+    const unit        = units.find(u => u.key === key);
+    const qty         = parseInt(activeRow.find('[name="quantity[]"]').val()) || 1;
+    let   selected    = rowSelected(activeRow);
+
+    if($chk.is(':checked')){
+        if(selected.length >= qty){
+            $chk.prop('checked', false);
+            alert(`You can select only ${qty} unit(s).`);
+            return;
+        }
+        if(ITEM_META[itemId] && ITEM_META[itemId].requires_gps && !unit.vts_sim
+           && !confirm('Aap GPS product select kiye hain, lekin is unit me SIM/VTS number nahi hai. Kya aap isko select karna chahte hain?')){
+            $chk.prop('checked', false);
+            return;
+        }
+        selected.push(unit);
+    } else {
+        selected = selected.filter(u => u.key !== key);
+    }
+
+    setRowSelected(activeRow, selected);
+    renderDrawer();
+});
+
+$('#interCompanyTransfer').on('change', function(){
+    $('#mergedCompanyBox').toggle(this.checked);
+}).trigger('change');
+
+$('.unit-filter').click(function(){
+    activeFilter = $(this).data('filter');
+    $('.unit-filter').removeClass('btn-primary').addClass('btn-outline-secondary');
+    $(this).addClass('btn-primary').removeClass('btn-outline-secondary');
+    renderDrawer();
+});
+
+$('#closeDrawer,#unitBackdrop').click(() => $('#unitDrawer,#unitBackdrop').removeClass('open'));
+
+$('#termsTemplate').on('change', function(){
+    if(this.value) $('#termsBox').val(this.value);
+});
+
+// ─── prefill lines on page load ───────────────────────────────────────────────
+if(PREFILL_LINES.length){
+    PREFILL_LINES.forEach(line => addLine(line));
+} else {
+    addLine();
+}
 </script>
 @endpush

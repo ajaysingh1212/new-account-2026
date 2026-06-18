@@ -543,37 +543,44 @@ class SalesInvoiceController extends Controller
 
     private function normalizeSelectedUnits(array $selectedUnits, array $poolUnits): array
     {
-        return collect($selectedUnits)->map(function (array $selected) use ($poolUnits) {
+        $identifyingFields = ['serial_no', 'vts_sim', 'buyer_code', 'batch_no', 'production_batch_no'];
+
+        // Only unsold units are valid candidates for remapping.
+        // We must NEVER remap onto a sold unit — that is the root cause of the
+        // "already sold or invalid" error when editing an invoice.
+        $unsoldPoolUnits = collect($poolUnits)->where('sold', false)->values();
+
+        return collect($selectedUnits)->map(function (array $selected) use ($poolUnits, $unsoldPoolUnits, $identifyingFields) {
             $selectedKey = $selected['key'] ?? null;
 
-            // 1. Exact key match in pool — use as-is
-            $poolMatch = collect($poolUnits)->firstWhere('key', $selectedKey);
-            if ($poolMatch) {
+            // 1. Exact key match AND the unit is unsold → keep as-is.
+            $exactMatch = collect($poolUnits)->firstWhere('key', $selectedKey);
+            if ($exactMatch && !$exactMatch['sold']) {
                 return $selected;
             }
 
-            // 2. Key not found (can happen when frontend sent a key from the OLD invoice
-            //    that no longer exists after items were deleted and pool was rebuilt).
-            //    Try to match by identifying fields: serial_no, vts_sim, buyer_code, batch_no, etc.
-            $identifyingFields = ['serial_no', 'vts_sim', 'buyer_code', 'batch_no', 'production_batch_no'];
-
-            $sameUnit = collect($poolUnits)->first(function ($unit) use ($selected, $identifyingFields) {
+            // 2. Key not found OR it points to a sold unit.
+            //    Try to find an UNSOLD unit with matching identifying fields.
+            //    This covers the case where item keys shift after a pool rebuild.
+            $sameUnit = $unsoldPoolUnits->first(function ($unit) use ($selected, $identifyingFields) {
                 foreach ($identifyingFields as $field) {
                     if (
                         !empty($selected[$field]) &&
                         !empty($unit[$field]) &&
                         (string) $selected[$field] !== (string) $unit[$field]
                     ) {
-                        return false;
+                        return false; // definite mismatch on this field
                     }
                 }
-                // At least one identifying field must match
+                // At least one identifying field must actually match
                 return collect($identifyingFields)
                     ->contains(fn($f) => !empty($selected[$f]) && !empty($unit[$f]));
             });
 
+            // If we found a valid unsold match, remap the key; otherwise keep original
+            // (the abort_if in storeLines will catch truly invalid keys).
             return $sameUnit
-                ? array_merge($selected, ['key' => $sameUnit['key']])
+                ? array_merge($selected, ['key' => $sameUnit['key'], 'sold' => false])
                 : $selected;
         })->values()->all();
     }
