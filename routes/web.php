@@ -13,6 +13,7 @@ use App\Http\Controllers\Admin\Inventory\ProductTypeController;
 use App\Http\Controllers\Admin\Inventory\StockController;
 use App\Http\Controllers\Admin\Production\ProductionBatchController;
 use App\Http\Controllers\Admin\Purchase\PurchaseBillController;
+use App\Http\Controllers\Admin\Purchase\PurchaseEstimateController;
 use App\Http\Controllers\Admin\Purchase\PurchaseReturnController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ExpenseController;
@@ -115,6 +116,15 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('purchases', PurchaseBillController::class)->only(['edit','update'])->middleware('permission:purchase.edit');
         Route::resource('purchases', PurchaseBillController::class)->only(['index','show']);
         Route::resource('purchase-returns', PurchaseReturnController::class)->only(['index','create','store','show']);
+    });
+    Route::middleware('permission:purchase_estimates.view')->group(function () {
+        Route::get('purchase-estimates/{purchaseEstimate}/print', [PurchaseEstimateController::class, 'print'])->middleware('permission:purchase_estimates.print')->name('purchase-estimates.print');
+        Route::post('purchase-estimates/{purchaseEstimate}/convert', [PurchaseEstimateController::class, 'convert'])->middleware('permission:purchase_estimates.convert')->name('purchase-estimates.convert');
+        Route::patch('purchase-estimates/{purchaseEstimate}/cancel', [PurchaseEstimateController::class, 'cancel'])->middleware('permission:purchase_estimates.edit')->name('purchase-estimates.cancel');
+        Route::resource('purchase-estimates', PurchaseEstimateController::class)->only(['create','store'])->middleware('permission:purchase_estimates.create');
+        Route::resource('purchase-estimates', PurchaseEstimateController::class)->only(['edit','update'])->middleware('permission:purchase_estimates.edit');
+        Route::resource('purchase-estimates', PurchaseEstimateController::class)->only(['destroy'])->middleware('permission:purchase_estimates.delete');
+        Route::resource('purchase-estimates', PurchaseEstimateController::class)->only(['index','show']);
     });
     Route::middleware('permission:sales.view')->group(function () {
         Route::get('sales/{sale}/print', [SalesInvoiceController::class, 'print'])->middleware('permission:sales.print')->name('sales.print');

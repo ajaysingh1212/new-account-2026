@@ -100,7 +100,18 @@ class DashboardController extends Controller
         $purchaseProducts = $this->productSummary(PurchaseBillItem::class, 'purchaseBill', 'billing_date', $companyId, $visibility, $user, $from, $to);
         $profitRows = $this->profitRows($companyId, $visibility, $user, $from, $to);
         $stats['total_profit'] = $profitRows->sum('profit');
-        $salesSegments = $this->salesSegments($companyId, $visibility, $user, $from, $to);
+        $salesSegments = $this->normalizeSegmentTotal(
+            $this->tradeSegments(SalesInvoiceItem::class, 'salesInvoice', SalesInvoice::class, 'billing_date', $companyId, $visibility, $user, $from, $to, 'sale'),
+            (float) ($stats['sales'] ?? 0)
+        );
+        $purchaseSegments = $this->normalizeSegmentTotal(
+            $this->tradeSegments(PurchaseBillItem::class, 'purchaseBill', PurchaseBill::class, 'billing_date', $companyId, $visibility, $user, $from, $to, 'purchase'),
+            (float) ($stats['purchases'] ?? 0)
+        );
+        $profitSegments = $this->normalizeSegmentTotal(
+            $this->profitSegments($companyId, $visibility, $user, $from, $to),
+            (float) ($stats['total_profit'] ?? 0)
+        );
         $topSellingItemIds = $salesProducts->take(3)->pluck('item_id')->filter()->all();
         $lowStockProducts = $this->lowStockProducts($companyId, $visibility, $user, $topSellingItemIds);
         $monthly = $this->monthlySeries($companyId, $visibility, $user, $from, $to);
@@ -112,7 +123,7 @@ class DashboardController extends Controller
         ];
         $quickActions = $this->quickActions($user);
 
-        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingPaginated','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments'));
+        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingPaginated','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','purchaseSegments','profitSegments'));
     }
 
     private function dateRange(Request $request): array
@@ -317,16 +328,17 @@ class DashboardController extends Controller
         })->values();
     }
 
-    private function salesSegments(?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to)
+    private function tradeSegments(string $lineModel, string $invoiceRelation, string $invoiceModel, string $dateColumn, ?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to, string $kind)
     {
-        $query = SalesInvoiceItem::with(['item.productType.productCategory','item.productCategory','salesInvoice'])
-            ->whereHas('salesInvoice', fn($q) => $q->whereBetween('billing_date', [$from, $to]));
+        $query = $lineModel::with(['item.productType.productCategory','item.productCategory', $invoiceRelation . '.party', $invoiceRelation . '.items'])
+            ->whereHas($invoiceRelation, fn($q) => $q->whereBetween($dateColumn, [$from, $to]));
 
         if ($user->isSuperAdmin()) {
-            $query->whereHas('salesInvoice', fn($q) => $this->scope($q, $companyId));
+            $query->whereHas($invoiceRelation, fn($q) => $this->scope($q, $companyId));
         } else {
-            $visibleIds = $visibility->scopeForUser(SalesInvoice::query(), SalesInvoice::class)->pluck('id');
-            $query->whereIn('sales_invoice_id', $visibleIds);
+            $visibleIds = $visibility->scopeForUser($invoiceModel::query(), $invoiceModel)->pluck('id');
+            $foreignKey = $lineModel === SalesInvoiceItem::class ? 'sales_invoice_id' : 'purchase_bill_id';
+            $query->whereIn($foreignKey, $visibleIds);
         }
 
         $palette = ['#2563eb','#14b8a6','#f59e0b','#ec4899','#7c3aed','#22c55e','#ef4444','#0f766e'];
@@ -368,32 +380,95 @@ class DashboardController extends Controller
             'items' => collect(),
         ]);
 
-        $query->get()->each(function (SalesInvoiceItem $line) use ($segments) {
+        $query->get()->each(function ($line) use ($segments, $invoiceRelation, $dateColumn, $kind) {
+            $bill = $line->{$invoiceRelation};
             $category = $line->item?->productCategory ?: $line->item?->productType?->productCategory;
             $key = $category ? (string) $category->id : 'uncategorized';
             $row = $segments->get($key);
             if (!$row) {
                 return;
             }
+            $amount = $this->adjustedLineAmount($line, $bill);
+            if ($kind === 'profit') {
+                $unitCost = collect($line->selected_units ?? [])->avg('cost_per_unit');
+                $unitCost = $unitCost ?: (float) ($line->item?->purchase_price ?? 0);
+                $amount -= $unitCost * (float) $line->quantity;
+            }
+            $amount = round($amount, 2);
             $row['qty'] += (float) $line->quantity;
-            $row['amount'] += (float) $line->line_total;
+            $row['amount'] += $amount;
             $row['items']->push([
-                'invoice' => $line->salesInvoice?->invoice_no,
-                'date' => $line->salesInvoice?->billing_date?->format('d M Y'),
+                'invoice' => $bill?->invoice_no,
+                'date' => $bill?->{$dateColumn}?->format('d M Y'),
+                'party' => $bill?->party?->display_name ?: 'Cash / Walk-in',
+                'party_id' => $bill?->party_id,
+                'state' => $bill?->party?->state ?: 'Unknown',
+                'district' => $bill?->party?->district ?: 'Unknown',
+                'city' => $bill?->party?->city ?: 'Unknown',
                 'name' => $line->item?->name ?: 'Item',
                 'product_type' => $line->item?->productType?->name ?: '-',
                 'category' => $category?->name ?: 'Uncategorized',
                 'qty' => (float) $line->quantity,
-                'amount' => (float) $line->line_total,
+                'amount' => $amount,
+                'kind' => $kind,
             ]);
             $segments->put($key, $row);
         });
 
-        $total = max(0.01, (float) $segments->sum('amount'));
+        $total = max(0.01, abs((float) $segments->sum('amount')));
 
         return $segments->map(function ($segment) use ($total) {
-            $segment['percent'] = round(((float) $segment['amount'] / $total) * 100, 2);
+            $segment['percent'] = round((abs((float) $segment['amount']) / $total) * 100, 2);
             $segment['items'] = $segment['items']->values();
+            return $segment;
+        })->sortByDesc('amount')->values();
+    }
+
+    private function adjustedLineAmount($line, $bill): float
+    {
+        $lineTotal = (float) $line->line_total;
+        if (!$bill) {
+            return $lineTotal;
+        }
+
+        $linesTotal = max(0.01, (float) $bill->items->sum('line_total'));
+        $grandTotal = (float) $bill->grand_total;
+
+        return round($lineTotal * ($grandTotal / $linesTotal), 2);
+    }
+
+    private function profitSegments(?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to)
+    {
+        return $this->tradeSegments(SalesInvoiceItem::class, 'salesInvoice', SalesInvoice::class, 'billing_date', $companyId, $visibility, $user, $from, $to, 'profit');
+    }
+
+    private function normalizeSegmentTotal($segments, float $expectedTotal)
+    {
+        $actualTotal = round((float) $segments->sum('amount'), 2);
+        $diff = round($expectedTotal - $actualTotal, 2);
+        if (abs($diff) < 0.01 || $segments->isEmpty()) {
+            return $segments;
+        }
+
+        $targetIndex = $segments->search(fn($segment) => abs((float) $segment['amount']) > 0);
+        $targetIndex = $targetIndex === false ? 0 : $targetIndex;
+        $segments = $segments->values();
+        $target = $segments->get($targetIndex);
+        $target['amount'] = round((float) $target['amount'] + $diff, 2);
+
+        $items = collect($target['items'] ?? []);
+        if ($items->isNotEmpty()) {
+            $item = $items->first();
+            $item['amount'] = round((float) ($item['amount'] ?? 0) + $diff, 2);
+            $items->put(0, $item);
+            $target['items'] = $items->values();
+        }
+
+        $segments->put($targetIndex, $target);
+        $total = max(0.01, abs((float) $segments->sum('amount')));
+
+        return $segments->map(function ($segment) use ($total) {
+            $segment['percent'] = round((abs((float) $segment['amount']) / $total) * 100, 2);
             return $segment;
         })->sortByDesc('amount')->values();
     }

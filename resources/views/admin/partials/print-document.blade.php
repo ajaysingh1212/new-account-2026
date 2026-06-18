@@ -425,7 +425,7 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
             <th class="num-cell">Qty</th>
             <th>Unit</th>
             <th class="num-cell">Rate (₹)</th>
-            <th>Tax %</th>
+            <th>Tax % / Amount</th>
             <th class="num-cell">Amount (₹)</th>
           </tr>
         </thead>
@@ -441,7 +441,7 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
             <td class="num-cell">{{ number_format((float)$line->quantity,2) }}</td>
             <td style="color:var(--muted);font-size:12px">{{ $line->unit }}</td>
             <td class="num-cell">{{ number_format((float)$line->unit_price,2) }}</td>
-            <td class="num-cell" style="color:var(--muted)">{{ $line->tax_rate ?? '—' }}</td>
+            <td class="num-cell" style="color:var(--muted)">{{ number_format((float)($line->tax_percent ?? 0),2) }}%<br><small>₹ {{ number_format((float)($line->tax_amount ?? 0),2) }}</small></td>
             <td class="amount-cell">{{ number_format((float)$line->line_total,2) }}</td>
           </tr>
         @empty

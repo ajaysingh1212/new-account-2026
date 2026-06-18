@@ -56,6 +56,13 @@ class PermissionSeeder extends Seeder
             ['name'=>'Delete Purchase', 'slug'=>'purchase.delete', 'module'=>'purchase'],
             ['name'=>'Print Purchase', 'slug'=>'purchase.print', 'module'=>'purchase'],
 
+            ['name'=>'View Purchase Estimates', 'slug'=>'purchase_estimates.view', 'module'=>'purchase_estimates'],
+            ['name'=>'Create Purchase Estimates', 'slug'=>'purchase_estimates.create', 'module'=>'purchase_estimates'],
+            ['name'=>'Edit Purchase Estimates', 'slug'=>'purchase_estimates.edit', 'module'=>'purchase_estimates'],
+            ['name'=>'Delete Purchase Estimates', 'slug'=>'purchase_estimates.delete', 'module'=>'purchase_estimates'],
+            ['name'=>'Convert Purchase Estimates', 'slug'=>'purchase_estimates.convert', 'module'=>'purchase_estimates'],
+            ['name'=>'Print Purchase Estimates', 'slug'=>'purchase_estimates.print', 'module'=>'purchase_estimates'],
+
             ['name'=>'View Stocks', 'slug'=>'stocks.view', 'module'=>'stocks'],
             ['name'=>'Add Stocks', 'slug'=>'stocks.create', 'module'=>'stocks'],
             ['name'=>'Edit Stocks', 'slug'=>'stocks.edit', 'module'=>'stocks'],

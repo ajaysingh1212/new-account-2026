@@ -13,7 +13,7 @@ class Party extends Model
         'company_id','party_code','party_type','display_name','legal_name','contact_person',
         'email','phone','alternate_phone','whatsapp_number','gstin','pan_number','tan_number',
         'cin_number','tax_type','place_of_supply','billing_address','shipping_address','city',
-        'state','pincode','country','opening_balance','opening_balance_type','opening_balance_date',
+        'district','state','pincode','country','opening_balance','opening_balance_type','opening_balance_date',
         'current_balance','credit_limit','credit_days','payment_terms','bank_name',
         'account_holder_name','account_number','ifsc_code','branch_name','upi_id','status',
         'notes','created_by','updated_by',

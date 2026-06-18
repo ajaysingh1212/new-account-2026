@@ -158,3 +158,22 @@ If you discover a security vulnerability within Laravel, please send an e-mail t
 ## License
 
 The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+# 2026-06-18 Dashboard, Tax, Report Filter, Purchase Estimate Updates
+
+## Completed
+
+- Sales create/edit form me tax percent input editable rakha gaya. User tax percent change karega to subtotal, tax amount, total weight aur grand total same form me recalculate honge.
+- Sales invoice print me line-wise tax percent aur tax amount already invoice table me show hota hai; updated calculation se wahi changed tax values print par aayengi.
+- Dashboard total sales vs sales popup mismatch fix kiya gaya. Root cause: popup category report line/category allocation se total nikal raha tha, jabki card invoice `grand_total` sum dikha raha tha. Ab category segments ko authoritative dashboard total se normalize kiya gaya hai, isliye card aur popup total same rahenge.
+- Sales, Purchase aur Total Profit cards ke popup me same category-wise modal pattern use hota hai.
+- Popup filters add/standardize kiye gaye: party wise, state wise, district wise, city wise. Koi bhi filter lagane par data product category wise hi grouped rahega.
+- Popup chart views available hain: pie, candle, wave, bar aur content/list. Filter change hone par chart labels, totals aur table rows update hote hain.
+- Dashboard report modal ka dark-heavy look light color combination par shift kiya gaya for sales/purchase/profit segment reports.
+- Purchase Estimate module wired hai with CRUD, print, permissions, routes, sidebar entry and permission seeder.
+- Purchase Estimate conversion flow stock aur party ledger ko tabhi hit karta hai jab `Convert to Purchase` kiya jata hai. Draft estimate stock/ledger ko affect nahi karta.
+- Purchase Estimate convert karne par generated Purchase Bill ko estimate ki entry visibility copy hoti hai, taaki permission-based access consistent rahe.
+
+## Notes
+
+- Existing permission slugs: `purchase_estimates.view`, `purchase_estimates.create`, `purchase_estimates.edit`, `purchase_estimates.delete`, `purchase_estimates.convert`, `purchase_estimates.print`.
+- Purchase Estimate purchasable/raw/non-finished goods items ke liye restricted hai; finished goods purchase ke liye existing Production/CRM assembly rule follow hota hai.

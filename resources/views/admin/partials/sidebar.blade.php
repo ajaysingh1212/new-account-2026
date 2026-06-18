@@ -1,7 +1,7 @@
 @php
     $user = auth()->user();
     $canAnySale = $user->can('sales.view') || $user->can('estimates.view') || $user->can('delivery_challans.view') || $user->can('stock_out_challans.view') || $user->can('party_payments.view');
-    $canAnyPurchase = $user->can('purchase.view') || $user->can('party_payments.view');
+    $canAnyPurchase = $user->can('purchase.view') || $user->can('purchase_estimates.view') || $user->can('party_payments.view');
     $canAnyBanking = $user->can('banking.view') || $user->can('cost_centers.view');
     $canAnyExpense = $user->can('expenses.view');
     $canAnyReport = $user->can('reports.party') || $user->can('reports.stock') || $user->can('reports.expense') || $user->can('reports.gst') || $user->can('reports.transaction');
@@ -84,10 +84,11 @@
 
                 @if($canAnyPurchase)
                     <li class="nav-header">PURCHASE</li>
-                    <li class="nav-item has-treeview {{ request()->routeIs('admin.purchases*','admin.purchase-returns*') ? 'menu-open' : '' }}">
-                        <a href="#" class="nav-link {{ request()->routeIs('admin.purchases*','admin.purchase-returns*') ? 'active' : '' }}"><i class="nav-icon fas fa-shopping-cart" style="color:#EC4899"></i><p>Purchase <i class="right fas fa-angle-left"></i></p></a>
+                    <li class="nav-item has-treeview {{ request()->routeIs('admin.purchases*','admin.purchase-returns*','admin.purchase-estimates*') ? 'menu-open' : '' }}">
+                        <a href="#" class="nav-link {{ request()->routeIs('admin.purchases*','admin.purchase-returns*','admin.purchase-estimates*') ? 'active' : '' }}"><i class="nav-icon fas fa-shopping-cart" style="color:#EC4899"></i><p>Purchase <i class="right fas fa-angle-left"></i></p></a>
                         <ul class="nav nav-treeview">
                             @can('purchase.view')<li class="nav-item"><a href="{{ route('admin.purchases.index') }}" class="nav-link {{ request()->routeIs('admin.purchases*') ? 'active' : '' }}"><i class="fas fa-file-invoice nav-icon"></i><p>Purchase Bill</p></a></li>@endcan
+                            @can('purchase_estimates.view')<li class="nav-item"><a href="{{ route('admin.purchase-estimates.index') }}" class="nav-link {{ request()->routeIs('admin.purchase-estimates*') ? 'active' : '' }}"><i class="fas fa-file-contract nav-icon"></i><p>Purchase Estimate</p></a></li>@endcan
                             @can('purchase.view')<li class="nav-item"><a href="{{ route('admin.purchase-returns.index') }}" class="nav-link {{ request()->routeIs('admin.purchase-returns*') ? 'active' : '' }}"><i class="fas fa-undo nav-icon"></i><p>Purchase Return</p></a></li>@endcan
                             @can('party_payments.create')<li class="nav-item"><a href="{{ route('admin.party-payments.create', ['type' => 'payment_out']) }}" class="nav-link"><i class="fas fa-hand-holding-usd nav-icon"></i><p>Payment Out</p></a></li>@endcan
                         </ul>

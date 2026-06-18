@@ -1,0 +1,18 @@
+@include('admin.partials.print-document', [
+    'title' => 'Purchase Estimate',
+    'docNo' => $estimate->estimate_no,
+    'docDate' => $estimate->estimate_date,
+    'dueDate' => $estimate->valid_until,
+    'status' => $estimate->status,
+    'party' => $estimate->party,
+    'lines' => $estimate->items,
+    'billingAddress' => $estimate->billing_address,
+    'shippingAddress' => $estimate->shipping_address,
+    'subtotal' => $estimate->subtotal,
+    'discount' => $estimate->discount_amount,
+    'tax' => $estimate->tax_amount,
+    'grandTotal' => $estimate->grand_total,
+    'terms' => $estimate->terms,
+    'company' => $estimate->company,
+    'accent' => '#0f766e',
+])
