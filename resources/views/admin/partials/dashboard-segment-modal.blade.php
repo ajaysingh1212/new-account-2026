@@ -49,17 +49,17 @@
                             <div class="segment-total-value">Rs {{ number_format($total,2) }}</div>
                         </div>
                         <div class="sales-viz-tabs">
-                            <button type="button" class="sales-viz-tab active" data-sales-viz="pie"><i class="fas fa-chart-pie mr-1"></i>Pie</button>
-                            <button type="button" class="sales-viz-tab" data-sales-viz="candle"><i class="fas fa-chart-simple mr-1"></i>Candle</button>
-                            <button type="button" class="sales-viz-tab" data-sales-viz="wave"><i class="fas fa-water mr-1"></i>Wave</button>
-                            <button type="button" class="sales-viz-tab" data-sales-viz="bar"><i class="fas fa-chart-bar mr-1"></i>Bar</button>
-                            <button type="button" class="sales-viz-tab" data-sales-viz="content"><i class="fas fa-list mr-1"></i>Content</button>
+                            <button type="button" class="sales-viz-tab active text-primary" data-sales-viz="pie"><i class="fas fa-chart-pie mr-1"></i>Pie</button>
+                            <button type="button" class="sales-viz-tab text-primary" data-sales-viz="candle"><i class="fas fa-chart-simple mr-1"></i>Candle</button>
+                            <button type="button" class="sales-viz-tab text-primary" data-sales-viz="wave"><i class="fas fa-water mr-1"></i>Wave</button>
+                            <button type="button" class="sales-viz-tab text-primary" data-sales-viz="bar"><i class="fas fa-chart-bar mr-1"></i>Bar</button>
+                            <button type="button" class="sales-viz-tab text-primary" data-sales-viz="content"><i class="fas fa-list mr-1"></i>Content</button>
                         </div>
                     </div>
 
                     <div class="sales-viz-pane active" data-sales-pane="pie">
                         <div class="category-pie-wrap">
-                            <div class="category-pie segment-pie" style="--pie-gradient:{{ $pieGradient }}"><div class="category-pie-center">100%<br><span style="font-size:11px;color:#64748b">{{ $amountLabel }}</span></div></div>
+                            <div class="category-pie segment-pie" style="--pie-gradient:{{ $pieGradient }}"><div class="category-pie-center text-white">100%<br><span style="font-size:11px;color:#64748b">{{ $amountLabel }}</span></div></div>
                             <div class="category-legend">
                                 @foreach($segments as $segment)
                                     <div class="category-legend-row segment-legend" data-segment='@json($segment)' style="--c:{{ $segment['color'] }};--w:{{ min(100, $segment['percent']) }}%">
