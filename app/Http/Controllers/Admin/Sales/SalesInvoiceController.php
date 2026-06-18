@@ -75,6 +75,7 @@ class SalesInvoiceController extends Controller
             'unit_price.*' => ['required','numeric','min:0'],
             'tax_mode.*' => ['nullable','in:with_gst,without_gst'],
             'tax_percent.*' => ['nullable','numeric','min:0'],
+            'selected_units.*' => ['nullable','string'],
             'inter_company_transfer' => ['nullable','boolean'],
             'target_company_ids' => ['nullable','array'],
             'target_company_ids.*' => ['integer'],
@@ -145,7 +146,10 @@ class SalesInvoiceController extends Controller
                 'inter_company_target_company_ids' => $request->boolean('inter_company_transfer') ? $this->validatedTargetCompanyIds($request, $sale->company_id) : null,
             ]));
 
-            $totals = $this->storeLines($request, $sale, $accounting);
+            // The old lines are gone, so their serialised units are available again.
+            // Build the pool once and reuse it while all replacement lines are stored.
+            $unitPool = $this->finishedGoodsUnitPool($sale->company_id);
+            $totals = $this->storeLines($request, $sale, $accounting, $unitPool);
             $sale->update($totals);
 
             if ($sale->sale_type === 'credit' && $sale->party_id) {
@@ -262,22 +266,45 @@ class SalesInvoiceController extends Controller
         ]);
     }
 
-    private function storeLines(Request $request, SalesInvoice $invoice, AccountingService $accounting): array
+    private function storeLines(
+        Request $request,
+        SalesInvoice $invoice,
+        AccountingService $accounting,
+        ?array $unitPool = null
+    ): array
     {
         $subtotal = $tax = $lineDiscount = $totalWeight = 0;
-        $unitPool = $this->finishedGoodsUnitPool($invoice->company_id, $invoice->id);
+        $unitPool ??= $this->finishedGoodsUnitPool($invoice->company_id, $invoice->id);
+
         foreach ($request->item_id as $i => $itemId) {
             $item = Item::with('productType')->findOrFail($itemId);
             $qty = (float) $request->quantity[$i];
             abort_if($item->track_stock && (float) $item->current_stock < $qty, 422, "Insufficient stock for {$item->name}");
             abort_if($item->productType?->nature !== 'finished_goods', 422, 'Only finished goods can be sold from Sales.');
+            abort_if((float) ((int) $qty) !== $qty, 422, "Quantity must be a whole number for {$item->name}.");
 
-            $selectedUnits = $this->normalizeSelectedUnits($this->decodeSelectedUnits($request->selected_units[$i] ?? null), $unitPool[$item->id] ?? []);
+            $selectedUnits = $this->reconcileSelectedUnits(
+                $this->decodeSelectedUnits($request->selected_units[$i] ?? null),
+                $unitPool[$item->id] ?? [],
+                (int) $qty,
+                $this->isGpsItem($item)
+            );
             abort_if($this->isGpsItem($item) && collect($selectedUnits)->contains(fn($unit) => empty($unit['vts_sim'])), 422, "VTS/SIM number is required for selected GPS units of {$item->name}.");
             $selectedKeys = collect($selectedUnits)->pluck('key')->filter()->values()->all();
-            abort_if(count($selectedKeys) !== (int) $qty || (float) ((int) $qty) !== $qty, 422, "Select exactly {$qty} finished goods unit(s) for {$item->name}.");
+            abort_if(count($selectedKeys) !== (int) $qty, 422, "Only " . count($selectedKeys) . " available finished goods unit(s) found for {$item->name}; {$qty} required.");
             $availableKeys = collect($unitPool[$item->id] ?? [])->where('sold', false)->pluck('key')->all();
             abort_if(count(array_diff($selectedKeys, $availableKeys)) > 0, 422, "One or more selected units for {$item->name} are already sold or invalid.");
+
+            // Reserve units in memory so two lines of the same invoice cannot use
+            // the same serial/batch unit.
+            if (isset($unitPool[$item->id])) {
+                foreach ($unitPool[$item->id] as &$poolUnit) {
+                    if (in_array($poolUnit['key'], $selectedKeys, true)) {
+                        $poolUnit['sold'] = true;
+                    }
+                }
+                unset($poolUnit);
+            }
 
             $price = (float) $request->unit_price[$i];
             $base = $qty * $price;
@@ -447,14 +474,16 @@ class SalesInvoiceController extends Controller
 
     private function normalizeSelectedUnits(array $selectedUnits, array $poolUnits): array
     {
-        return collect($selectedUnits)->map(function (array $selected) use ($poolUnits) {
+        $availablePoolUnits = collect($poolUnits)->where('sold', false)->values();
+
+        return collect($selectedUnits)->map(function (array $selected) use ($availablePoolUnits) {
             $selectedKey = $selected['key'] ?? null;
-            $poolMatch = collect($poolUnits)->firstWhere('key', $selectedKey);
+            $poolMatch = $availablePoolUnits->firstWhere('key', $selectedKey);
             if ($poolMatch) {
-                return $selected;
+                return $poolMatch;
             }
 
-            $sameUnit = collect($poolUnits)->first(function ($unit) use ($selected) {
+            $sameUnit = $availablePoolUnits->first(function ($unit) use ($selected) {
                 foreach (['serial_no', 'vts_sim', 'buyer_code', 'batch_no', 'production_batch_no'] as $field) {
                     if (!empty($selected[$field]) && !empty($unit[$field]) && (string) $selected[$field] !== (string) $unit[$field]) {
                         return false;
@@ -465,8 +494,36 @@ class SalesInvoiceController extends Controller
                     ->contains(fn($field) => !empty($selected[$field]) && !empty($unit[$field]));
             });
 
-            return $sameUnit ? array_merge($selected, ['key' => $sameUnit['key']]) : $selected;
-        })->values()->all();
+            return $sameUnit;
+        })->filter()->unique('key')->values()->all();
+    }
+
+    private function reconcileSelectedUnits(
+        array $selectedUnits,
+        array $poolUnits,
+        int $quantity,
+        bool $requiresGps
+    ): array {
+        $availableUnits = collect($poolUnits)
+            ->where('sold', false)
+            ->when($requiresGps, fn($units) => $units->filter(fn($unit) => !empty($unit['vts_sim'])))
+            ->values();
+
+        $selected = collect($this->normalizeSelectedUnits($selectedUnits, $availableUnits->all()))
+            ->when($requiresGps, fn($units) => $units->filter(fn($unit) => !empty($unit['vts_sim'])))
+            ->take($quantity)
+            ->values();
+
+        if ($selected->count() < $quantity) {
+            $selectedKeys = $selected->pluck('key')->all();
+            $selected = $selected->concat(
+                $availableUnits
+                    ->reject(fn($unit) => in_array($unit['key'], $selectedKeys, true))
+                    ->take($quantity - $selected->count())
+            );
+        }
+
+        return $selected->take($quantity)->values()->all();
     }
 
     private function validatedTargetCompanyIds(Request $request, int $companyId): array
