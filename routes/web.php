@@ -131,7 +131,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('sales', SalesInvoiceController::class)->only(['create','store'])->middleware('permission:sales.create');
         Route::resource('sales', SalesInvoiceController::class)->only(['edit','update'])->middleware('permission:sales.edit');
         Route::resource('sales', SalesInvoiceController::class)->only(['index','show']);
-        Route::resource('sales-returns', SalesReturnController::class)->only(['index','create','store','show']);
+        Route::resource('sales-returns', SalesReturnController::class)->only(['create','store'])->middleware('permission:sales.create');
+        Route::resource('sales-returns', SalesReturnController::class)->only(['edit','update'])->middleware('permission:sales.edit');
+        Route::resource('sales-returns', SalesReturnController::class)->only(['index','show']);
     });
     Route::middleware('permission:estimates.view')->group(function () {
         Route::get('estimates/{estimate}/print', [EstimateController::class, 'print'])->middleware('permission:estimates.print')->name('estimates.print');

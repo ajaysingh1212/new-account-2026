@@ -12,6 +12,7 @@ use App\Models\SalesInvoiceItem;
 use App\Models\StockMovement;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
+use App\Services\SerialUnitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -578,12 +579,7 @@ class ProductionBatchController extends Controller
 
     private function soldUnitKeys(int $companyId): array
     {
-        return SalesInvoiceItem::whereHas('salesInvoice', fn($q) => $q->where('company_id', $companyId))
-            ->get()
-            ->flatMap(fn($line) => collect($line->selected_units ?? [])->pluck('key'))
-            ->filter()
-            ->values()
-            ->all();
+        return app(SerialUnitService::class)->activeSoldKeys($companyId);
     }
 
     private function findUnitBySerial(string $term, EntryVisibilityService $visibility): ?array

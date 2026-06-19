@@ -23,6 +23,7 @@ use App\Models\TermsTemplate;
 use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
+use App\Services\SerialUnitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -398,16 +399,7 @@ class SalesInvoiceController extends Controller
 
     private function finishedGoodsUnitPool(int $companyId, ?int $currentInvoiceId = null): array
     {
-        $soldKeys = SalesInvoiceItem::whereHas('salesInvoice', function ($q) use ($companyId, $currentInvoiceId) {
-                $q->where('company_id', $companyId);
-                if ($currentInvoiceId) {
-                    $q->where('id', '<>', $currentInvoiceId);
-                }
-            })
-            ->get()
-            ->flatMap(fn($line) => collect($line->selected_units ?? [])->pluck('key'))
-            ->filter()
-            ->all();
+        $soldKeys = app(SerialUnitService::class)->activeSoldKeys($companyId, $currentInvoiceId);
 
         $producedUnits = ProductionBatch::with('finishedItem')
             ->where('company_id', $companyId)
