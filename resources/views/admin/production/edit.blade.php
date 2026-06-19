@@ -56,7 +56,7 @@ function unitRow(i, unit={}){let sold=SOLD_KEYS.includes(`${BATCH_ID}-${i}`);ret
 <div class="unit-grid">
 <div><label>#</label><input class="form-control" value="${i+1}${sold?' Sold':''}" readonly></div>
 <div><label>Buyer Code</label><input name="unit_buyer_code[${i}]" class="form-control" value="${unit.buyer_code||('BC-AUTO-'+String(i+1).padStart(3,'0'))}" ${sold?'readonly':''}><input type="hidden" name="unit_buyer_id[${i}]" value="${unit.buyer_id||''}"></div>
-<div><label>Serial No.</label><input name="unit_serial[${i}]" class="form-control" value="${unit.serial_no||''}" ${sold?:''}></div>
+<div><label>Serial No.</label><input name="unit_serial[${i}]" class="form-control" value="${unit.serial_no||''}" ${sold?'':''}></div>
 <div><label>Batch No. (Purchase)</label><input name="unit_batch[${i}]" class="form-control" value="${unit.batch_no||''}" ${sold?'readonly':''}></div>
 <div><label>VTS/SIM No.</label><input name="unit_vts_sim[${i}]" class="form-control" value="${unit.vts_sim||''}" ${sold?'readonly':''}></div>
 <div><label>Sale Price</label><input type="number" step="0.01" name="unit_sale_price[${i}]" class="form-control" value="${unit.sale_price||0}"></div>
