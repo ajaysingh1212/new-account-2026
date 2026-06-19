@@ -23,7 +23,7 @@
                         <td>{{ $payment->bankAccount?->account_name }}</td>
                         <td>
                             @forelse($payment->allocations as $allocation)
-                                <div><b>{{ $allocation->bill_no }}</b>: Rs {{ number_format((float) $allocation->amount, 2) }}</div>
+                                <div><b>{{ $allocation->bill_type === 'opening_balance' ? 'Opening Balance' : $allocation->bill_no }}</b>: Rs {{ number_format((float) $allocation->amount, 2) }}</div>
                             @empty
                                 -
                             @endforelse

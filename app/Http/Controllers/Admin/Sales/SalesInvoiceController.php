@@ -809,9 +809,9 @@ class SalesInvoiceController extends Controller
             'size' => $sourceItem->size,
             'color' => $sourceItem->color,
             'description' => $sourceItem->description,
-            'purchase_price' => $sourceItem->purchase_price,
-            'purchase_tax_inclusive' => $sourceItem->purchase_tax_inclusive,
-            'purchase_gst_percent' => $sourceItem->purchase_gst_percent,
+            'purchase_price' => $sourceItem->sale_price,
+            'purchase_tax_inclusive' => $sourceItem->sale_tax_inclusive,
+            'purchase_gst_percent' => $sourceItem->sale_gst_percent,
             'sale_price' => $sourceItem->sale_price,
             'sale_tax_inclusive' => $sourceItem->sale_tax_inclusive,
             'sale_gst_percent' => $sourceItem->sale_gst_percent,
@@ -826,9 +826,17 @@ class SalesInvoiceController extends Controller
             $defaults
         );
 
-        if ($item->product_type_id !== $productType->id) {
-            $item->update(['product_type_id' => $productType->id, 'track_stock' => true, 'status' => 'active']);
-        }
+        $item->update([
+            'product_type_id' => $productType->id,
+            'purchase_price' => $sourceItem->sale_price,
+            'purchase_tax_inclusive' => $sourceItem->sale_tax_inclusive,
+            'purchase_gst_percent' => $sourceItem->sale_gst_percent,
+            'sale_price' => $sourceItem->sale_price,
+            'sale_tax_inclusive' => $sourceItem->sale_tax_inclusive,
+            'sale_gst_percent' => $sourceItem->sale_gst_percent,
+            'track_stock' => true,
+            'status' => 'active',
+        ]);
 
         return $item;
     }

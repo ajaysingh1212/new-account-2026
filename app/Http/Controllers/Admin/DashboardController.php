@@ -250,7 +250,7 @@ class DashboardController extends Controller
                     'party' => $bill->party?->display_name ?: 'Cash / Walk-in',
                     'invoice' => $bill->invoice_no,
                     'date' => $bill->billing_date,
-                    'age' => $bill->billing_date ? $bill->billing_date->diffInDays(now()) : 0,
+                    'age' => $bill->billing_date ? (int) round($bill->billing_date->diffInDays(now())) : 0,
                     'total' => (float) $bill->grand_total,
                     'paid' => $paid,
                     'due' => $due,
