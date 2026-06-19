@@ -83,11 +83,35 @@ class DashboardController extends Controller
             $companies = collect();
         }
 
-        $salesDueRows = $this->dueRows(SalesInvoice::class, 'sale_type', $companyId, $visibility, $user, $from, $to);
-        $purchaseDueRows = $this->dueRows(PurchaseBill::class, 'purchase_type', $companyId, $visibility, $user, $from, $to);
+       $salesDueRows = collect(
+    $this->dueRows(
+        SalesInvoice::class,
+        'sale_type',
+        $companyId,
+        $visibility,
+        $user,
+        $from,
+        $to
+    )->all()
+);
+
+$purchaseDueRows = collect(
+    $this->dueRows(
+        PurchaseBill::class,
+        'purchase_type',
+        $companyId,
+        $visibility,
+        $user,
+        $from,
+        $to
+    )->all()
+);
         $stats['sales_due'] = $salesDueRows->sum('due');
         $stats['purchase_due'] = $purchaseDueRows->sum('due');
-        $ageingRows = $salesDueRows->merge($purchaseDueRows)->sortByDesc('date')->values();
+        $ageingRows = $salesDueRows
+    ->merge($purchaseDueRows)
+    ->sortByDesc('date')
+    ->values();
         $ageingPage = max(1, $request->integer('ageing_page', 1));
         $ageingPaginated = new \Illuminate\Pagination\LengthAwarePaginator(
             $ageingRows->forPage($ageingPage, 5)->values(),
