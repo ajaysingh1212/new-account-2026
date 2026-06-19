@@ -77,6 +77,35 @@ class SalesReturnSerialLifecycleTest extends TestCase
         $this->assertSame(['1-2', '1-3', '1-4'], app(SerialUnitService::class)->activeSoldKeys($company->id));
     }
 
+    public function test_sales_return_edit_screen_loads_serial_lines(): void
+    {
+        [$company, $item, $invoiceLine, $units, $user] = $this->serialSaleContext(1);
+
+        $return = SalesReturn::create([
+            'company_id' => $company->id,
+            'sales_invoice_id' => $invoiceLine->sales_invoice_id,
+            'return_no' => 'SR-00001',
+            'return_date' => '2026-06-19',
+            'created_by' => $user->id,
+        ]);
+        SalesReturnItem::create([
+            'sales_return_id' => $return->id,
+            'sales_invoice_item_id' => $invoiceLine->id,
+            'item_id' => $item->id,
+            'quantity' => 1,
+            'unit' => 'PCS',
+            'unit_price' => 100,
+            'line_total' => 100,
+            'selected_units' => [],
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('admin.sales-returns.edit', $return))
+            ->assertOk()
+            ->assertSee('Update Returned Serials')
+            ->assertSee('GPS Device');
+    }
+
     private function serialSaleContext(int $qty): array
     {
         $user = User::factory()->create(['user_type' => 'super_admin']);

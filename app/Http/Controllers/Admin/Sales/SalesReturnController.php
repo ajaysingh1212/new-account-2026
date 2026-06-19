@@ -204,7 +204,7 @@ class SalesReturnController extends Controller
     public function edit(SalesReturn $sales_return, EntryVisibilityService $visibility, SerialUnitService $serialUnits)
     {
         $visibility->authorizeView($sales_return);
-        $sales_return->load(['invoice.items.item','party','items.item.invoiceItem']);
+        $sales_return->load(['invoice.items.item','party','items.item','items.invoiceItem.item']);
 
         return view('admin.sales-returns.edit', [
             'return' => $sales_return,
