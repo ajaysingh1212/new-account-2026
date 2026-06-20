@@ -10,6 +10,7 @@
             'discount_type' => old("discount_type.$i", 'percent'),
             'discount_value' => old("discount_value.$i", 0),
             'tax_percent' => old("tax_percent.$i", 0),
+            'selected_units' => old("selected_units.$i"),
         ])
         : ($isEdit ? $bill->items->map(fn($line) => [
             'item_id' => $line->item_id,
@@ -20,12 +21,17 @@
             'discount_type' => $line->discount_type,
             'discount_value' => (float) $line->discount_value,
             'tax_percent' => (float) $line->tax_percent,
+            'selected_units' => collect($line->selected_units ?? [])->map(fn($unit) => trim(implode(' | ', array_filter([
+                $unit['serial_no'] ?? null,
+                $unit['vts_sim'] ?? null,
+                $unit['sku'] ?? null,
+            ]))))->filter()->join("\n"),
         ]) : collect());
 @endphp
 
 @push('styles')
 <style>
-.trade-shell{background:#fff;border:1px solid #e8edf5;border-radius:8px;box-shadow:0 16px 36px rgba(15,23,42,.08);overflow:hidden}.trade-head{background:#172033;color:#fff;padding:22px 24px;display:flex;justify-content:space-between;gap:16px;align-items:center}.trade-head h2{font-weight:800;margin:0;font-size:24px}.trade-head small{color:#a9b7ca}.trade-section{padding:20px 24px;border-bottom:1px solid #edf1f7}.trade-title{font-size:12px;font-weight:800;color:#7c2d12;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px}.trade-table{border-collapse:separate;border-spacing:0 14px}.trade-table thead{display:none}.trade-table tbody tr{display:grid;grid-template-columns:minmax(420px,2fr) minmax(260px,1fr) 100px 90px 120px 100px 100px 46px;gap:12px;align-items:end;background:#fbfdff;border:1px solid #e5ebf3;border-radius:8px;padding:14px}.trade-table td{display:block;border:0!important;padding:0!important}.trade-table td:before{content:attr(data-label);display:block;font-size:10px;text-transform:uppercase;color:#667085;font-weight:800;margin-bottom:5px}.total-box{background:#0f172a;color:#fff;border-radius:8px;padding:16px}.total-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)}.total-row:last-child{border-bottom:0;color:#fdba74;font-weight:800;font-size:18px}.form-control,.custom-select{border-radius:6px}.wide-select{min-width:100%}.icon-btn{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px}@media(max-width:992px){.trade-table tbody tr{grid-template-columns:1fr 1fr}}@media(max-width:576px){.trade-table tbody tr{grid-template-columns:1fr}}
+.trade-shell{background:#fff;border:1px solid #e8edf5;border-radius:8px;box-shadow:0 16px 36px rgba(15,23,42,.08);overflow:hidden}.trade-head{background:#172033;color:#fff;padding:22px 24px;display:flex;justify-content:space-between;gap:16px;align-items:center}.trade-head h2{font-weight:800;margin:0;font-size:24px}.trade-head small{color:#a9b7ca}.trade-section{padding:20px 24px;border-bottom:1px solid #edf1f7}.trade-title{font-size:12px;font-weight:800;color:#7c2d12;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px}.trade-table{border-collapse:separate;border-spacing:0 14px}.trade-table thead{display:none}.trade-table tbody tr{display:grid;grid-template-columns:minmax(360px,1.5fr) minmax(220px,1fr) minmax(220px,1fr) 90px 80px 110px 90px 90px 46px;gap:12px;align-items:end;background:#fbfdff;border:1px solid #e5ebf3;border-radius:8px;padding:14px}.trade-table td{display:block;border:0!important;padding:0!important}.trade-table td:before{content:attr(data-label);display:block;font-size:10px;text-transform:uppercase;color:#667085;font-weight:800;margin-bottom:5px}.total-box{background:#0f172a;color:#fff;border-radius:8px;padding:16px}.total-row{display:flex;justify-content:space-between;padding:7px 0;border-bottom:1px solid rgba(255,255,255,.08)}.total-row:last-child{border-bottom:0;color:#fdba74;font-weight:800;font-size:18px}.form-control,.custom-select{border-radius:6px}.wide-select{min-width:100%}.icon-btn{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px}@media(max-width:1200px){.trade-table tbody tr{grid-template-columns:1fr 1fr}}@media(max-width:576px){.trade-table tbody tr{grid-template-columns:1fr}}
 </style>
 @endpush
 
@@ -66,7 +72,7 @@
         </div>
         <div class="table-responsive">
             <table class="table trade-table" id="lineTable">
-                <thead><tr><th class="item-cell">Item</th><th class="desc-cell">Description</th><th>Qty</th><th>Unit</th><th>Price</th><th>Disc</th><th>Tax %</th><th></th></tr></thead>
+                <thead><tr><th class="item-cell">Item</th><th class="desc-cell">Description</th><th>Serial/VTS/SKU</th><th>Qty</th><th>Unit</th><th>Price</th><th>Disc</th><th>Tax %</th><th></th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
@@ -91,6 +97,7 @@
 <tr>
     <td class="item-cell" data-label="Item"><select name="item_id[]" class="form-control item-select wide-select" required><option value="">Select purchasable item</option>@foreach($items as $it)<option value="{{ $it->id }}" data-unit="{{ $it->unit }}" data-price="{{ $it->purchase_price }}" data-tax="{{ $it->purchase_gst_percent }}">{{ $it->name }} | {{ $it->item_code }} | Stock {{ $it->current_stock }}</option>@endforeach</select></td>
     <td class="desc-cell" data-label="Description"><input name="description[]" class="form-control"></td>
+    <td data-label="Serial/VTS/SKU"><textarea name="selected_units[]" class="form-control serial-input" rows="2" placeholder="One per line: Serial | VTS | SKU"></textarea><small class="text-muted">Qty ke barabar entries.</small></td>
     <td class="num-cell" data-label="Qty"><input type="number" step="0.001" name="quantity[]" class="form-control" value="1" required></td>
     <td class="mini-cell" data-label="Unit"><input name="unit[]" class="form-control"></td>
     <td class="num-cell" data-label="Price"><input type="number" step="0.01" name="unit_price[]" class="form-control" required></td>
@@ -105,9 +112,9 @@
 const PREFILL_LINES = @json($lines->values());
 function money(n){return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function calc(){let sub=0,tax=0;$('#lineTable tbody tr').each(function(){let r=$(this),q=+r.find('[name="quantity[]"]').val()||0,p=+r.find('[name="unit_price[]"]').val()||0,d=+r.find('[name="discount_value[]"]').val()||0,dt=r.find('[name="discount_type[]"]').val(),tx=+r.find('[name="tax_percent[]"]').val()||0,b=q*p,da=dt==='flat'?d:b*d/100;sub+=b;tax+=Math.max(0,b-da)*tx/100});let od=+$('[name="discount_amount"]').val()||0;$('#uiSubtotal').text(money(sub));$('#uiTax').text(money(tax));$('#uiTotal').text(money(Math.max(0,sub-od+tax)))}
-function addLine(data={}){let $row=$($('#lineTpl').html());$('#lineTable tbody').append($row);if(data.item_id){$row.find('[name="item_id[]"]').val(data.item_id).trigger('change')}['description','quantity','unit','unit_price','discount_type','discount_value','tax_percent'].forEach(k=>$row.find(`[name="${k}[]"]`).val(data[k]??$row.find(`[name="${k}[]"]`).val()));calc()}
+function addLine(data={}){let $row=$($('#lineTpl').html());$('#lineTable tbody').append($row);if(data.item_id){$row.find('[name="item_id[]"]').val(data.item_id).trigger('change')}['description','quantity','unit','unit_price','discount_type','discount_value','tax_percent','selected_units'].forEach(k=>$row.find(`[name="${k}[]"]`).val(data[k]??$row.find(`[name="${k}[]"]`).val()));calc()}
 $('#addLine').click(()=>addLine());
-$(document).on('input change','#lineTable input,#lineTable select,[name="discount_amount"]',calc);
+$(document).on('input change','#lineTable input,#lineTable select,#lineTable textarea,[name="discount_amount"]',calc);
 $(document).on('click','.remove-row',function(){$(this).closest('tr').remove();calc()});
 $(document).on('change','.item-select',function(){let o=$(this).find(':selected'),r=$(this).closest('tr');r.find('[name="unit[]"]').val(o.data('unit'));r.find('[name="unit_price[]"]').val(o.data('price'));r.find('[name="tax_percent[]"]').val(o.data('tax'));calc()});
 $('#termsTemplate').on('change',function(){if(this.value){$('#termsBox').val(this.value)}});

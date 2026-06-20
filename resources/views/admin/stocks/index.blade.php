@@ -31,13 +31,14 @@
         <div class="col-md-3 form-group mb-md-0"><label>Month Wise Valuation</label><input type="month" name="month" value="{{ $month }}" class="form-control"></div>
         <div class="col-md-3 form-group mb-md-0"><label>Product Nature</label><select name="nature" class="form-control"><option value="">All</option><option value="finished_goods" @selected($nature==='finished_goods')>Finished Goods</option><option value="raw_material" @selected($nature==='raw_material')>Raw Material</option><option value="traded_goods" @selected($nature==='traded_goods')>Traded Goods</option><option value="packing_material" @selected($nature==='packing_material')>Packing Material</option></select></div>
         <div class="col-md-3 form-group mb-md-0"><label>Product Type</label><select name="product_type_id" class="form-control"><option value="">All Product Types</option>@foreach($productTypes as $type)<option value="{{ $type->id }}" @selected((string)$productTypeId === (string)$type->id)>{{ $type->name }}</option>@endforeach</select></div>
-        <div class="col-md-3"><button class="btn btn-primary"><i class="fas fa-filter mr-1"></i>Apply</button><a href="{{ route('admin.stocks.index') }}" class="btn btn-light">Reset</a></div>
+        <div class="col-md-2 form-group mb-md-0"><label>Serial / VTS / SKU</label><input name="q" class="form-control" value="{{ $serialSearch }}" placeholder="Search stock"></div>
+        <div class="col-md-1"><button class="btn btn-primary"><i class="fas fa-filter mr-1"></i>Apply</button><a href="{{ route('admin.stocks.index') }}" class="btn btn-light mt-1">Reset</a></div>
     </div>
 </form>
 
 <div class="stock-table-card table-responsive">
     <table id="stockTable" class="table table-hover">
-        <thead><tr><th>Item</th><th>SKU</th><th>Nature</th><th>Stock</th><th>Purchase Cost</th><th>Value</th><th>Low Warning</th><th>Status</th></tr></thead>
+        <thead><tr><th>Item</th><th>SKU</th><th>Nature</th><th>Stock</th><th>Serials In Stock</th><th>Purchase Cost</th><th>Value</th><th>Low Warning</th><th>Status</th></tr></thead>
         <tbody>
         @foreach($items as $item)
             @php $isLow = $item->low_stock_qty && $item->current_stock <= $item->low_stock_qty; @endphp
@@ -46,6 +47,16 @@
                 <td>{{ $item->sku ?: '-' }}</td>
                 <td>{{ $item->productType?->name }}<br><small>{{ str_replace('_',' ', $item->productType?->nature ?? '-') }}</small></td>
                 <td><b>{{ number_format((float)$item->current_stock,3) }}</b> {{ $item->unit }}</td>
+                <td>
+                    @php $stockUnits = collect($serialsByItem[$item->id] ?? []); @endphp
+                    @forelse($stockUnits->take(10) as $unit)
+                        <span class="badge badge-info mr-1 mb-1">{{ $unit['serial_no'] ?? $unit['vts_sim'] ?? $unit['sku'] ?? $unit['key'] ?? 'Unit' }}</span>
+                    @empty
+                        <span class="text-muted">-</span>
+                    @endforelse
+                    @if($stockUnits->count() > 10)<small class="text-muted">+{{ $stockUnits->count() - 10 }} more</small>@endif
+                    <span class="d-none">{{ $stockUnits->flatMap(fn($unit) => [$unit['serial_no'] ?? null, $unit['vts_sim'] ?? null, $unit['sku'] ?? null, $unit['batch_no'] ?? null])->filter()->join(' ') }}</span>
+                </td>
                 <td>Rs {{ number_format((float)$item->purchase_price,2) }}</td>
                 <td>Rs {{ number_format((float)$item->calculated_stock_value,2) }}</td>
                 <td>@if($isLow)<span class="badge badge-warning">Low Stock</span>@else <span class="badge badge-success">OK</span>@endif</td>

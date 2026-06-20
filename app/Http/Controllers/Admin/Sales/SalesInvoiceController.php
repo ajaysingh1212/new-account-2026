@@ -32,7 +32,7 @@ class SalesInvoiceController extends Controller
     public function index(EntryVisibilityService $visibility)
     {
         $invoices = $visibility->scopeForUser(
-            SalesInvoice::with(['party','creator'])->latest(),
+            SalesInvoice::with(['party','creator','items.item'])->latest(),
             SalesInvoice::class
         )->get();
         return view('admin.sales.index', compact('invoices'));
@@ -153,7 +153,7 @@ class SalesInvoiceController extends Controller
                 'inter_company_target_company_ids' => $request->boolean('inter_company_transfer') ? $this->validatedTargetCompanyIds($request, $sale->company_id) : null,
             ]));
 
-            $unitPool = $this->finishedGoodsUnitPool($sale->company_id);
+            $unitPool = $this->finishedGoodsUnitPool($sale->company_id, $sale->id);
 
             // ✅ originalItemQtys pass karo storeLines mein
             $totals = $this->storeLines($request, $sale, $accounting, $unitPool, $originalItemQtys);
@@ -358,6 +358,7 @@ class SalesInvoiceController extends Controller
                 'reference_id' => $invoice->id,
                 'reference_no' => $invoice->invoice_no,
                 'description' => 'Sales stock out.',
+                'movement_units' => $selectedUnits,
             ]);
 
             $subtotal += $taxableAmount;
@@ -396,6 +397,7 @@ class SalesInvoiceController extends Controller
                 'reference_id' => $invoice->id,
                 'reference_no' => $invoice->invoice_no,
                 'description' => 'Sales stock reversal before update.',
+                'movement_units' => $line->selected_units ?? [],
             ]);
         }
 
@@ -607,6 +609,7 @@ class SalesInvoiceController extends Controller
                     'reference_id' => $purchase->id,
                     'reference_no' => $purchase->invoice_no,
                     'description' => 'Auto purchase stock in from inter-company sale.',
+                    'movement_units' => $line->selected_units ?? [],
                 ]);
                 $this->syncInterCompanyVisibilityForEntry($request, $targetItem, $targetCompanyId);
                 if ($movement) {
@@ -704,6 +707,7 @@ class SalesInvoiceController extends Controller
                 'reference_id' => $purchase->id,
                 'reference_no' => $purchase->invoice_no,
                 'description' => 'Auto purchase reversal before source sale update.',
+                'movement_units' => $line->selected_units ?? [],
             ]);
         }
 

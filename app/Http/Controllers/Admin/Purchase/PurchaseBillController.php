@@ -22,7 +22,7 @@ class PurchaseBillController extends Controller
     public function index(EntryVisibilityService $visibility)
     {
         $bills = $visibility->scopeForUser(
-            PurchaseBill::with(['party','creator'])->latest(),
+            PurchaseBill::with(['party','creator','items.item'])->latest(),
             PurchaseBill::class
         )->get();
         return view('admin.purchases.index', compact('bills'));
@@ -211,6 +211,7 @@ class PurchaseBillController extends Controller
             'unit_price.*' => ['required','numeric','min:0'],
             'tax_percent.*' => ['nullable','numeric','min:0'],
             'discount_value.*' => ['nullable','numeric','min:0'],
+            'selected_units.*' => ['nullable','string'],
         ]);
     }
 
@@ -226,6 +227,14 @@ class PurchaseBillController extends Controller
             $discount = (($request->discount_type[$i] ?? 'percent') === 'flat') ? (float) ($request->discount_value[$i] ?? 0) : $base * (float) ($request->discount_value[$i] ?? 0) / 100;
             $taxAmount = max(0, $base - $discount) * (float) ($request->tax_percent[$i] ?? 0) / 100;
             $total = max(0, $base - $discount) + $taxAmount;
+            $selectedUnits = $this->purchaseUnitsFromInput(
+                $request->selected_units[$i] ?? null,
+                $item,
+                $qty,
+                $bill->invoice_no,
+                $price
+            );
+
             PurchaseBillItem::create([
                 'purchase_bill_id' => $bill->id,
                 'item_id' => $item->id,
@@ -239,6 +248,7 @@ class PurchaseBillController extends Controller
                 'tax_percent' => $request->tax_percent[$i] ?? 0,
                 'tax_amount' => $taxAmount,
                 'line_total' => $total,
+                'selected_units' => $selectedUnits,
             ]);
             $accounting->moveStock($item, [
                 'party_id' => $bill->party_id,
@@ -252,6 +262,7 @@ class PurchaseBillController extends Controller
                 'reference_id' => $bill->id,
                 'reference_no' => $bill->invoice_no,
                 'description' => 'Purchase stock in.',
+                'movement_units' => $selectedUnits,
             ]);
             $subtotal += $base;
             $tax += $taxAmount;
@@ -285,6 +296,7 @@ class PurchaseBillController extends Controller
                 'reference_id' => $bill->id,
                 'reference_no' => $bill->invoice_no,
                 'description' => 'Purchase stock reversal before update.',
+                'movement_units' => $line->selected_units ?? [],
             ]);
         }
 
@@ -318,6 +330,41 @@ class PurchaseBillController extends Controller
                 $user?->currentCompany?->name ?? 'Unknown company'
             ),
         ]);
+    }
+
+    private function purchaseUnitsFromInput(?string $raw, Item $item, float $qty, string $invoiceNo, float $price): array
+    {
+        $rows = collect(preg_split('/\r\n|\r|\n|,/', (string) $raw))
+            ->map(fn($row) => trim($row))
+            ->filter()
+            ->values();
+
+        if ($rows->isEmpty()) {
+            return [];
+        }
+
+        $wholeQty = (int) $qty;
+        abort_if((float) $wholeQty !== $qty, 422, "Serial tracking requires whole quantity for {$item->name}.");
+        abort_if($rows->count() !== $wholeQty, 422, "Enter exactly {$wholeQty} serial/SKU/VTS value(s) for {$item->name}.");
+
+        return $rows->map(function (string $row, int $index) use ($item, $invoiceNo, $price) {
+            $parts = array_map('trim', explode('|', $row));
+            $serial = $parts[0] ?? null;
+            $vts = $parts[1] ?? null;
+            $sku = $parts[2] ?? null;
+
+            return [
+                'key' => 'PUR-' . $invoiceNo . '-' . $item->id . '-' . ($index + 1) . '-' . md5($row),
+                'item_id' => $item->id,
+                'item_name' => $item->name,
+                'serial_no' => $serial ?: null,
+                'vts_sim' => $vts ?: null,
+                'sku' => $sku ?: ($item->sku ?: null),
+                'batch_no' => $invoiceNo,
+                'production_batch_no' => $invoiceNo,
+                'cost_per_unit' => $price,
+            ];
+        })->all();
     }
 
     private function nextNo(): string
