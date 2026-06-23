@@ -12,6 +12,7 @@ use App\Models\SalesInvoiceItem;
 use App\Models\StockMovement;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
+use App\Services\SerialUnitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -209,6 +210,7 @@ class ProductionBatchController extends Controller
                 'reference_type' => ProductionBatch::class,
                 'reference_id'   => $batch->id,
                 'reference_no'   => $batch->batch_no,
+                'movement_units'  => $this->productionMovementUnits($batch, $unitsData),
                 'description'    => "Finished goods produced — {$batch->batch_no}",
             ]);
         });
@@ -314,6 +316,7 @@ class ProductionBatchController extends Controller
                 'reference_type' => ProductionBatch::class,
                 'reference_id' => $productionBatch->id,
                 'reference_no' => $productionBatch->batch_no,
+                'movement_units' => $this->productionMovementUnits($productionBatch, $unitsData),
                 'description' => "Finished goods updated - {$productionBatch->batch_no}",
             ]);
 
@@ -360,6 +363,7 @@ class ProductionBatchController extends Controller
                     'reference_type' => ProductionBatch::class,
                     'reference_id' => $productionBatch->id,
                     'reference_no' => $productionBatch->batch_no,
+                    'movement_units' => $this->productionMovementUnits($productionBatch, $productionBatch->units_data ?? []),
                     'description' => 'Production batch reverted - finished goods removed.',
                 ]);
             }
@@ -455,6 +459,7 @@ class ProductionBatchController extends Controller
                 'reference_type' => ProductionBatch::class,
                 'reference_id' => $batch->id,
                 'reference_no' => $batch->batch_no,
+                'movement_units' => $this->productionMovementUnits($batch, [$unitIndex => $units[$unitIndex]]),
                 'description' => 'Production serial reverted - finished goods removed: ' . ($units[$unitIndex]['serial_no'] ?? $unitIndex),
             ]);
 
@@ -503,6 +508,7 @@ class ProductionBatchController extends Controller
                 'reference_type' => ProductionBatch::class,
                 'reference_id' => $batch->id,
                 'reference_no' => $batch->batch_no,
+                'movement_units' => $this->productionMovementUnits($batch, $batch->units_data ?? []),
                 'description' => 'Production output reversal before update.',
             ]);
         }
@@ -576,14 +582,27 @@ class ProductionBatchController extends Controller
             ->values();
     }
 
-    private function soldUnitKeys(int $companyId): array
+    private function productionMovementUnits(ProductionBatch $batch, array $units): array
     {
-        return SalesInvoiceItem::whereHas('salesInvoice', fn($q) => $q->where('company_id', $companyId))
-            ->get()
-            ->flatMap(fn($line) => collect($line->selected_units ?? [])->pluck('key'))
-            ->filter()
+        return collect($units)
+            ->filter(fn($unit) => is_array($unit))
+            ->map(function (array $unit, $index) use ($batch) {
+                return array_merge($unit, [
+                    'key' => $batch->id . '-' . $index,
+                    'item_id' => $batch->finished_item_id,
+                    'item_name' => $batch->finishedItem?->name,
+                    'production_batch_no' => $batch->batch_no,
+                    'production_date' => $batch->production_date?->format('Y-m-d'),
+                    'cost_per_unit' => (float) $batch->cost_per_unit,
+                ]);
+            })
             ->values()
             ->all();
+    }
+
+    private function soldUnitKeys(int $companyId): array
+    {
+        return app(SerialUnitService::class)->activeSoldKeys($companyId);
     }
 
     private function findUnitBySerial(string $term, EntryVisibilityService $visibility): ?array

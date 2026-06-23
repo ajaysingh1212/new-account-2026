@@ -23,6 +23,7 @@ use App\Models\TermsTemplate;
 use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
+use App\Services\SerialUnitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -31,7 +32,7 @@ class SalesInvoiceController extends Controller
     public function index(EntryVisibilityService $visibility)
     {
         $invoices = $visibility->scopeForUser(
-            SalesInvoice::with(['party','creator'])->latest(),
+            SalesInvoice::with(['party','creator','items.item'])->latest(),
             SalesInvoice::class
         )->get();
         return view('admin.sales.index', compact('invoices'));
@@ -131,6 +132,12 @@ class SalesInvoiceController extends Controller
             $oldValues = $sale->replicate()->toArray();
             $oldValues['items'] = $sale->items->toArray();
 
+            // ✅ Reversal se PEHLE original quantities capture karo
+            $originalItemQtys = $sale->items
+                ->groupBy('item_id')
+                ->map(fn($lines) => $lines->sum('quantity'))
+                ->all();
+
             $this->reverseSalePosting($sale, $accounting);
 
             $attachment = $sale->attachment;
@@ -146,10 +153,10 @@ class SalesInvoiceController extends Controller
                 'inter_company_target_company_ids' => $request->boolean('inter_company_transfer') ? $this->validatedTargetCompanyIds($request, $sale->company_id) : null,
             ]));
 
-            // The old lines are gone, so their serialised units are available again.
-            // Build the pool once and reuse it while all replacement lines are stored.
-            $unitPool = $this->finishedGoodsUnitPool($sale->company_id);
-            $totals = $this->storeLines($request, $sale, $accounting, $unitPool);
+            $unitPool = $this->finishedGoodsUnitPool($sale->company_id, $sale->id);
+
+            // ✅ originalItemQtys pass karo storeLines mein
+            $totals = $this->storeLines($request, $sale, $accounting, $unitPool, $originalItemQtys);
             $sale->update($totals);
 
             if ($sale->sale_type === 'credit' && $sale->party_id) {
@@ -270,16 +277,21 @@ class SalesInvoiceController extends Controller
         Request $request,
         SalesInvoice $invoice,
         AccountingService $accounting,
-        ?array $unitPool = null
-    ): array
-    {
+        ?array $unitPool = null,
+        array $originalItemQtys = []
+    ): array {
         $subtotal = $tax = $lineDiscount = $totalWeight = 0;
         $unitPool ??= $this->finishedGoodsUnitPool($invoice->company_id, $invoice->id);
 
         foreach ($request->item_id as $i => $itemId) {
             $item = Item::with('productType')->findOrFail($itemId);
             $qty = (float) $request->quantity[$i];
-            abort_if($item->track_stock && (float) $item->current_stock < $qty, 422, "Insufficient stock for {$item->name}");
+
+            // ✅ FIX: reversal se jo stock wapas aaya use bhi effective stock mein count karo
+            $reversedQty = (float) ($originalItemQtys[$item->id] ?? 0);
+            $effectiveStock = (float) $item->current_stock + $reversedQty;
+
+            abort_if($item->track_stock && $effectiveStock < $qty, 422, "Insufficient stock for {$item->name}");
             abort_if($item->productType?->nature !== 'finished_goods', 422, 'Only finished goods can be sold from Sales.');
             abort_if((float) ((int) $qty) !== $qty, 422, "Quantity must be a whole number for {$item->name}.");
 
@@ -316,6 +328,7 @@ class SalesInvoiceController extends Controller
             $taxableAmount = $grossAfterDiscount - $taxAmount;
             $total = $grossAfterDiscount;
             $lineWeight = $qty * (float) ($item->per_quantity_weight ?? 0);
+
             SalesInvoiceItem::create([
                 'sales_invoice_id' => $invoice->id,
                 'item_id' => $item->id,
@@ -332,6 +345,7 @@ class SalesInvoiceController extends Controller
                 'line_weight' => $lineWeight,
                 'selected_units' => $selectedUnits,
             ]);
+
             $accounting->moveStock($item, [
                 'party_id' => $invoice->party_id,
                 'movement_date' => $invoice->billing_date,
@@ -344,13 +358,17 @@ class SalesInvoiceController extends Controller
                 'reference_id' => $invoice->id,
                 'reference_no' => $invoice->invoice_no,
                 'description' => 'Sales stock out.',
+                'movement_units' => $selectedUnits,
             ]);
+
             $subtotal += $taxableAmount;
             $tax += $taxAmount;
             $lineDiscount += $discount;
             $totalWeight += $lineWeight;
         }
+
         $overallDiscount = (float) ($request->discount_amount ?? 0);
+
         return [
             'subtotal' => $subtotal,
             'discount_amount' => $lineDiscount + $overallDiscount,
@@ -379,6 +397,7 @@ class SalesInvoiceController extends Controller
                 'reference_id' => $invoice->id,
                 'reference_no' => $invoice->invoice_no,
                 'description' => 'Sales stock reversal before update.',
+                'movement_units' => $line->selected_units ?? [],
             ]);
         }
 
@@ -398,16 +417,7 @@ class SalesInvoiceController extends Controller
 
     private function finishedGoodsUnitPool(int $companyId, ?int $currentInvoiceId = null): array
     {
-        $soldKeys = SalesInvoiceItem::whereHas('salesInvoice', function ($q) use ($companyId, $currentInvoiceId) {
-                $q->where('company_id', $companyId);
-                if ($currentInvoiceId) {
-                    $q->where('id', '<>', $currentInvoiceId);
-                }
-            })
-            ->get()
-            ->flatMap(fn($line) => collect($line->selected_units ?? [])->pluck('key'))
-            ->filter()
-            ->all();
+        $soldKeys = app(SerialUnitService::class)->activeSoldKeys($companyId, $currentInvoiceId);
 
         $producedUnits = ProductionBatch::with('finishedItem')
             ->where('company_id', $companyId)
@@ -599,6 +609,7 @@ class SalesInvoiceController extends Controller
                     'reference_id' => $purchase->id,
                     'reference_no' => $purchase->invoice_no,
                     'description' => 'Auto purchase stock in from inter-company sale.',
+                    'movement_units' => $line->selected_units ?? [],
                 ]);
                 $this->syncInterCompanyVisibilityForEntry($request, $targetItem, $targetCompanyId);
                 if ($movement) {
@@ -696,6 +707,7 @@ class SalesInvoiceController extends Controller
                 'reference_id' => $purchase->id,
                 'reference_no' => $purchase->invoice_no,
                 'description' => 'Auto purchase reversal before source sale update.',
+                'movement_units' => $line->selected_units ?? [],
             ]);
         }
 
@@ -809,9 +821,9 @@ class SalesInvoiceController extends Controller
             'size' => $sourceItem->size,
             'color' => $sourceItem->color,
             'description' => $sourceItem->description,
-            'purchase_price' => $sourceItem->purchase_price,
-            'purchase_tax_inclusive' => $sourceItem->purchase_tax_inclusive,
-            'purchase_gst_percent' => $sourceItem->purchase_gst_percent,
+            'purchase_price' => $sourceItem->sale_price,
+            'purchase_tax_inclusive' => $sourceItem->sale_tax_inclusive,
+            'purchase_gst_percent' => $sourceItem->sale_gst_percent,
             'sale_price' => $sourceItem->sale_price,
             'sale_tax_inclusive' => $sourceItem->sale_tax_inclusive,
             'sale_gst_percent' => $sourceItem->sale_gst_percent,
@@ -826,9 +838,17 @@ class SalesInvoiceController extends Controller
             $defaults
         );
 
-        if ($item->product_type_id !== $productType->id) {
-            $item->update(['product_type_id' => $productType->id, 'track_stock' => true, 'status' => 'active']);
-        }
+        $item->update([
+            'product_type_id' => $productType->id,
+            'purchase_price' => $sourceItem->sale_price,
+            'purchase_tax_inclusive' => $sourceItem->sale_tax_inclusive,
+            'purchase_gst_percent' => $sourceItem->sale_gst_percent,
+            'sale_price' => $sourceItem->sale_price,
+            'sale_tax_inclusive' => $sourceItem->sale_tax_inclusive,
+            'sale_gst_percent' => $sourceItem->sale_gst_percent,
+            'track_stock' => true,
+            'status' => 'active',
+        ]);
 
         return $item;
     }
