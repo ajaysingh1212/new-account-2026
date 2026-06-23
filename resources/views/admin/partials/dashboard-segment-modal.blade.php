@@ -90,7 +90,7 @@
                             @foreach($segments->values() as $index => $segment)
                                 @php $x = 35 + ($index * (690 / $labelCount)); $y = 285 - ((abs((float)$segment['amount']) / $maxAmount) * 220); @endphp
                                 <g class="segment-wave-point" data-segment='@json($segment)'><circle cx="{{ $x }}" cy="{{ $y }}" r="5" fill="{{ $segment['color'] }}"/><text x="{{ $x }}" y="315" text-anchor="middle" font-size="11" fill="#475569">{{ \Illuminate\Support\Str::limit($segment['label'], 10) }}</text></g>
-                            @endforeach
+                            @endforeach 
                         </svg>
                     </div>
 
