@@ -113,40 +113,36 @@
 
 <div class="row">
     @can('reports.transaction')
-    <div class="col-xl-6 mb-4">
-        <div class="ops-card">
+    <div class="col-12 mb-4">
+        <div class="ops-card report-card" data-export-title="Dashboard Ageing Report" data-export-file="dashboard-ageing-report">
+            @include('admin.reports.partials.branded-export')
             <div class="ops-head">
                 <div><div class="ops-kicker">Ageing Report</div><div class="ops-amount">Rs {{ number_format(($stats['sales_due'] ?? 0) + ($stats['purchase_due'] ?? 0),2) }}</div></div>
-                <span class="badge badge-light">5 per page</span>
+                <span class="badge badge-light">Party-wise slab summary</span>
             </div>
             <form method="GET" class="row mb-3">
-                @foreach(request()->except(['ageing_kind','ageing_slab','ageing_page']) as $key => $value) @if(is_scalar($value))<input type="hidden" name="{{ $key }}" value="{{ $value }}">@endif @endforeach
-                <div class="col-6"><select name="ageing_kind" class="form-control form-control-sm"><option value="both" @selected($ageingKind==='both')>Both</option><option value="receivable" @selected($ageingKind==='receivable')>Receivable</option><option value="payable" @selected($ageingKind==='payable')>Payable</option></select></div>
-                <div class="col-4"><select name="ageing_slab" class="form-control form-control-sm">@foreach(['all'=>'All Days','0-15'=>'0-15','15-30'=>'15-30','30-45'=>'30-45','30-60'=>'30-60','60-75'=>'60-75','75-90'=>'75-90'] as $value => $label)<option value="{{ $value }}" @selected($ageingSlab===$value)>{{ $label }}</option>@endforeach</select></div>
+                @foreach(request()->except(['ageing_kind']) as $key => $value) @if(is_scalar($value))<input type="hidden" name="{{ $key }}" value="{{ $value }}">@endif @endforeach
+                <div class="col-10"><select name="ageing_kind" class="form-control form-control-sm"><option value="both" @selected($ageingKind==='both')>Both</option><option value="receivable" @selected($ageingKind==='receivable')>Receivable</option><option value="payable" @selected($ageingKind==='payable')>Payable</option></select></div>
                 <div class="col-2"><button class="btn btn-sm btn-primary btn-block"><i class="fas fa-filter"></i></button></div>
             </form>
             <div class="table-responsive">
                 <table class="table ageing-table mb-0">
-                    <thead><tr><th>Type</th><th>Party</th><th>Invoice</th><th>Age</th><th>Due</th><th></th></tr></thead>
+                    <thead><tr><th>Party</th><th>Receivable</th><th>Payable</th>@foreach($ageingSlabLabels as $label)<th>{{ $label }}</th>@endforeach<th>Total Due</th></tr></thead>
                     <tbody>
-                    @forelse($ageingPaginated as $row)
+                    @forelse($ageingMatrix as $row)
                         <tr>
-                            <td><span class="badge {{ $row['kind']==='receivable' ? 'badge-success' : 'badge-warning' }}">{{ $row['kind']==='receivable' ? 'To Receive' : 'To Pay' }}</span></td>
-                            <td>{{ $row['party'] }}</td>
-                            <td>{{ $row['invoice'] }}<br><small class="text-muted">{{ $row['date']?->format('d M Y') }}</small></td>
-                            <td>{{ $row['age'] }} days</td>
-                            <td><b>Rs {{ number_format($row['due'],2) }}</b></td>
-                            <td class="due-action">
-                                <button type="button" class="btn btn-sm btn-outline-primary view-detail-btn" data-invoice='@json($row)'><i class="fas fa-eye mr-1"></i>View Details</button>
-                            </td>
+                            <td><strong>{{ $row['party'] }}</strong><br><small>{{ $row['bill_count'] }} open bill(s)</small></td>
+                            <td>Rs {{ number_format($row['receivable'],2) }}</td><td>Rs {{ number_format($row['payable'],2) }}</td>
+                            @foreach($ageingSlabLabels as $key => $label) @php $cell=$row['slabs'][$key]; @endphp<td title="{{ $cell['invoices'] }}">@if($cell['bills'])<b>Rs {{ number_format($cell['due'],2) }}</b><br><small>{{ $cell['bills'] }} bill(s)</small>@else<span class="text-muted">—</span>@endif</td>@endforeach
+                            <td><b>Rs {{ number_format($row['total_due'],2) }}</b></td>
                         </tr>
                     @empty
-                        <tr><td colspan="6" class="text-muted text-center py-4">No ageing due found for this filter.</td></tr>
+                        <tr><td colspan="10" class="text-muted text-center py-4">No ageing due found for this filter.</td></tr>
                     @endforelse
                     </tbody>
+                    <tfoot><tr><th>Total</th><th>Rs {{ number_format($ageingMatrix->sum('receivable'),2) }}</th><th>Rs {{ number_format($ageingMatrix->sum('payable'),2) }}</th>@foreach($ageingSlabLabels as $key => $label)<th>Rs {{ number_format($ageingMatrix->sum(fn($row) => $row['slabs'][$key]['due']),2) }}</th>@endforeach<th>Rs {{ number_format($ageingMatrix->sum('total_due'),2) }}</th></tr></tfoot>
                 </table>
             </div>
-            <div class="activity-footer mt-3">{{ $ageingPaginated->appends(request()->except('ageing_page'))->links('pagination::bootstrap-5') }}</div>
         </div>
     </div>
     @endcan

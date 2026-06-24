@@ -13,6 +13,7 @@ use App\Models\PurchaseBill;
 use App\Models\ProductionBatch;
 use App\Models\SalesInvoice;
 use App\Services\EntryVisibilityService;
+use App\Services\AgeingSlabService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -194,24 +195,12 @@ class ReportController extends Controller
         return view('admin.reports.bill-wise-profit', compact('filters','parties','bills'));
     }
 
-    public function ageing(Request $request, EntryVisibilityService $visibility)
+    public function ageing(Request $request, EntryVisibilityService $visibility, AgeingSlabService $ageingSlabs)
     {
         $companyParties = $visibility->scopeForUser(Party::orderBy('display_name'), Party::class)->get();
         $partyId = $request->integer('party_id') ?: null;
         $kind = $request->input('kind', 'both');
         abort_unless(in_array($kind, ['receivable', 'payable', 'both'], true), 422, 'Invalid ageing type.');
-        $slab = $request->input('slab', '0-15');
-        $slabs = [
-            '0-15' => [0, 15],
-            '15-30' => [15, 30],
-            '30-45' => [30, 45],
-            '30-60' => [30, 60],
-            '60-75' => [60, 75],
-            '75-90' => [75, 90],
-            'all' => [0, PHP_INT_MAX],
-        ];
-        abort_unless(isset($slabs[$slab]), 422, 'Invalid ageing slab.');
-        [$minAge, $maxAge] = $slabs[$slab];
         $to = $request->date('to_date')?->toDateString() ?? now()->toDateString();
         $asOf = Carbon::parse($to)->endOfDay();
 
@@ -225,12 +214,14 @@ class ReportController extends Controller
             ->when($partyId, fn($q) => $q->where('party_id', $partyId))
             ->get()
             ->map(fn($bill) => $this->ageingRow($bill, PurchaseBill::class, 'payable', $asOf));
-        $rows = $sales->merge($purchases)
+        $billRows = $sales->merge($purchases)
             ->when($kind !== 'both', fn($rows) => $rows->where('kind', $kind))
-            ->filter(fn($row) => $row['due'] > 0 && $row['age'] >= $minAge && $row['age'] <= $maxAge)
+            ->filter(fn($row) => $row['due'] > 0)
             ->sortByDesc('date')->values();
+        $rows = $ageingSlabs->matrix($billRows);
+        $slabs = AgeingSlabService::SLABS;
 
-        return view('admin.reports.ageing', compact('companyParties', 'rows', 'partyId', 'kind', 'slab', 'to') + ['parties' => $companyParties]);
+        return view('admin.reports.ageing', compact('rows', 'billRows', 'partyId', 'kind', 'to', 'slabs') + ['parties' => $companyParties]);
     }
 
     public function balanceSheet(Request $request, EntryVisibilityService $visibility)
@@ -431,6 +422,7 @@ class ReportController extends Controller
         $paid = (float) PartyPaymentAllocation::where('bill_model', $model)->where('bill_id', $bill->id)->sum('amount');
         return [
             'kind' => $kind,
+            'party_id' => $bill->party_id,
             'party' => $bill->party?->display_name ?: 'Cash / Walk-in',
             'invoice' => $bill->invoice_no,
             'date' => $bill->billing_date,
