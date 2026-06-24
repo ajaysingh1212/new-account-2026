@@ -12,7 +12,7 @@
         <button class="btn btn-info report-btn">Apply</button>
     </form>
 </div>
-<div class="mb-3 d-flex flex-wrap" style="gap:8px">
+<div class="mb-3 d-flex flex-wrap" style="gap:8px; margin-top:30px;">
 @foreach(['0-15','15-30','30-45','30-60','60-75','75-90','all'] as $ageSlab)
     <a class="btn {{ $slab === $ageSlab ? 'btn-primary' : 'btn-outline-primary' }}" href="{{ route('admin.reports.ageing', request()->except('slab') + ['slab' => $ageSlab]) }}">{{ $ageSlab === 'all' ? 'All Days' : $ageSlab.' Days' }}</a>
 @endforeach
