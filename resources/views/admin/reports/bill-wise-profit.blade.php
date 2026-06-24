@@ -7,6 +7,7 @@
 @endpush
 @section('content')
 @include('admin.reports.partials.styles')
+<div data-export-title="Bill Wise Profit Report" data-export-file="bill-wise-profit">@include('admin.reports.partials.branded-export')</div>
 <div class="report-hero">
     <h1>Bill Wise Profit</h1>
     <form class="report-filter" method="GET">

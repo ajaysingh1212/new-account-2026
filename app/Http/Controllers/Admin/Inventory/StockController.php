@@ -24,6 +24,7 @@ class StockController extends Controller
 
         $items = $visibility->scopeForUser(
             Item::with('productType')
+                ->where('current_stock', '>', 0)
                 ->when($nature, fn($q) => $q->whereHas('productType', fn($type) => $type->where('nature', $nature)))
                 ->when($productTypeId, fn($q) => $q->where('product_type_id', $productTypeId))
                 ->orderBy('name'),
@@ -77,9 +78,11 @@ class StockController extends Controller
     public function history(Request $request, EntryVisibilityService $visibility)
     {
         $serialSearch = trim((string) $request->input('q', ''));
+        [$period, $from, $to] = $this->movementDateRange($request);
         $movements = $visibility->scopeForUser(
             StockMovement::with(['item','party','creator'])
                 ->when($request->filled('item_id'), fn($q) => $q->where('item_id', $request->item_id))
+                ->whereBetween('movement_date', [$from, $to])
                 ->latest('movement_date')
                 ->latest(),
             StockMovement::class
@@ -108,7 +111,7 @@ class StockController extends Controller
         }
 
         $items = $visibility->scopeForUser(Item::orderBy('name'), Item::class)->get();
-        return view('admin.stocks.history', compact('movements', 'items', 'serialSearch'));
+        return view('admin.stocks.history', compact('movements', 'items', 'serialSearch', 'period', 'from', 'to'));
     }
 
     public function specialStockOut(EntryVisibilityService $visibility)
@@ -212,5 +215,24 @@ class StockController extends Controller
         }
 
         return null;
+    }
+
+    private function movementDateRange(Request $request): array
+    {
+        $period = $request->input('period', 'month');
+        $today = now();
+
+        [$from, $to] = match ($period) {
+            'today' => [$today->toDateString(), $today->toDateString()],
+            'week' => [$today->copy()->startOfWeek()->toDateString(), $today->copy()->endOfWeek()->toDateString()],
+            'year' => [$today->copy()->startOfYear()->toDateString(), $today->copy()->endOfYear()->toDateString()],
+            'custom' => [
+                $request->date('from_date')?->toDateString() ?? $today->copy()->startOfMonth()->toDateString(),
+                $request->date('to_date')?->toDateString() ?? $today->toDateString(),
+            ],
+            default => [$today->copy()->startOfMonth()->toDateString(), $today->copy()->endOfMonth()->toDateString()],
+        };
+
+        return [$period, $from, $to];
     }
 }

@@ -3,10 +3,12 @@
 @section('content')
 <div class="card">
     <div class="card-body">
-        <form method="GET" class="row">
-            <div class="col-md-5"><select name="item_id" class="form-control select2"><option value="">All Items</option>@foreach($items as $item)<option value="{{ $item->id }}" @selected(request('item_id')==$item->id)>{{ $item->name }}</option>@endforeach</select></div>
-            <div class="col-md-4"><input name="q" class="form-control" value="{{ $serialSearch }}" placeholder="Serial / VTS / SKU / reference"></div>
-            <div class="col-md-3"><button class="btn btn-primary">Filter</button><a href="{{ route('admin.stocks.history') }}" class="btn btn-light">Reset</a></div>
+        <form method="GET" class="row align-items-end">
+            <div class="col-md-3"><label>Item</label><select name="item_id" class="form-control select2"><option value="">All Items</option>@foreach($items as $item)<option value="{{ $item->id }}" @selected(request('item_id')==$item->id)>{{ $item->name }}</option>@endforeach</select></div>
+            <div class="col-md-2"><label>Period</label><select name="period" class="form-control" id="movementPeriod"><option value="today" @selected($period==='today')>Today</option><option value="week" @selected($period==='week')>This Week</option><option value="month" @selected($period==='month')>This Month</option><option value="year" @selected($period==='year')>This Year</option><option value="custom" @selected($period==='custom')>Custom Date</option></select></div>
+            <div class="col-md-2 custom-date"><label>From</label><input type="date" name="from_date" class="form-control" value="{{ $from }}"></div>
+            <div class="col-md-2 custom-date"><label>To</label><input type="date" name="to_date" class="form-control" value="{{ $to }}"></div>
+            <div class="col-md-3"><label>Serial / SKU</label><input name="q" class="form-control" value="{{ $serialSearch }}" placeholder="Serial / VTS / SKU / reference"><button class="btn btn-primary mt-2">Filter</button><a href="{{ route('admin.stocks.history') }}" class="btn btn-light mt-2">Reset</a></div>
         </form>
     </div>
 </div>
@@ -19,4 +21,4 @@
     </div>
 </div>
 @endsection
-@push('scripts')<script>$('#historyTable').DataTable({pageLength:25});</script>@endpush
+@push('scripts')<script>$('#historyTable').DataTable({pageLength:25});function toggleMovementDates(){ $('.custom-date').toggle($('#movementPeriod').val()==='custom'); } $('#movementPeriod').on('change',toggleMovementDates);toggleMovementDates();</script>@endpush

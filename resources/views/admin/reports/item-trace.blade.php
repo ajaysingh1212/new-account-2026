@@ -1,6 +1,7 @@
 @extends('layouts.admin')
 @section('title','Return Trace Report')
 @section('content')
+<div data-export-title="Item / Return Trace Report" data-export-file="item-trace">@include('admin.reports.partials.branded-export')</div>
 <div class="card">
     <div class="card-header"><h3 class="card-title m-0">Return Trace Report</h3></div>
     <div class="card-body">

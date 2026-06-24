@@ -108,8 +108,20 @@ class DashboardController extends Controller
         );
                 $stats['sales_due'] = $salesDueRows->sum('due');
                 $stats['purchase_due'] = $purchaseDueRows->sum('due');
+        $ageingKind = $request->input('ageing_kind', 'both');
+        $ageingSlab = $request->input('ageing_slab', 'all');
+        $ageingRanges = ['0-15' => [0,15], '15-30' => [15,30], '30-45' => [30,45], '30-60' => [30,60], '60-75' => [60,75], '75-90' => [75,90], 'all' => [0, PHP_INT_MAX]];
+        if (!isset($ageingRanges[$ageingSlab])) {
+            $ageingSlab = 'all';
+        }
+        if (!in_array($ageingKind, ['both','receivable','payable'], true)) {
+            $ageingKind = 'both';
+        }
+        [$ageMin, $ageMax] = $ageingRanges[$ageingSlab];
                 $ageingRows = $salesDueRows
             ->merge($purchaseDueRows)
+            ->when($ageingKind !== 'both', fn($rows) => $rows->where('kind', $ageingKind))
+            ->filter(fn($row) => $row['age'] >= $ageMin && $row['age'] <= $ageMax)
             ->sortByDesc('date')
             ->values();
         $ageingPage = max(1, $request->integer('ageing_page', 1));
@@ -147,7 +159,7 @@ class DashboardController extends Controller
         ];
         $quickActions = $this->quickActions($user);
 
-        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingPaginated','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','purchaseSegments','profitSegments'));
+        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingPaginated','ageingKind','ageingSlab','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','purchaseSegments','profitSegments'));
     }
 
     private function dateRange(Request $request): array

@@ -11,6 +11,7 @@ use App\Models\ProductionBatch;
 use App\Models\SalesInvoiceItem;
 use App\Models\StockMovement;
 use App\Services\AccountingService;
+use App\Services\CrmIdentifierPropagationService;
 use App\Services\EntryVisibilityService;
 use App\Services\SerialUnitService;
 use Illuminate\Http\Request;
@@ -182,6 +183,8 @@ class ProductionBatchController extends Controller
                 ];
             }
 
+            $this->assertUnitIdentifiersAvailable($unitsData, auth()->user()->current_company_id);
+
             // 3. Create production batch record
             $batch = ProductionBatch::create([
                 'company_id'        => auth()->user()->current_company_id,
@@ -220,7 +223,7 @@ class ProductionBatchController extends Controller
             ->with('success', 'Production batch saved. Raw materials consumed and finished goods added to stock.');
     }
 
-    public function update(Request $request, ProductionBatch $productionBatch, AccountingService $accounting, EntryVisibilityService $visibility)
+    public function update(Request $request, ProductionBatch $productionBatch, AccountingService $accounting, EntryVisibilityService $visibility, CrmIdentifierPropagationService $propagation)
     {
         $visibility->authorizeView($productionBatch);
         abort_if($productionBatch->status === 'reverted', 422, 'Reverted production batch cannot be edited.');
@@ -230,6 +233,9 @@ class ProductionBatchController extends Controller
             'production_date' => ['required','date'],
             'quantity' => ['required','numeric','min:0.001'],
             'notes' => ['nullable','string'],
+            'finished_item_sku' => ['nullable','string','max:255'],
+            'propagation_targets' => ['nullable','array'],
+            'propagation_targets.*' => ['string','max:100'],
             'unit_buyer_code.*' => ['nullable','string','max:100'],
             'unit_buyer_id.*' => ['nullable','exists:buyers,id'],
             'unit_serial.*' => ['nullable','string','max:100'],
@@ -242,9 +248,11 @@ class ProductionBatchController extends Controller
             'unit_notes.*' => ['nullable','string','max:500'],
         ]);
 
-        DB::transaction(function () use ($request, $data, $productionBatch, $accounting, $visibility) {
+        DB::transaction(function () use ($request, $data, $productionBatch, $accounting, $visibility, $propagation) {
             $productionBatch->load('finishedItem.bomMaterials.rawItem');
             $oldValues = $productionBatch->toArray();
+            $oldUnits = $productionBatch->units_data ?? [];
+            $oldSku = $productionBatch->finishedItem?->sku;
             $soldKeys = collect($this->soldUnitKeys($productionBatch->company_id))
                 ->filter(fn($key) => str_starts_with($key, $productionBatch->id . '-'))
                 ->values();
@@ -278,23 +286,9 @@ class ProductionBatchController extends Controller
                 ]);
             }
 
-            $unitsData = [];
-            for ($i = 0; $i < (int) $qty; $i++) {
-                $vtsSim = trim((string) $request->input("unit_vts_sim.{$i}", ''));
-                abort_if($requiresGps && $vtsSim === '', 422, 'VTS/SIM number is required for every GPS finished goods unit.');
-                $unitsData[] = [
-                    'buyer_code' => $request->input("unit_buyer_code.{$i}") ?: 'BC-AUTO-' . str_pad((string) ($i + 1), 3, '0', STR_PAD_LEFT),
-                    'buyer_id' => $request->input("unit_buyer_id.{$i}"),
-                    'serial_no' => $request->input("unit_serial.{$i}"),
-                    'batch_no' => $request->input("unit_batch.{$i}"),
-                    'vts_sim' => $vtsSim ?: null,
-                    'sale_price' => $request->input("unit_sale_price.{$i}"),
-                    'gst' => $request->input("unit_gst.{$i}"),
-                    'sale_mode' => $request->input("unit_sale_mode.{$i}", 'exclusive'),
-                    'warehouse' => $request->input("unit_warehouse.{$i}"),
-                    'notes' => $request->input("unit_notes.{$i}"),
-                ];
-            }
+            $unitsData = $this->unitsFromRequest($request, (int) $qty, $requiresGps);
+
+            $this->assertUnitIdentifiersAvailable($unitsData, $productionBatch->company_id, $productionBatch->id);
 
             $productionBatch->update([
                 'batch_no' => $data['batch_no'],
@@ -305,6 +299,10 @@ class ProductionBatchController extends Controller
                 'notes' => $data['notes'] ?? null,
                 'units_data' => $unitsData,
             ]);
+            $newSku = $data['finished_item_sku'] ?? null;
+            if ((string) $finished->sku !== (string) $newSku) {
+                $finished->update(['sku' => $newSku]);
+            }
 
             $accounting->moveStock($finished, [
                 'movement_date' => $productionBatch->production_date,
@@ -320,11 +318,40 @@ class ProductionBatchController extends Controller
                 'description' => "Finished goods updated - {$productionBatch->batch_no}",
             ]);
 
+            $propagation->propagate(
+                $productionBatch,
+                $oldUnits,
+                $unitsData,
+                $oldSku,
+                $newSku,
+                $data['propagation_targets'] ?? []
+            );
+
             $visibility->syncFromRequest($request, $productionBatch);
             $this->logUpdate($productionBatch, $oldValues, $productionBatch->fresh()->toArray());
         });
 
         return redirect()->route('admin.production-batches.show', $productionBatch)->with('success', 'Production batch updated with stock reposted.');
+    }
+
+    public function identifierImpact(Request $request, ProductionBatch $productionBatch, EntryVisibilityService $visibility, CrmIdentifierPropagationService $propagation)
+    {
+        $visibility->authorizeView($productionBatch);
+        abort_if($productionBatch->status === 'reverted', 422, 'Reverted production batch cannot be edited.');
+        $data = $request->validate([
+            'quantity' => ['required','integer','min:1'],
+            'finished_item_sku' => ['nullable','string','max:255'],
+            'unit_serial.*' => ['nullable','string','max:100'],
+            'unit_vts_sim.*' => ['nullable','string','max:100'],
+        ]);
+
+        $productionBatch->load('finishedItem');
+        $units = $this->unitsFromRequest($request, (int) $data['quantity'], false);
+
+        return response()->json([
+            'changed' => $this->identifiersChanged($productionBatch, $units, $data['finished_item_sku'] ?? null),
+            'targets' => $propagation->preview($productionBatch, $units, $data['finished_item_sku'] ?? null),
+        ]);
     }
 
     public function revert(ProductionBatch $productionBatch, AccountingService $accounting, EntryVisibilityService $visibility)
@@ -614,6 +641,9 @@ class ProductionBatchController extends Controller
 
         foreach ($batches as $batch) {
             foreach (($batch->units_data ?? []) as $index => $unit) {
+                if (!empty($unit['reverted_at'])) {
+                    continue;
+                }
                 if (in_array($term, array_filter([
                     $unit['serial_no'] ?? null,
                     $unit['buyer_code'] ?? null,
@@ -632,6 +662,74 @@ class ProductionBatchController extends Controller
         }
 
         return null;
+    }
+
+    private function assertUnitIdentifiersAvailable(array $units, int $companyId, ?int $excludeBatchId = null): void
+    {
+        $fields = ['serial_no' => 'Serial number', 'vts_sim' => 'VTS/SIM number'];
+
+        foreach ($fields as $field => $label) {
+            $submitted = collect($units)
+                ->pluck($field)
+                ->map(fn($value) => trim((string) $value))
+                ->filter()
+                ->map(fn($value) => mb_strtolower($value));
+
+            abort_if($submitted->duplicates()->isNotEmpty(), 422, "Duplicate {$label} is not allowed in the same production batch.");
+
+            if ($submitted->isEmpty()) {
+                continue;
+            }
+
+            $alreadyUsed = ProductionBatch::query()
+                ->where('company_id', $companyId)
+                ->where('status', 'posted')
+                ->when($excludeBatchId, fn($query) => $query->whereKeyNot($excludeBatchId))
+                ->get(['units_data'])
+                ->flatMap(fn(ProductionBatch $batch) => collect($batch->units_data ?? [])
+                    ->filter(fn($unit) => is_array($unit) && empty($unit['reverted_at']))
+                    ->pluck($field))
+                ->map(fn($value) => mb_strtolower(trim((string) $value)))
+                ->filter();
+
+            abort_if($submitted->intersect($alreadyUsed)->isNotEmpty(), 422, "{$label} is already used in an active Production / CRM Assembly.");
+        }
+    }
+
+    private function unitsFromRequest(Request $request, int $quantity, bool $requiresGps): array
+    {
+        $units = [];
+        for ($i = 0; $i < $quantity; $i++) {
+            $vtsSim = trim((string) $request->input("unit_vts_sim.{$i}", ''));
+            abort_if($requiresGps && $vtsSim === '', 422, 'VTS/SIM number is required for every GPS finished goods unit.');
+            $units[] = [
+                'buyer_code' => $request->input("unit_buyer_code.{$i}") ?: 'BC-AUTO-' . str_pad((string) ($i + 1), 3, '0', STR_PAD_LEFT),
+                'buyer_id' => $request->input("unit_buyer_id.{$i}"),
+                'serial_no' => $request->input("unit_serial.{$i}"),
+                'batch_no' => $request->input("unit_batch.{$i}"),
+                'vts_sim' => $vtsSim ?: null,
+                'sale_price' => $request->input("unit_sale_price.{$i}"),
+                'gst' => $request->input("unit_gst.{$i}"),
+                'sale_mode' => $request->input("unit_sale_mode.{$i}", 'exclusive'),
+                'warehouse' => $request->input("unit_warehouse.{$i}"),
+                'notes' => $request->input("unit_notes.{$i}"),
+            ];
+        }
+
+        return $units;
+    }
+
+    private function identifiersChanged(ProductionBatch $batch, array $newUnits, ?string $newSku): bool
+    {
+        if ((string) $batch->finishedItem?->sku !== (string) $newSku) {
+            return true;
+        }
+
+        return collect($batch->units_data ?? [])->contains(function ($unit, $index) use ($newUnits) {
+            $new = $newUnits[$index] ?? [];
+            return (string) ($unit['serial_no'] ?? '') !== (string) ($new['serial_no'] ?? '')
+                || (string) ($unit['vts_sim'] ?? '') !== (string) ($new['vts_sim'] ?? '');
+        });
     }
 
     private function rawMaterialRows(ProductionBatch $batch, float $qty): array

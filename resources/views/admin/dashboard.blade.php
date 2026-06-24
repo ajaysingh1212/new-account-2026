@@ -119,6 +119,12 @@
                 <div><div class="ops-kicker">Ageing Report</div><div class="ops-amount">Rs {{ number_format(($stats['sales_due'] ?? 0) + ($stats['purchase_due'] ?? 0),2) }}</div></div>
                 <span class="badge badge-light">5 per page</span>
             </div>
+            <form method="GET" class="row mb-3">
+                @foreach(request()->except(['ageing_kind','ageing_slab','ageing_page']) as $key => $value) @if(is_scalar($value))<input type="hidden" name="{{ $key }}" value="{{ $value }}">@endif @endforeach
+                <div class="col-6"><select name="ageing_kind" class="form-control form-control-sm"><option value="both" @selected($ageingKind==='both')>Both</option><option value="receivable" @selected($ageingKind==='receivable')>Receivable</option><option value="payable" @selected($ageingKind==='payable')>Payable</option></select></div>
+                <div class="col-4"><select name="ageing_slab" class="form-control form-control-sm">@foreach(['all'=>'All Days','0-15'=>'0-15','15-30'=>'15-30','30-45'=>'30-45','30-60'=>'30-60','60-75'=>'60-75','75-90'=>'75-90'] as $value => $label)<option value="{{ $value }}" @selected($ageingSlab===$value)>{{ $label }}</option>@endforeach</select></div>
+                <div class="col-2"><button class="btn btn-sm btn-primary btn-block"><i class="fas fa-filter"></i></button></div>
+            </form>
             <div class="table-responsive">
                 <table class="table ageing-table mb-0">
                     <thead><tr><th>Type</th><th>Party</th><th>Invoice</th><th>Age</th><th>Due</th><th></th></tr></thead>

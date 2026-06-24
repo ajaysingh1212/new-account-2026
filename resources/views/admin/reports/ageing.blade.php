@@ -2,15 +2,20 @@
 @section('title', 'Ageing Report')
 @section('content')
 @include('admin.reports.partials.styles')
+<div data-export-title="Ageing Report" data-export-file="ageing-report">@include('admin.reports.partials.branded-export')</div>
 <div class="report-hero">
     <h1>Ageing Report</h1>
     <form class="report-filter" method="GET">
         <div><label>Party</label><select name="party_id" class="form-control"><option value="">All Parties</option>@foreach($parties as $party)<option value="{{ $party->id }}" @selected($partyId==$party->id)>{{ $party->display_name }}</option>@endforeach</select></div>
-        <div><label>Range</label><select name="bucket" class="form-control"><option value="15" @selected($bucket==='15')>15 Days</option><option value="30" @selected($bucket==='30')>1 Month</option><option value="90" @selected($bucket==='90')>3 Months</option><option value="180" @selected($bucket==='180')>6 Months</option><option value="custom" @selected($bucket==='custom')>Custom</option></select></div>
-        <div><label>From</label><input type="date" name="from_date" class="form-control" value="{{ $from }}"></div>
-        <div><label>To</label><input type="date" name="to_date" class="form-control" value="{{ $to }}"></div>
+        <div><label>Balance Type</label><select name="kind" class="form-control"><option value="both" @selected($kind==='both')>Both</option><option value="receivable" @selected($kind==='receivable')>Receivable</option><option value="payable" @selected($kind==='payable')>Payable</option></select></div>
+        <div><label>As On Date</label><input type="date" name="to_date" class="form-control" value="{{ $to }}"></div>
         <button class="btn btn-info report-btn">Apply</button>
     </form>
+</div>
+<div class="mb-3 d-flex flex-wrap" style="gap:8px">
+@foreach(['0-15','15-30','30-45','30-60','60-75','75-90','all'] as $ageSlab)
+    <a class="btn {{ $slab === $ageSlab ? 'btn-primary' : 'btn-outline-primary' }}" href="{{ route('admin.reports.ageing', request()->except('slab') + ['slab' => $ageSlab]) }}">{{ $ageSlab === 'all' ? 'All Days' : $ageSlab.' Days' }}</a>
+@endforeach
 </div>
 <div class="metric-strip">
     <div class="metric"><span>Receivable</span><strong>Rs {{ number_format($rows->where('kind','receivable')->sum('due'),2) }}</strong></div>

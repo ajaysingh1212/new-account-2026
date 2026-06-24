@@ -14,8 +14,8 @@
     $terms        = $terms        ?? '';
     $status       = $status       ?? 'posted';
     $title        = $title        ?? 'INVOICE';
-    $billingAddress  = $billingAddress  ?? '';
-    $shippingAddress = $shippingAddress ?? '';
+    $billingAddress  = $billingAddress  ?: (($party ?? null)?->billing_address ?? '');
+    $shippingAddress = $shippingAddress ?: (($party ?? null)?->shipping_address ?? '');
 
     /* ── Amount in Words ── */
     function numberToWordsIN(float $amount): string {

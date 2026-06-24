@@ -29,15 +29,16 @@
             </thead>
             <tbody>
             @foreach($batches as $batch)
+                @php $activeUnits = $batch->status === 'reverted' ? collect() : collect($batch->units_data ?? [])->filter(fn($unit) => empty($unit['reverted_at'])); @endphp
                 <tr>
                     <td>{{ $batch->batch_no }}</td>
                     <td>{{ $batch->production_date?->format('d M Y') }}</td>
                     <td>{{ $batch->finishedItem?->name }}</td>
-                    <td>{{ $batch->finishedItem?->sku ?: '-' }}</td>
-                    <td>{{ $batch->quantity }}</td>
-                    <td>{{ collect($batch->units_data ?? [])->pluck('serial_no')->filter()->join(', ') ?: '-' }}</td>
-                    <td>{{ collect($batch->units_data ?? [])->pluck('batch_no')->filter()->join(', ') ?: '-' }}</td>
-                    <td>{{ collect($batch->units_data ?? [])->pluck('vts_sim')->filter()->join(', ') ?: '-' }}</td>
+                    <td>{{ $batch->status === 'reverted' ? '-' : ($batch->finishedItem?->sku ?: '-') }}</td>
+                    <td>{{ $batch->status === 'reverted' ? 0 : $activeUnits->count() }}</td>
+                    <td>{{ $activeUnits->pluck('serial_no')->filter()->join(', ') ?: '-' }}</td>
+                    <td>{{ $activeUnits->pluck('batch_no')->filter()->join(', ') ?: '-' }}</td>
+                    <td>{{ $activeUnits->pluck('vts_sim')->filter()->join(', ') ?: '-' }}</td>
                     <td>Rs {{ number_format((float) $batch->raw_material_cost, 2) }}</td>
                     <td>Rs {{ number_format((float) $batch->cost_per_unit, 2) }}</td>
                     <td>

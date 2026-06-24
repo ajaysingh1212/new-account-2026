@@ -107,6 +107,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::post('production-reverts', [ProductionBatchController::class, 'revertSelected'])->middleware('permission:production_reverts.manage')->name('production-reverts.store');
         Route::resource('production-batches', ProductionBatchController::class)->only(['create','store'])->middleware('permission:production.create');
         Route::resource('production-batches', ProductionBatchController::class)->only(['edit','update'])->middleware('permission:production.create');
+        Route::post('production-batches/{productionBatch}/identifier-impact', [ProductionBatchController::class, 'identifierImpact'])->middleware('permission:production.create')->name('production-batches.identifier-impact');
         Route::post('production-batches/{productionBatch}/revert', [ProductionBatchController::class, 'revert'])->middleware('permission:production.create')->name('production-batches.revert');
         Route::resource('production-batches', ProductionBatchController::class)->only(['index','show']);
     });

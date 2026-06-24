@@ -581,19 +581,23 @@ class SalesInvoiceController extends Controller
 
             foreach ($invoice->items as $line) {
                 $targetItem = $this->targetItemForSaleLine($line->item, $targetCompanyId);
+                // An inter-company sale moves the stock at its real cost.  The
+                // selling rate belongs only to the source sales invoice.
+                $purchaseRate = (float) $line->item->purchase_price;
+                $purchaseLineTotal = (float) $line->quantity * $purchaseRate;
                 $purchaseLine = PurchaseBillItem::create([
                     'purchase_bill_id' => $purchase->id,
                     'item_id' => $targetItem->id,
                     'description' => $line->description,
                     'quantity' => $line->quantity,
                     'unit' => $line->unit,
-                    'unit_price' => $line->unit_price,
-                    'discount_type' => $line->discount_type,
-                    'discount_value' => $line->discount_value,
-                    'discount_amount' => $line->discount_amount,
-                    'tax_percent' => $line->tax_percent,
-                    'tax_amount' => $line->tax_amount,
-                    'line_total' => $line->line_total,
+                    'unit_price' => $purchaseRate,
+                    'discount_type' => 'flat',
+                    'discount_value' => 0,
+                    'discount_amount' => 0,
+                    'tax_percent' => 0,
+                    'tax_amount' => 0,
+                    'line_total' => $purchaseLineTotal,
                     'selected_units' => $line->selected_units,
                 ]);
 
@@ -604,7 +608,7 @@ class SalesInvoiceController extends Controller
                     'direction' => 'in',
                     'quantity' => (float) $purchaseLine->quantity,
                     'unit_price' => $purchaseLine->unit_price,
-                    'total_value' => $purchaseLine->line_total,
+                    'total_value' => $purchaseLineTotal,
                     'reference_type' => PurchaseBill::class,
                     'reference_id' => $purchase->id,
                     'reference_no' => $purchase->invoice_no,
@@ -616,6 +620,15 @@ class SalesInvoiceController extends Controller
                     $this->syncInterCompanyVisibilityForEntry($request, $movement, $targetCompanyId);
                 }
             }
+
+            $purchaseTotal = (float) $purchase->items()->sum('line_total');
+            $purchase->update([
+                'subtotal' => $purchaseTotal,
+                'discount_amount' => 0,
+                'tax_amount' => 0,
+                'grand_total' => $purchaseTotal,
+            ]);
+            $purchase->refresh();
 
             $accounting->postPartyLedger($targetParty, [
                 'entry_date' => $purchase->billing_date,

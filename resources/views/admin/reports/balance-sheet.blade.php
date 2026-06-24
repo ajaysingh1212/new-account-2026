@@ -2,6 +2,7 @@
 @section('title','Balance Sheet')
 @section('content')
 @include('admin.reports.partials.styles')
+<div data-export-title="Balance Sheet" data-export-file="balance-sheet">@include('admin.reports.partials.branded-export')</div>
 @php
     $receivable = abs((float)$parties->where('current_balance','<',0)->sum('current_balance'));
     $payable = (float)$parties->where('current_balance','>',0)->sum('current_balance');

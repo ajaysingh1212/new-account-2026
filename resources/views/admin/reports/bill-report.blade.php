@@ -2,6 +2,7 @@
 @section('title', $title)
 @section('content')
 @include('admin.reports.partials.styles')
+<div data-export-title="{{ $title }}" data-export-file="{{ $viewKey }}-report">@include('admin.reports.partials.branded-export')</div>
 <div class="report-hero">
     <h1>{{ $title }}</h1>
     <form class="report-filter" method="GET">

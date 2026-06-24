@@ -33,7 +33,7 @@
             <table class="table table-hover">
                 <thead><tr><th>#</th><th>Buyer Code</th><th>Serial No.</th><th>Batch No. (Purchase)</th><th>VTS/SIM No.</th><th>Sale Price</th><th>GST</th><th>Warehouse</th><th>Notes</th></tr></thead>
                 <tbody>
-                @foreach(($batch->units_data ?? []) as $i => $unit)
+                @foreach(($batch->status === 'reverted' ? collect() : collect($batch->units_data ?? [])->filter(fn($unit) => empty($unit['reverted_at']))) as $i => $unit)
                     <tr>
                         <td>{{ $i + 1 }}</td>
                         <td>{{ $unit['buyer_code'] ?? '-' }}</td>
