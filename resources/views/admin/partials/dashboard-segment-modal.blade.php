@@ -36,10 +36,10 @@
             </div>
             <div class="modal-body">
                 <div class="segment-filter-grid">
-                    <select class="form-control segment-filter" data-filter="party"><option value="">All Parties</option>@foreach($parties as $party)<option value="{{ $party }}">{{ $party }}</option>@endforeach</select>
-                    <select class="form-control segment-filter" data-filter="state"><option value="">All States</option>@foreach($states as $state)<option value="{{ $state }}">{{ $state }}</option>@endforeach</select>
-                    <select class="form-control segment-filter" data-filter="district"><option value="">All Districts</option>@foreach($districts as $district)<option value="{{ $district }}">{{ $district }}</option>@endforeach</select>
-                    <select class="form-control segment-filter" data-filter="city"><option value="">All Cities</option>@foreach($cities as $city)<option value="{{ $city }}">{{ $city }}</option>@endforeach</select>
+                    <select class="form-control segment-filter segment-party-filter" data-filter="party" data-placeholder="All Parties"><option value="">All Parties</option>@foreach($parties as $party)<option value="{{ $party }}">{{ $party }}</option>@endforeach</select>
+                    <select class="form-control segment-filter segment-location-filter" data-filter="state" data-placeholder="All States"><option value="">All States</option>@foreach($states as $state)<option value="{{ $state }}">{{ $state }}</option>@endforeach</select>
+                    <select class="form-control segment-filter segment-location-filter" data-filter="district" data-placeholder="All Districts"><option value="">All Districts</option>@foreach($districts as $district)<option value="{{ $district }}">{{ $district }}</option>@endforeach</select>
+                    <select class="form-control segment-filter segment-location-filter" data-filter="city" data-placeholder="All Cities"><option value="">All Cities</option>@foreach($cities as $city)<option value="{{ $city }}">{{ $city }}</option>@endforeach</select>
                 </div>
 
                 <div class="sales-viz-shell mb-3">

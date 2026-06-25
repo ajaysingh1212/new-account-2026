@@ -113,7 +113,18 @@ class ItemController extends Controller
             'item'     => $item,
             'types'    => ProductType::with('productCategory')->where('company_id', $companyId)->where('status', 'active')->orderBy('name')->get(),
             'categories' => ProductCategory::where('company_id', $companyId)->where('status', 'active')->orderBy('name')->get(),
-            'rawItems' => Item::where('company_id', $companyId)->where('item_type', 'product')->where('id', '!=', $item->id)->orderBy('name')->get(),
+            'rawItems' => Item::where('company_id', $companyId)
+                ->where('item_type', 'product')
+                ->where('id', '!=', $item->id)
+                ->whereHas('productType', fn($q) => $q->where('nature', 'raw_material'))
+                ->orderBy('name')
+                ->get(),
+            'serviceItems' => Item::where('company_id', $companyId)
+                ->where('item_type', 'service')
+                ->where('id', '!=', $item->id)
+                ->where('status', 'active')
+                ->orderBy('name')
+                ->get(),
         ];
     }
 
@@ -172,6 +183,19 @@ class ItemController extends Controller
                     'company_id'       => $item->company_id,
                     'finished_item_id' => $item->id,
                     'raw_item_id'      => $rawId,
+                    'line_type'        => 'raw_material',
+                    'qty_per_unit'     => $qty,
+                ]);
+            }
+        }
+        foreach ($request->input('bom_service_item_id', []) as $index => $serviceId) {
+            $qty = (float) ($request->input('bom_service_qty_per_unit')[$index] ?? 1);
+            if ($serviceId && $qty > 0) {
+                ItemBom::create([
+                    'company_id'       => $item->company_id,
+                    'finished_item_id' => $item->id,
+                    'raw_item_id'      => $serviceId,
+                    'line_type'        => 'service',
                     'qty_per_unit'     => $qty,
                 ]);
             }

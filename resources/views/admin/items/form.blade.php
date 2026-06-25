@@ -106,6 +106,29 @@
 .bom-apply-cost:hover{color:#fff;opacity:.92}
 .price-mode-note{font-size:11px;color:#64748b;margin-top:5px;font-weight:700}
 .finished-category-hint{font-size:11px;color:#7c3aed;margin-top:4px;font-weight:700}
+.service-pick-btn{border:0;border-radius:10px;background:linear-gradient(135deg,#0f172a,#155e75);color:#fff;font-size:12px;font-weight:800;padding:8px 16px;display:inline-flex;align-items:center;gap:7px;margin-left:8px;box-shadow:0 10px 22px rgba(15,23,42,.18)}
+.service-pick-btn:hover{color:#fff;transform:translateY(-1px)}
+.service-drawer-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.38);z-index:1058;opacity:0;pointer-events:none;transition:opacity .22s ease}
+.service-drawer-backdrop.open{opacity:1;pointer-events:auto}
+.service-drawer{position:fixed;top:0;right:0;width:430px;max-width:calc(100vw - 18px);height:100vh;background:#ffffff;z-index:1059;box-shadow:-22px 0 45px rgba(15,23,42,.26);transform:translateX(105%);transition:transform .35s cubic-bezier(.2,.9,.2,1);display:flex;flex-direction:column;overflow:hidden}
+.service-drawer.open{transform:translateX(0)}
+.service-drawer-head{background:linear-gradient(135deg,#0f172a,#155e75);color:#fff;padding:20px;position:relative}
+.service-drawer-head h5{margin:0;font-size:18px;font-weight:800}
+.service-drawer-head small{color:#a7f3d0;font-size:12px}
+.service-close{position:absolute;right:14px;top:14px;width:34px;height:34px;border:0;border-radius:10px;background:rgba(255,255,255,.14);color:#fff}
+.service-drawer-body{padding:16px;overflow:auto;flex:1;background:#f8fafc}
+.service-card{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px;margin-bottom:10px;transition:.2s;animation:serviceIn .3s ease both}
+.service-card:hover{border-color:#67e8f9;box-shadow:0 10px 24px rgba(8,145,178,.12);transform:translateX(-2px)}
+.service-card.checked{border-color:#0891b2;background:#ecfeff}
+.service-check{width:22px;height:22px}
+.service-meta b{display:block;font-size:13px;color:#0f172a}
+.service-meta span{font-size:11px;color:#64748b}
+.service-price{font-weight:800;color:#0e7490;font-size:13px;white-space:nowrap}
+.service-selected-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.service-pill{display:inline-flex;align-items:center;gap:7px;background:#ecfeff;border:1px solid #a5f3fc;color:#155e75;border-radius:999px;padding:6px 10px;font-size:12px;font-weight:800;animation:serviceIn .25s ease both}
+.service-pill button{border:0;background:transparent;color:#dc2626;font-weight:900;padding:0;line-height:1}
+.service-empty{color:#94a3b8;font-size:12px;font-weight:700;margin-top:10px}
+@keyframes serviceIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 </style>
 @endpush
 
@@ -433,7 +456,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @forelse($item->bomMaterials ?? [] as $bom)
+                            @forelse(($item->bomMaterials ?? collect())->where('line_type', 'raw_material') as $bom)
                             <tr>
                                 <td>
                                     <select name="bom_raw_item_id[]" class="form-control select2-bom">
@@ -478,9 +501,14 @@
                 <button type="button" id="addBom" class="bom-add-btn mt-3">
                     <i class="fas fa-plus"></i> Add Raw Material
                 </button>
+                <button type="button" id="openServiceDrawer" class="service-pick-btn">
+                    <i class="fas fa-concierge-bell"></i> Add Services
+                </button>
+                <div id="selectedServices" class="service-selected-list"></div>
+                <div id="serviceHiddenInputs"></div>
                 <div class="bom-cost-summary">
                     <div class="bom-cost-card">
-                        <small>Raw Material Total Cost</small>
+                        <small>Raw Materials + Services Cost</small>
                         <b id="bomTotalCost">Rs 0.00</b>
                     </div>
                     <div class="bom-cost-card">
@@ -521,6 +549,29 @@
 </div>
 </form>
 
+<div id="serviceDrawerBackdrop" class="service-drawer-backdrop"></div>
+<aside id="serviceDrawer" class="service-drawer" aria-hidden="true">
+    <div class="service-drawer-head">
+        <button type="button" id="closeServiceDrawer" class="service-close"><i class="fas fa-times"></i></button>
+        <h5>Production Services</h5>
+        <small>Select service costs to include in finished goods BOM.</small>
+    </div>
+    <div class="service-drawer-body">
+        @forelse($serviceItems as $service)
+            <label class="service-card" data-service-id="{{ $service->id }}" style="animation-delay:{{ $loop->index * 35 }}ms">
+                <input type="checkbox" class="service-check" value="{{ $service->id }}">
+                <span class="service-meta">
+                    <b>{{ $service->name }}</b>
+                    <span>{{ $service->item_code }} | {{ $service->unit }} | Purchase cost</span>
+                </span>
+                <span class="service-price">Rs {{ number_format((float) $service->purchase_price, 2) }}</span>
+            </label>
+        @empty
+            <div class="service-empty">No service items found. Create item with Item Type = Service first.</div>
+        @endforelse
+    </div>
+</aside>
+
 {{-- BOM row template --}}
 <template id="bomTemplate">
 <tr>
@@ -559,9 +610,21 @@
 @push('scripts')
 <script>
 const TYPES = @json($types->keyBy('id')->map(fn($t) => ['nature'=>$t->nature,'name'=>$t->name,'category_id'=>$t->product_category_id]));
+const SERVICE_ITEMS = @json($serviceItems->keyBy('id')->map(fn($s) => [
+    'id' => $s->id,
+    'name' => $s->name,
+    'item_code' => $s->item_code,
+    'unit' => $s->unit,
+    'purchase_price' => (float) $s->purchase_price,
+]));
+const INITIAL_SERVICE_BOM = @json(($item->bomMaterials ?? collect())->where('line_type', 'service')->map(fn($bom) => [
+    'id' => $bom->raw_item_id,
+    'qty' => (float) $bom->qty_per_unit,
+])->values());
 
 // ── State ─────────────────────────────────────────────────────
 let step = 1;
+let selectedServices = {};
 
 // ── Helpers ───────────────────────────────────────────────────
 function money(n){ return '₹ '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
@@ -701,7 +764,13 @@ function updateBomStockDisplay($select){
     updateBomCostSummary();
 }
 
-function updateBomCostSummary(){
+function serviceCostTotal(){
+    return Object.values(selectedServices).reduce((sum, row) => {
+        return sum + ((parseFloat(row.purchase_price) || 0) * (parseFloat(row.qty) || 1));
+    }, 0);
+}
+
+function rawBomCostTotal(){
     let total = 0;
     $('#bomTable tbody tr').each(function(){
         const $row = $(this);
@@ -713,8 +782,45 @@ function updateBomCostSummary(){
         const unit = $opt.data('unit') || '';
         $row.find('.bom-cost-display').text($opt.val() ? `${money(cost)} / ${unit || 'unit'} = ${money(lineTotal)}` : '-');
     });
+    return total;
+}
+
+function updateBomCostSummary(){
+    const total = rawBomCostTotal() + serviceCostTotal();
     $('#bomTotalCost').text(money(total));
     $('#finishedPurchaseCost').text(money($('#purchase_price').val()));
+}
+
+function renderSelectedServices(){
+    const rows = Object.values(selectedServices);
+    $('#selectedServices').html(rows.length ? rows.map(row => `
+        <span class="service-pill" data-service-id="${row.id}">
+            <i class="fas fa-tools"></i> ${row.name} - ${money(row.purchase_price)}
+            <button type="button" class="remove-service" data-service-id="${row.id}">&times;</button>
+        </span>
+    `).join('') : '<div class="service-empty">No service selected.</div>');
+
+    $('#serviceHiddenInputs').html(rows.map(row => `
+        <input type="hidden" name="bom_service_item_id[]" value="${row.id}">
+        <input type="hidden" name="bom_service_qty_per_unit[]" value="${row.qty || 1}">
+    `).join(''));
+
+    $('.service-card').each(function(){
+        const id = String($(this).data('service-id'));
+        const checked = !!selectedServices[id];
+        $(this).toggleClass('checked', checked).find('.service-check').prop('checked', checked);
+    });
+    updateBomCostSummary();
+}
+
+function openServiceDrawer(){
+    $('#serviceDrawerBackdrop,#serviceDrawer').addClass('open');
+    $('#serviceDrawer').attr('aria-hidden','false');
+}
+
+function closeServiceDrawer(){
+    $('#serviceDrawerBackdrop,#serviceDrawer').removeClass('open');
+    $('#serviceDrawer').attr('aria-hidden','true');
 }
 
 $(document).on('change','.select2-bom', function(){ updateBomStockDisplay($(this)); });
@@ -733,12 +839,26 @@ $('#addBom').click(function(){
 $(document).on('click','.remove-row', function(){ $(this).closest('tr').remove(); updateBomCostSummary(); });
 
 $('#applyBomCost').on('click', function(){
-    let total = 0;
-    $('#bomTable tbody tr').each(function(){
-        const $opt = $(this).find('.select2-bom option:selected');
-        total += (parseFloat($opt.data('cost')) || 0) * (parseFloat($(this).find('.bom-qty').val()) || 0);
-    });
+    const total = rawBomCostTotal() + serviceCostTotal();
     $('#purchase_price').val(total.toFixed(2)).trigger('input');
+});
+
+$('#openServiceDrawer').on('click', openServiceDrawer);
+$('#closeServiceDrawer,#serviceDrawerBackdrop').on('click', closeServiceDrawer);
+$(document).on('change','.service-check', function(){
+    const id = String($(this).val());
+    const service = SERVICE_ITEMS[id];
+    if(!service) return;
+    if($(this).is(':checked')){
+        selectedServices[id] = Object.assign({}, service, {qty: 1});
+    } else {
+        delete selectedServices[id];
+    }
+    renderSelectedServices();
+});
+$(document).on('click','.remove-service', function(){
+    delete selectedServices[String($(this).data('service-id'))];
+    renderSelectedServices();
 });
 
 $('#itemNameInput').on('input', function(){
@@ -755,6 +875,13 @@ renderStep();
 calc();
 updateNatureBadge();
 toggleProductOnly();
+INITIAL_SERVICE_BOM.forEach(row => {
+    const id = String(row.id);
+    if(SERVICE_ITEMS[id]){
+        selectedServices[id] = Object.assign({}, SERVICE_ITEMS[id], {qty: row.qty || 1});
+    }
+});
+renderSelectedServices();
 
 // Init select2 on existing BOM rows
 $('.select2-bom').select2({ width:'100%', placeholder:'— Select raw material —' });

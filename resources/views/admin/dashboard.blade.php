@@ -413,7 +413,46 @@ $(document).on('click','.view-detail-btn',function(){
     $('#detailPaymentAction').html(row.kind === 'receivable' ? '<i class="fas fa-money-bill-wave mr-1"></i>Payment In' : '<i class="fas fa-hand-holding-usd mr-1"></i>Payment Out');
     $('#invoiceDetailModal').modal('show');
 });
-$(document).on('change','.segment-report-modal .segment-filter',function(){
+function segmentModalItems($modal) {
+    return $modal.find('.segment-card-filterable').map(function(){
+        return ($(this).data('segment') || {}).items || [];
+    }).get().flat();
+}
+
+function segmentUniqueValues(items, key) {
+    return [...new Set((items || []).map(item => item[key]).filter(Boolean))].sort((a, b) => String(a).localeCompare(String(b)));
+}
+
+function segmentSetOptions($select, values, selected) {
+    const placeholder = $select.data('placeholder') || 'All';
+    const validSelected = selected && values.includes(selected) ? selected : '';
+    $select.html(`<option value="">${placeholder}</option>` + values.map(value => `<option value="${String(value).replace(/"/g,'&quot;')}">${value}</option>`).join(''));
+    $select.val(validSelected);
+}
+
+function refreshSegmentLocationOptions($modal, changedFilter) {
+    const allItems = segmentModalItems($modal);
+    const party = $modal.find('[data-filter="party"]').val();
+    const stateSelect = $modal.find('[data-filter="state"]');
+    const districtSelect = $modal.find('[data-filter="district"]');
+    const citySelect = $modal.find('[data-filter="city"]');
+    const currentState = stateSelect.val();
+    const currentDistrict = districtSelect.val();
+    const currentCity = citySelect.val();
+
+    const partyItems = party ? allItems.filter(item => item.party === party) : allItems;
+    segmentSetOptions(stateSelect, segmentUniqueValues(partyItems, 'state'), changedFilter === 'party' ? '' : currentState);
+
+    const state = stateSelect.val();
+    const stateItems = state ? partyItems.filter(item => item.state === state) : partyItems;
+    segmentSetOptions(districtSelect, segmentUniqueValues(stateItems, 'district'), ['party','state'].includes(changedFilter) ? '' : currentDistrict);
+
+    const district = districtSelect.val();
+    const districtItems = district ? stateItems.filter(item => item.district === district) : stateItems;
+    segmentSetOptions(citySelect, segmentUniqueValues(districtItems, 'city'), ['party','state','district'].includes(changedFilter) ? '' : currentCity);
+}
+
+function applySegmentFilters() {
     const $modal = $(this).closest('.segment-report-modal');
     const filters = {};
     $modal.find('.segment-filter').each(function(){ filters[$(this).data('filter')] = this.value; });
@@ -451,6 +490,17 @@ $(document).on('change','.segment-report-modal .segment-filter',function(){
         $(this).find('small').first().text(`${qty.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})} qty | ${pct.toFixed(2)}%`);
     });
     $modal.find('.segment-total-value').text(dashMoney(modalTotal));
+}
+
+$(document).on('change','.segment-report-modal .segment-filter',function(){
+    const $modal = $(this).closest('.segment-report-modal');
+    refreshSegmentLocationOptions($modal, $(this).data('filter'));
+    applySegmentFilters.call(this);
+});
+$('.segment-report-modal').on('shown.bs.modal', function(){
+    const $modal = $(this);
+    refreshSegmentLocationOptions($modal, null);
+    applySegmentFilters.call($modal.find('.segment-filter').first()[0] || this);
 });
 </script>
 @endpush

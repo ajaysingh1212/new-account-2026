@@ -57,6 +57,7 @@ class ProductionBatchController extends Controller
             'requires_gps'      => $this->isGpsItem($item),
             'bom'              => $item->bomMaterials->map(fn($bom) => [
                 'raw_item_id'      => $bom->raw_item_id,
+                'line_type'        => $bom->line_type ?? 'raw_material',
                 'name'             => $bom->rawItem?->name ?? 'Unknown',
                 'unit'             => $bom->rawItem?->unit ?? 'PCS',
                 'qty_per_unit'     => (float) $bom->qty_per_unit,
@@ -141,15 +142,18 @@ class ProductionBatchController extends Controller
             foreach ($finished->bomMaterials as $bom) {
                 $raw  = Item::lockForUpdate()->findOrFail($bom->raw_item_id);
                 $need = (float) $bom->qty_per_unit * $qty;
+                $value = $need * (float) $raw->purchase_price;
+                $rawCost += $value;
+
+                if (($bom->line_type ?? 'raw_material') === 'service' || $raw->item_type === 'service') {
+                    continue;
+                }
 
                 abort_if(
                     (float) $raw->current_stock < $need,
                     422,
                     "Insufficient stock for raw material: {$raw->name} (need {$need}, have {$raw->current_stock})"
                 );
-
-                $value    = $need * (float) $raw->purchase_price;
-                $rawCost += $value;
 
                 $accounting->moveStock($raw, [
                     'movement_date'  => $data['production_date'],
@@ -269,9 +273,14 @@ class ProductionBatchController extends Controller
             foreach ($finished->bomMaterials as $bom) {
                 $raw = Item::lockForUpdate()->findOrFail($bom->raw_item_id);
                 $need = (float) $bom->qty_per_unit * $qty;
-                abort_if((float) $raw->current_stock < $need, 422, "Insufficient stock for raw material: {$raw->name} (need {$need}, have {$raw->current_stock})");
                 $value = $need * (float) $raw->purchase_price;
                 $rawCost += $value;
+
+                if (($bom->line_type ?? 'raw_material') === 'service' || $raw->item_type === 'service') {
+                    continue;
+                }
+
+                abort_if((float) $raw->current_stock < $need, 422, "Insufficient stock for raw material: {$raw->name} (need {$need}, have {$raw->current_stock})");
                 $accounting->moveStock($raw, [
                     'movement_date' => $data['production_date'],
                     'movement_type' => 'production_consumption',
@@ -494,6 +503,9 @@ class ProductionBatchController extends Controller
                 if (!$bom->rawItem) {
                     continue;
                 }
+                if (($bom->line_type ?? 'raw_material') === 'service' || $bom->rawItem->item_type === 'service') {
+                    continue;
+                }
                 $raw = Item::lockForUpdate()->findOrFail($bom->raw_item_id);
                 $qty = (float) $bom->qty_per_unit;
                 $accounting->moveStock($raw, [
@@ -543,6 +555,9 @@ class ProductionBatchController extends Controller
         foreach ($finished?->bomMaterials ?? [] as $bom) {
             $raw = $bom->rawItem;
             if (!$raw) {
+                continue;
+            }
+            if (($bom->line_type ?? 'raw_material') === 'service' || $raw->item_type === 'service') {
                 continue;
             }
             $qty = (float) $bom->qty_per_unit * (float) $batch->quantity;
@@ -750,6 +765,7 @@ class ProductionBatchController extends Controller
             'name' => $bom->rawItem?->name ?: 'Raw material',
             'qty' => (float) $bom->qty_per_unit * $qty,
             'unit' => $bom->rawItem?->unit,
+            'line_type' => $bom->line_type ?? 'raw_material',
         ])->values()->all();
     }
 

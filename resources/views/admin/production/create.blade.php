@@ -407,16 +407,19 @@ function renderBomTable(){
     bom.forEach(m=>{
         const lineCost = m.qty_per_unit * m.purchase_price;
         totalCpu += lineCost;
+        const isService = m.line_type === 'service';
         const stock = m.current_stock;
-        const stockHtml = stock<=0
-            ? `<span class="stock-zero">0 ${m.unit}</span>`
-            : stock <= (m.low_stock_qty||0)
-                ? `<span class="stock-low">${stock} ${m.unit}</span>`
-                : `<span class="stock-ok">${stock} ${m.unit}</span>`;
+        const stockHtml = isService
+            ? `<span class="stock-ok">Service cost</span>`
+            : stock<=0
+                ? `<span class="stock-zero">0 ${m.unit}</span>`
+                : stock <= (m.low_stock_qty||0)
+                    ? `<span class="stock-low">${stock} ${m.unit}</span>`
+                    : `<span class="stock-ok">${stock} ${m.unit}</span>`;
 
         html+=`<tr>
             <td>${m.name}</td>
-            <td><span class="unit-badge">${m.unit}</span></td>
+            <td><span class="unit-badge">${isService ? 'SERVICE' : m.unit}</span></td>
             <td>${m.qty_per_unit}</td>
             <td>${money(m.purchase_price)}</td>
             <td>${stockHtml}</td>
@@ -440,22 +443,23 @@ function renderQtyBom(){
 
     let html='', totalCost=0, totalGst=0, warnings=0;
     bom.forEach(m=>{
+        const isService = m.line_type === 'service';
         const need = m.qty_per_unit * q;
         const lineCost = need * m.purchase_price;
         const lineGst = lineCost * (m.purchase_gst||0)/100;
         totalCost += lineCost;
         totalGst  += lineGst;
 
-        const ok = m.current_stock >= need;
+        const ok = isService || m.current_stock >= need;
         if(!ok) warnings++;
         const statusHtml = ok
-            ? `<span class="stock-ok">✓ OK</span>`
+            ? `<span class="stock-ok">${isService ? 'Service included' : 'OK'}</span>`
             : `<span class="stock-zero">⚠ LOW (${m.current_stock} / ${need} needed)</span>`;
 
         html+=`<tr>
             <td>${m.name}</td>
-            <td>${need} ${m.unit}</td>
-            <td>${m.current_stock} ${m.unit}</td>
+            <td>${need} ${isService ? 'service' : m.unit}</td>
+            <td>${isService ? 'Cost only' : `${m.current_stock} ${m.unit}`}</td>
             <td>${statusHtml}</td>
             <td class="num">${money(lineCost)}</td>
         </tr>`;
@@ -636,7 +640,7 @@ function buildConfirm(){
     const rawCost=calcTotalRawCost();
     const cpu=q>0?rawCost/q:0;
     let warnings=0;
-    selectedItem.bom.forEach(m=>{ if(m.current_stock<m.qty_per_unit*q) warnings++; });
+    selectedItem.bom.forEach(m=>{ if(m.line_type !== 'service' && m.current_stock<m.qty_per_unit*q) warnings++; });
 
     $('#confirmSummary').html(`
         <table style="width:100%;font-size:13px">
