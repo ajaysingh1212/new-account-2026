@@ -24,18 +24,22 @@ use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
 use App\Services\SerialUnitService;
+use App\Services\SalesProfitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class SalesInvoiceController extends Controller
 {
-    public function index(EntryVisibilityService $visibility)
+    public function index(EntryVisibilityService $visibility, SalesProfitService $profits)
     {
         $invoices = $visibility->scopeForUser(
-            SalesInvoice::with(['party','creator','items.item'])->latest(),
+            SalesInvoice::with(['party','creator','items.item.bomMaterials.rawItem'])->latest(),
             SalesInvoice::class
         )->get();
-        return view('admin.sales.index', compact('invoices'));
+        $invoiceDetails = $invoices->mapWithKeys(fn(SalesInvoice $invoice) => [
+            $invoice->id => $profits->invoiceDetail($invoice),
+        ]);
+        return view('admin.sales.index', compact('invoices', 'invoiceDetails'));
     }
 
     public function create()
@@ -137,6 +141,10 @@ class SalesInvoiceController extends Controller
                 ->groupBy('item_id')
                 ->map(fn($lines) => $lines->sum('quantity'))
                 ->all();
+            $originalUnitsByItem = $sale->items
+                ->groupBy('item_id')
+                ->map(fn($lines) => $lines->flatMap(fn($line) => $line->selected_units ?? [])->values()->all())
+                ->all();
 
             $this->reverseSalePosting($sale, $accounting);
 
@@ -156,7 +164,7 @@ class SalesInvoiceController extends Controller
             $unitPool = $this->finishedGoodsUnitPool($sale->company_id, $sale->id);
 
             // ✅ originalItemQtys pass karo storeLines mein
-            $totals = $this->storeLines($request, $sale, $accounting, $unitPool, $originalItemQtys);
+            $totals = $this->storeLines($request, $sale, $accounting, $unitPool, $originalItemQtys, $originalUnitsByItem);
             $sale->update($totals);
 
             if ($sale->sale_type === 'credit' && $sale->party_id) {
@@ -203,6 +211,18 @@ class SalesInvoiceController extends Controller
         $bankAccount = BankAccount::where('company_id', $sale->company_id)->where('print_on_invoice', true)->where('status', 'active')->first();
         $defaultTerms = TermsTemplate::where('company_id', $sale->company_id)->where('status', 'active')->whereIn('document_type', ['sales','all'])->orderByDesc('is_default')->first();
         return view('admin.sales.print', ['invoice' => $sale, 'bankAccount' => $bankAccount, 'company' => $sale->company, 'defaultTerms' => $defaultTerms]);
+    }
+
+    public function detailPdf(SalesInvoice $sale, EntryVisibilityService $visibility, SalesProfitService $profits)
+    {
+        $visibility->authorizeView($sale);
+        $sale->load(['party','items.item.bomMaterials.rawItem','company']);
+
+        return view('admin.sales.detail-pdf', [
+            'invoice' => $sale,
+            'company' => $sale->company,
+            'detail' => $profits->invoiceDetail($sale),
+        ]);
     }
 
     private function formData(?SalesInvoice $invoice = null): array
@@ -278,7 +298,8 @@ class SalesInvoiceController extends Controller
         SalesInvoice $invoice,
         AccountingService $accounting,
         ?array $unitPool = null,
-        array $originalItemQtys = []
+        array $originalItemQtys = [],
+        array $originalUnitsByItem = []
     ): array {
         $subtotal = $tax = $lineDiscount = $totalWeight = 0;
         $unitPool ??= $this->finishedGoodsUnitPool($invoice->company_id, $invoice->id);
@@ -286,6 +307,15 @@ class SalesInvoiceController extends Controller
         foreach ($request->item_id as $i => $itemId) {
             $item = Item::with('productType')->findOrFail($itemId);
             $qty = (float) $request->quantity[$i];
+            $originalKeysForItem = collect($originalUnitsByItem[$item->id] ?? [])->pluck('key')->filter()->all();
+            if ($originalKeysForItem && isset($unitPool[$item->id])) {
+                foreach ($unitPool[$item->id] as &$poolUnit) {
+                    if (in_array($poolUnit['key'] ?? null, $originalKeysForItem, true)) {
+                        $poolUnit['sold'] = false;
+                    }
+                }
+                unset($poolUnit);
+            }
 
             // ✅ FIX: reversal se jo stock wapas aaya use bhi effective stock mein count karo
             $reversedQty = (float) ($originalItemQtys[$item->id] ?? 0);
@@ -295,8 +325,17 @@ class SalesInvoiceController extends Controller
             abort_if($item->productType?->nature !== 'finished_goods', 422, 'Only finished goods can be sold from Sales.');
             abort_if((float) ((int) $qty) !== $qty, 422, "Quantity must be a whole number for {$item->name}.");
 
+            $requestedUnits = $this->decodeSelectedUnits($request->selected_units[$i] ?? null);
+            if (count($requestedUnits) < (int) $qty && isset($originalUnitsByItem[$item->id])) {
+                $requestedUnits = collect($requestedUnits)
+                    ->concat($originalUnitsByItem[$item->id])
+                    ->unique('key')
+                    ->values()
+                    ->all();
+            }
+
             $selectedUnits = $this->reconcileSelectedUnits(
-                $this->decodeSelectedUnits($request->selected_units[$i] ?? null),
+                $requestedUnits,
                 $unitPool[$item->id] ?? [],
                 (int) $qty,
                 $this->isGpsItem($item)
@@ -304,7 +343,10 @@ class SalesInvoiceController extends Controller
             abort_if($this->isGpsItem($item) && collect($selectedUnits)->contains(fn($unit) => empty($unit['vts_sim'])), 422, "VTS/SIM number is required for selected GPS units of {$item->name}.");
             $selectedKeys = collect($selectedUnits)->pluck('key')->filter()->values()->all();
             abort_if(count($selectedKeys) !== (int) $qty, 422, "Only " . count($selectedKeys) . " available finished goods unit(s) found for {$item->name}; {$qty} required.");
-            $availableKeys = collect($unitPool[$item->id] ?? [])->where('sold', false)->pluck('key')->all();
+            $availableKeys = collect($unitPool[$item->id] ?? [])
+                ->filter(fn($unit) => empty($unit['sold']) || in_array($unit['key'] ?? null, $originalKeysForItem, true))
+                ->pluck('key')
+                ->all();
             abort_if(count(array_diff($selectedKeys, $availableKeys)) > 0, 422, "One or more selected units for {$item->name} are already sold or invalid.");
 
             // Reserve units in memory so two lines of the same invoice cannot use

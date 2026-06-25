@@ -14,6 +14,7 @@ use App\Models\ProductionBatch;
 use App\Models\SalesInvoice;
 use App\Services\EntryVisibilityService;
 use App\Services\AgeingSlabService;
+use App\Services\SalesProfitService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -159,16 +160,19 @@ class ReportController extends Controller
         return $this->dayBook($request, $visibility);
     }
 
-    public function profitLoss(Request $request, EntryVisibilityService $visibility)
+    public function profitLoss(Request $request, EntryVisibilityService $visibility, SalesProfitService $profits)
     {
         $filters = $this->filters($request);
-        $sales = (float) $visibility->scopeForUser(SalesInvoice::whereBetween('billing_date', [$filters['from'], $filters['to']]), SalesInvoice::class)->sum('grand_total');
+        $salesBills = $visibility->scopeForUser(SalesInvoice::with(['items.item'])->whereBetween('billing_date', [$filters['from'], $filters['to']]), SalesInvoice::class)->get();
+        $sales = (float) $salesBills->sum('grand_total');
+        $salesCost = (float) $salesBills->sum(fn(SalesInvoice $bill) => $profits->invoiceCost($bill));
+        $grossProfit = $sales - $salesCost;
         $purchases = (float) $visibility->scopeForUser(PurchaseBill::whereBetween('billing_date', [$filters['from'], $filters['to']]), PurchaseBill::class)->sum('grand_total');
         $expenses = (float) $visibility->scopeForUser(Expense::whereBetween('expense_date', [$filters['from'], $filters['to']])->where('status', 'approved'), Expense::class)->sum('total_amount');
-        return view('admin.reports.profit-loss', compact('filters','sales','purchases','expenses'));
+        return view('admin.reports.profit-loss', compact('filters','sales','salesCost','grossProfit','purchases','expenses'));
     }
 
-    public function billWiseProfit(Request $request, EntryVisibilityService $visibility)
+    public function billWiseProfit(Request $request, EntryVisibilityService $visibility, SalesProfitService $profits)
     {
         $filters = $this->filters($request);
         $parties = $visibility->scopeForUser(Party::orderBy('display_name'), Party::class)->get();
@@ -176,19 +180,15 @@ class ReportController extends Controller
             ->when($filters['partyId'], fn($q) => $q->where('party_id', $filters['partyId']))
             ->latest('billing_date')
             ->get()
-            ->map(function (SalesInvoice $bill) {
-                $cost = $bill->items->sum(function ($line) {
-                    $unitCost = collect($line->selected_units ?? [])->avg('cost_per_unit');
-                    $unitCost = $unitCost ?: (float) ($line->item?->purchase_price ?? 0);
-                    return $unitCost * (float) $line->quantity;
-                });
-                $sale = (float) $bill->grand_total;
+            ->map(function (SalesInvoice $bill) use ($profits) {
+                $cost = $profits->invoiceCost($bill);
+                $sale = $profits->invoiceSale($bill);
                 return [
                     'bill' => $bill,
                     'cost' => $cost,
                     'sale' => $sale,
                     'profit' => $sale - $cost,
-                    'detail' => $this->salesInvoiceDetail($bill, $cost, $sale),
+                    'detail' => $profits->invoiceDetail($bill),
                 ];
             });
 
@@ -332,7 +332,7 @@ class ReportController extends Controller
 
     private function filters(Request $request): array
     {
-        if ($request->filled('period')) {
+        if ($request->filled('period') && $request->input('period') !== 'month') {
             [$from, $to] = $this->periodRange($request->input('period'));
             return [
                 'month' => now()->format('Y-m'),
@@ -371,50 +371,6 @@ class ReportController extends Controller
             'all' => ['1970-01-01', $today->toDateString()],
             default => [$today->copy()->startOfMonth()->toDateString(), $today->copy()->endOfMonth()->toDateString()],
         };
-    }
-
-    private function salesInvoiceDetail(SalesInvoice $bill, float $cost, float $sale): array
-    {
-        return [
-            'invoice' => $bill->invoice_no,
-            'date' => $bill->billing_date?->format('d M Y'),
-            'sale_type' => ucfirst((string) $bill->sale_type),
-            'reference' => $bill->reference_no ?: '-',
-            'phone' => $bill->phone ?: ($bill->party?->phone ?: '-'),
-            'billing_address' => $bill->billing_address ?: ($bill->party?->billing_address ?: '-'),
-            'shipping_address' => $bill->shipping_address ?: ($bill->party?->shipping_address ?: '-'),
-            'party' => [
-                'name' => $bill->party?->display_name ?: 'Cash / Walk-in',
-                'legal_name' => $bill->party?->legal_name ?: '-',
-                'phone' => $bill->party?->phone ?: '-',
-                'email' => $bill->party?->email ?: '-',
-                'gstin' => $bill->party?->gstin ?: '-',
-                'city' => trim(collect([$bill->party?->city, $bill->party?->state, $bill->party?->pincode])->filter()->implode(', ')) ?: '-',
-            ],
-            'amounts' => [
-                'subtotal' => (float) $bill->subtotal,
-                'discount' => (float) $bill->discount_amount,
-                'tax' => (float) $bill->tax_amount,
-                'total' => (float) $bill->grand_total,
-                'cost' => $cost,
-                'profit' => $sale - $cost,
-            ],
-            'items' => $bill->items->map(function ($line) {
-                $unitCost = collect($line->selected_units ?? [])->avg('cost_per_unit');
-                $unitCost = $unitCost ?: (float) ($line->item?->purchase_price ?? 0);
-                return [
-                    'name' => $line->item?->name ?: 'Item',
-                    'description' => $line->description ?: '-',
-                    'hsn' => $line->item?->hsn_code ?: '-',
-                    'qty' => (float) $line->quantity,
-                    'unit' => $line->unit ?: $line->item?->unit,
-                    'rate' => (float) $line->unit_price,
-                    'tax' => (float) $line->tax_amount,
-                    'amount' => (float) $line->line_total,
-                    'cost' => $unitCost * (float) $line->quantity,
-                ];
-            })->values(),
-        ];
     }
 
     private function ageingRow($bill, string $model, string $kind, ?Carbon $asOf = null): array

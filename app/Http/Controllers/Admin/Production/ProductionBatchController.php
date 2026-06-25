@@ -685,14 +685,26 @@ class ProductionBatchController extends Controller
                 ->where('company_id', $companyId)
                 ->where('status', 'posted')
                 ->when($excludeBatchId, fn($query) => $query->whereKeyNot($excludeBatchId))
-                ->get(['units_data'])
+                ->get(['id', 'batch_no', 'units_data'])
                 ->flatMap(fn(ProductionBatch $batch) => collect($batch->units_data ?? [])
-                    ->filter(fn($unit) => is_array($unit) && empty($unit['reverted_at']))
-                    ->pluck($field))
-                ->map(fn($value) => mb_strtolower(trim((string) $value)))
-                ->filter();
+                    ->filter(fn($unit) => is_array($unit) && empty($unit['reverted_at']) && trim((string) ($unit[$field] ?? '')) !== '')
+                    ->map(fn($unit) => [
+                        'value' => mb_strtolower(trim((string) $unit[$field])),
+                        'display' => trim((string) $unit[$field]),
+                        'batch' => $batch->batch_no,
+                    ]));
 
-            abort_if($submitted->intersect($alreadyUsed)->isNotEmpty(), 422, "{$label} is already used in an active Production / CRM Assembly.");
+            $conflicts = $alreadyUsed
+                ->whereIn('value', $submitted->all())
+                ->values();
+
+            abort_if(
+                $conflicts->isNotEmpty(),
+                422,
+                "{$label} is already used in an active Production / CRM Assembly. Conflicts: " .
+                    $conflicts->map(fn($row) => "{$row['display']} in batch {$row['batch']}")->join(', ') .
+                    ". Use a unique {$label} or update the original batch first."
+            );
         }
     }
 

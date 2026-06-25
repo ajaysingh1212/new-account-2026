@@ -6,9 +6,10 @@
 <div class="report-hero">
     <h1>{{ $title }}</h1>
     <form class="report-filter" method="GET">
+        <div><label>Filter</label><select name="period" class="form-control"><option value="month" @selected($filters['period']==='month')>Selected Month</option><option value="all" @selected($filters['period']==='all')>All Sales</option></select></div>
         <div><label>Month</label><input type="month" name="month" class="form-control" value="{{ $filters['month'] }}"></div>
         <div><label>Party</label><select name="party_id" class="form-control"><option value="">All Parties</option>@foreach($parties as $party)<option value="{{ $party->id }}" @selected($filters['partyId']==$party->id)>{{ $party->display_name }}</option>@endforeach</select></div>
-        <div></div><button class="btn btn-info report-btn">Apply</button>
+        <button class="btn btn-info report-btn">Apply</button>
     </form>
 </div>
 <div class="metric-strip">

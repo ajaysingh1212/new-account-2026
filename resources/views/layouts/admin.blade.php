@@ -279,6 +279,34 @@
                     <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
                 </div>
                 @endif
+                @if(session('error_details'))
+                    @php($details = session('error_details'))
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert" style="background:#fff5f5;color:#991b1b;border-left:5px solid #dc2626!important;box-shadow:0 10px 28px rgba(220,38,38,.12)!important;">
+                        <div class="d-flex align-items-start">
+                            <i class="fas fa-triangle-exclamation mr-3 mt-1"></i>
+                            <div>
+                                <strong>{{ $details['title'] ?? 'Request failed' }}</strong>
+                                <div>{{ $details['message'] ?? session('error') }}</div>
+                                <small class="d-block mt-2 text-muted">Status {{ $details['status'] ?? 500 }}. Please review the highlighted data and try again.</small>
+                                @if(!empty($details['file']))
+                                    <small class="d-block text-muted">{{ $details['file'] }}:{{ $details['line'] }}</small>
+                                @endif
+                            </div>
+                        </div>
+                        <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+                    </div>
+                @endif
+                @if($errors->any())
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert" style="background:#fff5f5;color:#991b1b;border-left:5px solid #dc2626!important;">
+                        <strong>Please fix these details:</strong>
+                        <ul class="mb-0 mt-2">
+                            @foreach($errors->all() as $error)
+                                <li>{{ $error }}</li>
+                            @endforeach
+                        </ul>
+                        <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
+                    </div>
+                @endif
 
                 @yield('content')
             </div>

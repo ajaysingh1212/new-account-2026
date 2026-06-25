@@ -22,12 +22,13 @@ use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\EntryVisibilityService;
 use App\Services\AgeingSlabService;
+use App\Services\SalesProfitService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request, EntryVisibilityService $visibility, AgeingSlabService $ageingSlabs)
+    public function index(Request $request, EntryVisibilityService $visibility, AgeingSlabService $ageingSlabs, SalesProfitService $profits)
     {
         $user = auth()->user();
         $companyId = $user->isSuperAdmin() ? $request->integer('company_id') : $user->current_company_id;
@@ -122,7 +123,7 @@ class DashboardController extends Controller
         $ageingSlabLabels = AgeingSlabService::SLABS;
         $salesProducts = $this->productSummary(SalesInvoiceItem::class, 'salesInvoice', 'billing_date', $companyId, $visibility, $user, $from, $to);
         $purchaseProducts = $this->productSummary(PurchaseBillItem::class, 'purchaseBill', 'billing_date', $companyId, $visibility, $user, $from, $to);
-        $profitRows = $this->profitRows($companyId, $visibility, $user, $from, $to);
+        $profitRows = $this->profitRows($companyId, $visibility, $user, $from, $to, $profits);
         $stats['total_profit'] = $profitRows->sum('profit');
         $salesSegments = $this->normalizeSegmentTotal(
             $this->tradeSegments(SalesInvoiceItem::class, 'salesInvoice', SalesInvoice::class, 'billing_date', $companyId, $visibility, $user, $from, $to, 'sale'),
@@ -133,7 +134,7 @@ class DashboardController extends Controller
             (float) ($stats['purchases'] ?? 0)
         );
         $profitSegments = $this->normalizeSegmentTotal(
-            $this->profitSegments($companyId, $visibility, $user, $from, $to),
+            $this->profitSegments($companyId, $visibility, $user, $from, $to, $profits),
             (float) ($stats['total_profit'] ?? 0)
         );
         $topSellingItemIds = $salesProducts->take(3)->pluck('item_id')->filter()->all();
@@ -328,18 +329,14 @@ class DashboardController extends Controller
             ->values();
     }
 
-    private function profitRows(?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to)
+    private function profitRows(?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to, SalesProfitService $profits)
     {
         $query = SalesInvoice::with(['party','items.item'])
             ->whereBetween('billing_date', [$from, $to]);
         $query = $user->isSuperAdmin() ? $this->scope($query, $companyId) : $visibility->scopeForUser($query, SalesInvoice::class);
 
-        return $query->latest('billing_date')->get()->map(function (SalesInvoice $bill) {
-            $cost = $bill->items->sum(function ($line) {
-                $unitCost = collect($line->selected_units ?? [])->avg('cost_per_unit');
-                $unitCost = $unitCost ?: (float) ($line->item?->purchase_price ?? 0);
-                return $unitCost * (float) $line->quantity;
-            });
+        return $query->latest('billing_date')->get()->map(function (SalesInvoice $bill) use ($profits) {
+            $cost = $profits->invoiceCost($bill);
 
             return [
                 'invoice' => $bill->invoice_no,
@@ -352,7 +349,7 @@ class DashboardController extends Controller
         })->values();
     }
 
-    private function tradeSegments(string $lineModel, string $invoiceRelation, string $invoiceModel, string $dateColumn, ?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to, string $kind)
+    private function tradeSegments(string $lineModel, string $invoiceRelation, string $invoiceModel, string $dateColumn, ?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to, string $kind, ?SalesProfitService $profits = null)
     {
         $query = $lineModel::with(['item.productType.productCategory','item.productCategory', $invoiceRelation . '.party', $invoiceRelation . '.items'])
             ->whereHas($invoiceRelation, fn($q) => $q->whereBetween($dateColumn, [$from, $to]));
@@ -414,9 +411,7 @@ class DashboardController extends Controller
             }
             $amount = $this->adjustedLineAmount($line, $bill);
             if ($kind === 'profit') {
-                $unitCost = collect($line->selected_units ?? [])->avg('cost_per_unit');
-                $unitCost = $unitCost ?: (float) ($line->item?->purchase_price ?? 0);
-                $amount -= $unitCost * (float) $line->quantity;
+                $amount -= $profits?->lineCost($line) ?? 0;
             }
             $amount = round($amount, 2);
             $row['qty'] += (float) $line->quantity;
@@ -461,9 +456,9 @@ class DashboardController extends Controller
         return round($lineTotal * ($grandTotal / $linesTotal), 2);
     }
 
-    private function profitSegments(?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to)
+    private function profitSegments(?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to, SalesProfitService $profits)
     {
-        return $this->tradeSegments(SalesInvoiceItem::class, 'salesInvoice', SalesInvoice::class, 'billing_date', $companyId, $visibility, $user, $from, $to, 'profit');
+        return $this->tradeSegments(SalesInvoiceItem::class, 'salesInvoice', SalesInvoice::class, 'billing_date', $companyId, $visibility, $user, $from, $to, 'profit', $profits);
     }
 
     private function normalizeSegmentTotal($segments, float $expectedTotal)
