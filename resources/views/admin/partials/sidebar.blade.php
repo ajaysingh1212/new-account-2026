@@ -22,7 +22,7 @@
                     style="height:40px;width:auto;"
                 >
 
-            @else 
+            @else
 
                 <i class="fas fa-building me-1" style="color:#7C3AED"></i>
 

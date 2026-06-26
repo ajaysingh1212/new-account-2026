@@ -121,11 +121,37 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('purchases', PurchaseBillController::class)->only(['create','store'])->middleware('permission:purchase.create');
         Route::resource('purchases', PurchaseBillController::class)->only(['edit','update'])->middleware('permission:purchase.edit');
         Route::resource('purchases', PurchaseBillController::class)->only(['index','show']);
+        // web.php → Route::prefix('admin')->name('admin.')->group(function() {
+
+        // Admin group ke ANDAR — baaki routes ke saath
+
+        // ─── Purchase Returns ───────────────────────────────────────────
+        // RULE: Har static/named route resource se PEHLE aana chahiye
+
         Route::get('purchase-returns/bill-items', [PurchaseReturnController::class, 'billItems'])
-        ->name('purchase-returns.bill-items');
-        Route::resource('purchase-returns', PurchaseReturnController::class)->only(['create','store'])->middleware('permission:purchase.create');
-        Route::resource('purchase-returns', PurchaseReturnController::class)->only(['edit','update'])->middleware('permission:purchase.edit');
-        Route::resource('purchase-returns', PurchaseReturnController::class)->only(['index','show']);
+            ->name('purchase-returns.bill-items');
+
+        Route::get('purchase-returns', [PurchaseReturnController::class, 'index'])
+            ->name('purchase-returns.index');
+
+        Route::get('purchase-returns/create', [PurchaseReturnController::class, 'create'])
+            ->middleware('permission:purchase.create')
+            ->name('purchase-returns.create');
+
+        Route::post('purchase-returns', [PurchaseReturnController::class, 'store'])
+            ->middleware('permission:purchase.create')
+            ->name('purchase-returns.store');
+
+        Route::get('purchase-returns/{purchaseReturn}', [PurchaseReturnController::class, 'show'])
+            ->name('purchase-returns.show');
+
+        Route::get('purchase-returns/{purchaseReturn}/edit', [PurchaseReturnController::class, 'edit'])
+            ->middleware('permission:purchase.edit')
+            ->name('purchase-returns.edit');
+
+        Route::put('purchase-returns/{purchaseReturn}', [PurchaseReturnController::class, 'update'])
+            ->middleware('permission:purchase.edit')
+            ->name('purchase-returns.update');
     });
     Route::middleware('permission:purchase_estimates.view')->group(function () {
         Route::get('purchase-estimates/{purchaseEstimate}/print', [PurchaseEstimateController::class, 'print'])->middleware('permission:purchase_estimates.print')->name('purchase-estimates.print');
