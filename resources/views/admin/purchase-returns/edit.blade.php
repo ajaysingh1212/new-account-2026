@@ -190,6 +190,7 @@
     display: flex; align-items: flex-start; gap: 10px; margin-bottom: 16px;
 }
 .warn-alert i { color: var(--pr-warning); margin-top: 1px; }
+.serial-btn{width:38px;height:38px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;position:relative}.serial-count{position:absolute;right:-7px;top:-7px;min-width:19px;height:19px;border-radius:999px;background:var(--pr-accent);color:#fff;font-size:10px;font-weight:800}.serial-pill{display:inline-flex;align-items:center;gap:5px;border:1px solid #99f6e4;background:#f0fdfa;color:#0f766e;border-radius:999px;padding:3px 8px;margin:2px;font-size:11px;font-weight:700}.serial-summary{max-width:260px}.serial-drawer{position:fixed;right:-460px;top:0;width:min(440px,100vw);height:100vh;background:#fff;z-index:2050;box-shadow:-18px 0 50px rgba(15,23,42,.22);transition:right .22s ease;display:flex;flex-direction:column}.serial-drawer.open{right:0}.serial-drawer-head{padding:18px 20px;background:#172033;color:#fff}.serial-drawer-body{padding:16px;overflow:auto;flex:1}.serial-card{border:1px solid #e2e8f0;border-radius:8px;padding:11px;display:grid;grid-template-columns:26px 1fr;gap:8px;margin-bottom:9px;cursor:pointer}.serial-card.selected{border-color:var(--pr-accent);background:#faf5ff}.serial-card.disabled{background:#f8fafc;color:#94a3b8;cursor:not-allowed}.serial-meta{font-size:11px;color:#64748b}.serial-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:2040;display:none}.serial-backdrop.show{display:block}
 @media (max-width: 768px) {
     .pr-wrapper { padding: 12px; }
     .pr-section  { padding: 16px; }
@@ -202,6 +203,7 @@
 {{-- Pass existing quantities to JS --}}
 @php
 $existingQtyJson = $existingQty->toJson();
+$serialByLine = collect($serialLines)->keyBy('line_id');
 @endphp
 
 <div class="pr-wrapper">
@@ -289,6 +291,7 @@ $existingQtyJson = $existingQty->toJson();
                         <th>Current Stock</th>
                         <th>Return Qty</th>
                         <th>Unit Price</th>
+                        <th>Serial No.</th>
                         <th>Tax %</th>
                         <th>Return Value</th>
                     </tr>
@@ -314,6 +317,8 @@ $existingQtyJson = $existingQty->toJson();
                     $returnQty  = $prevQty ?? $line->quantity;
                     $ratio      = $line->quantity > 0 ? $returnQty / $line->quantity : 0;
                     $lineVal    = $line->line_total * $ratio;
+                    $serialLine = $serialByLine[$line->id] ?? null;
+                    $selectedSerials = $serialLine['selected_units'] ?? [];
                 @endphp
                 <tr data-idx="{{ $i }}"
                     data-line-total="{{ $line->line_total }}"
@@ -356,10 +361,26 @@ $existingQtyJson = $existingQty->toJson();
                                step="0.001"
                                min="0.001"
                                max="{{ $line->quantity }}"
+                               name="quantity[]"
                                value="{{ $returnQty }}"
                                {{ $isSelected ? '' : 'disabled' }}>
                     </td>
                     <td style="color:var(--pr-muted)">₹{{ number_format($line->unit_price,2) }}</td>
+                    <td>
+                        <input type="hidden" name="returned_units[]" class="returned-units" data-idx="{{ $i }}" value="{{ e(json_encode($selectedSerials)) }}" {{ $isSelected ? '' : 'disabled' }}>
+                        @if(($serialLine['has_serials'] ?? false))
+                            <button type="button" class="btn btn-outline-primary serial-btn open-serials" data-idx="{{ $i }}" {{ $isSelected ? '' : 'disabled' }}><i class="fas fa-barcode"></i><span class="serial-count" data-idx="{{ $i }}">{{ count($selectedSerials) }}</span></button>
+                            <div class="serial-summary mt-1" data-idx="{{ $i }}">
+                                @forelse($selectedSerials as $unit)
+                                    <span class="serial-pill"><i class="fas fa-barcode"></i>{{ $unit['serial_no'] ?? $unit['vts_sim'] ?? $unit['sku'] ?? $unit['key'] ?? 'Serial' }}</span>
+                                @empty
+                                    <span class="text-muted small">No serial selected</span>
+                                @endforelse
+                            </div>
+                        @else
+                            <span class="text-muted small">Not tracked</span>
+                        @endif
+                    </td>
                     <td><span style="color:var(--pr-muted)">{{ $line->tax_percent }}%</span></td>
                     <td>
                         <span class="val-pill line-val" data-idx="{{ $i }}">
@@ -410,6 +431,19 @@ $existingQtyJson = $existingQty->toJson();
 </div>{{-- .pr-card --}}
 </form>
 </div>
+
+<div class="serial-backdrop" id="serialBackdrop"></div>
+<aside class="serial-drawer" id="serialDrawer">
+    <div class="serial-drawer-head d-flex justify-content-between align-items-center">
+        <div><div class="small text-uppercase" style="opacity:.7;font-weight:800">Purchase Return Serials</div><h5 class="mb-0" id="serialDrawerTitle">Select serials</h5></div>
+        <button type="button" class="btn btn-sm btn-outline-light" id="closeSerialDrawer"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="serial-drawer-body">
+        <div class="d-flex justify-content-between align-items-center mb-3"><b id="serialRequirement">Select serials</b><button type="button" class="btn btn-outline-primary btn-sm" id="autoSelectSerials"><i class="fas fa-magic mr-1"></i>Auto</button></div>
+        <div id="serialGrid"></div>
+    </div>
+    <div class="p-3 border-top text-right"><button type="button" class="btn btn-outline-secondary" id="cancelSerialDrawer">Cancel</button> <button type="button" class="btn btn-primary" id="saveSerialSelection">Use selected</button></div>
+</aside>
 @endsection
 
 @push('scripts')
@@ -420,6 +454,17 @@ $existingQtyJson = $existingQty->toJson();
     const $tbody     = $('#linesBody');
     const $checkAll  = $('#checkAll');
     const $submitBtn = $('#submitBtn');
+    const linesData = @json($return->bill->items->values()->map(function($line) use ($serialByLine) {
+        $serial = $serialByLine[$line->id] ?? [];
+        return [
+            'id' => $line->id,
+            'item_name' => $line->item?->name ?? '-',
+            'purchased_units' => $serial['purchased_units'] ?? [],
+            'available_units' => $serial['available_units'] ?? [],
+            'has_serials' => $serial['has_serials'] ?? false,
+        ];
+    }));
+    let activeSerialIndex = null, modalSelection = [];
 
     // ── Checkbox toggle ──────────────────────────────────────────
     $tbody.on('change', '.line-check', function () {
@@ -433,6 +478,13 @@ $existingQtyJson = $existingQty->toJson();
         $row.toggleClass('selected', checked);
         $qtyInp.prop('disabled', !checked);
         $hiddenId.prop('disabled', !checked).val(checked ? lineId : '');
+        $row.find('.returned-units').prop('disabled', !checked);
+        $row.find('.open-serials').prop('disabled', !checked);
+        if (checked) {
+            reconcileSerialSelection(idx);
+        } else {
+            setSelectedUnits(idx, []);
+        }
 
         recalcSummary();
     });
@@ -494,6 +546,64 @@ $existingQtyJson = $existingQty->toJson();
         }
     }
 
+    function hasSerials(line) { return line && line.has_serials; }
+    function unitLabel(unit) { return unit.serial_no || unit.vts_sim || unit.sku || unit.batch_no || unit.key || 'Serial'; }
+    function requiredQty(index) { return Math.max(0, Math.floor(parseFloat($tbody.find(`.line-qty[data-idx="${index}"]`).val()) || 0)); }
+    function selectedUnits(index) { try { return JSON.parse($tbody.find(`.returned-units[data-idx="${index}"]`).val() || '[]'); } catch(e) { return []; } }
+    function escHtml(value) { return $('<div>').text(value ?? '').html(); }
+    function setSelectedUnits(index, units) {
+        $tbody.find(`.returned-units[data-idx="${index}"]`).val(JSON.stringify(units));
+        $tbody.find(`.serial-count[data-idx="${index}"]`).text(units.length);
+        $tbody.find(`.serial-summary[data-idx="${index}"]`).html(units.length ? units.map(u => `<span class="serial-pill"><i class="fas fa-barcode"></i>${escHtml(unitLabel(u))}</span>`).join('') : '<span class="text-muted small">No serial selected</span>');
+    }
+    function reconcileSerialSelection(index) {
+        const line = linesData[index];
+        if (!hasSerials(line)) return;
+        const required = requiredQty(index);
+        const available = line.available_units || [];
+        let chosen = selectedUnits(index).filter(sel => available.some(u => u.key === sel.key)).slice(0, required);
+        const keys = chosen.map(u => u.key);
+        if (chosen.length < required) chosen = chosen.concat(available.filter(u => !keys.includes(u.key)).slice(0, required - chosen.length));
+        setSelectedUnits(index, chosen);
+    }
+    function renderSerialDrawer() {
+        const line = linesData[activeSerialIndex], required = requiredQty(activeSerialIndex), selectedKeys = modalSelection.map(u => u.key), availableKeys = (line.available_units || []).map(u => u.key);
+        $('#serialRequirement').text(`Select exactly ${required} serial${required === 1 ? '' : 's'} (${modalSelection.length} selected)`);
+        $('#serialGrid').html((line.purchased_units || []).map(unit => {
+            const available = availableKeys.includes(unit.key), selected = selectedKeys.includes(unit.key);
+            return `<label class="serial-card ${available ? '' : 'disabled'} ${selected ? 'selected' : ''}"><input type="checkbox" class="drawer-serial-check" data-key="${escHtml(unit.key)}" ${selected ? 'checked' : ''} ${available ? '' : 'disabled'}><span><b>${escHtml(unitLabel(unit))}</b><div class="serial-meta">Batch ${escHtml(unit.batch_no || '-')} | VTS/SIM ${escHtml(unit.vts_sim || '-')} | SKU ${escHtml(unit.sku || '-')}</div><div class="${available ? 'text-success' : 'text-muted'} small font-weight-bold">${available ? 'Available in stock' : 'Not available in stock'}</div></span></label>`;
+        }).join('') || '<div class="text-muted">No serial found.</div>');
+    }
+    function closeSerialDrawer() { $('#serialDrawer').removeClass('open'); $('#serialBackdrop').removeClass('show'); }
+
+    $tbody.on('input', '.line-qty', function () { reconcileSerialSelection($(this).data('idx')); });
+    $tbody.on('click', '.open-serials', function () {
+        activeSerialIndex = $(this).data('idx');
+        modalSelection = selectedUnits(activeSerialIndex);
+        $('#serialDrawerTitle').text(linesData[activeSerialIndex].item_name);
+        renderSerialDrawer();
+        $('#serialDrawer').addClass('open');
+        $('#serialBackdrop').addClass('show');
+    });
+    $(document).on('change', '.drawer-serial-check', function () {
+        const line = linesData[activeSerialIndex], key = $(this).data('key'), unit = (line.available_units || []).find(u => u.key === key), required = requiredQty(activeSerialIndex);
+        if ($(this).is(':checked')) {
+            if (modalSelection.length >= required) { $(this).prop('checked', false); return; }
+            if (unit) modalSelection.push(unit);
+        } else {
+            modalSelection = modalSelection.filter(u => u.key !== key);
+        }
+        renderSerialDrawer();
+    });
+    $('#autoSelectSerials').on('click', function () { modalSelection = (linesData[activeSerialIndex].available_units || []).slice(0, requiredQty(activeSerialIndex)); renderSerialDrawer(); });
+    $('#saveSerialSelection').on('click', function () {
+        const required = requiredQty(activeSerialIndex);
+        if (modalSelection.length !== required) { alert(`Return quantity ke liye exactly ${required} serial select karein.`); return; }
+        setSelectedUnits(activeSerialIndex, modalSelection);
+        closeSerialDrawer();
+    });
+    $('#closeSerialDrawer,#cancelSerialDrawer,#serialBackdrop').on('click', closeSerialDrawer);
+
     // ── Init summary ─────────────────────────────────────────────
     recalcSummary();
 
@@ -502,6 +612,16 @@ $existingQtyJson = $existingQty->toJson();
         if (!$tbody.find('.line-check:checked').length) {
             e.preventDefault();
             toastr.warning('Please select at least one item to return.');
+            return;
+        }
+        let serialOk = true;
+        $tbody.find('.line-check:checked').each(function () {
+            const idx = $(this).data('idx'), line = linesData[idx];
+            if (hasSerials(line) && selectedUnits(idx).length !== requiredQty(idx)) serialOk = false;
+        });
+        if (!serialOk) {
+            e.preventDefault();
+            toastr.warning('Serialised item me return qty ke barabar serial select karein.');
         }
     });
 

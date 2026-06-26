@@ -1,9 +1,9 @@
-@extends('layouts.admin')
+﻿@extends('layouts.admin')
 @section('title', 'New Purchase Return')
 
 @push('styles')
 <style>
-/* ── Variables ─────────────────────────────────────────────────── */
+/* â”€â”€ Variables â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 :root {
     --pr-accent:   #6C3FC5;
     --pr-accent2:  #9B6FF5;
@@ -22,7 +22,7 @@
     --radius:      12px;
 }
 
-/* ── Layout ────────────────────────────────────────────────────── */
+/* â”€â”€ Layout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .pr-wrapper { background: var(--pr-bg); min-height: 100vh; padding: 24px; }
 
 .pr-card {
@@ -33,7 +33,7 @@
     overflow: hidden;
 }
 
-/* ── Header ────────────────────────────────────────────────────── */
+/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .pr-header {
     background: linear-gradient(135deg, var(--pr-accent) 0%, #9055E8 100%);
     padding: 22px 28px;
@@ -51,7 +51,7 @@
 .pr-header h4 { color: #fff; margin: 0; font-size: 1.15rem; font-weight: 600; }
 .pr-header span { color: rgba(255,255,255,.75); font-size: .82rem; margin-top: 2px; display: block; }
 
-/* ── Form Sections ─────────────────────────────────────────────── */
+/* â”€â”€ Form Sections â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .pr-section { padding: 24px 28px; }
 .pr-section + .pr-section { border-top: 1px solid var(--pr-border); }
 .pr-section-title {
@@ -91,7 +91,7 @@
     box-shadow: 0 0 0 3px rgba(108,63,197,.12);
 }
 
-/* ── Bill Selector ─────────────────────────────────────────────── */
+/* â”€â”€ Bill Selector â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .bill-select-wrap { position: relative; }
 .bill-select-wrap .select2-container .select2-selection--single {
     height: 42px !important;
@@ -104,7 +104,7 @@
     box-shadow: 0 0 0 3px rgba(108,63,197,.12) !important;
 }
 
-/* ── Party Info Banner ─────────────────────────────────────────── */
+/* â”€â”€ Party Info Banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #partyBanner {
     display: none;
     background: linear-gradient(90deg,#F0EBFF,#F7F4FF);
@@ -119,7 +119,7 @@
 }
 #partyBanner i { color: var(--pr-accent); font-size: 1rem; }
 
-/* ── Lines Loader ──────────────────────────────────────────────── */
+/* â”€â”€ Lines Loader â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #linesLoader {
     display: none;
     text-align: center;
@@ -130,7 +130,7 @@
 .spin-icon { animation: spin .8s linear infinite; display: inline-block; margin-right: 8px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ── Items Table ───────────────────────────────────────────────── */
+/* â”€â”€ Items Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #linesTable { display: none; }
 
 .items-table {
@@ -170,7 +170,7 @@
     color: var(--pr-text);
 }
 
-/* Checkbox custom ─────────────────────────────────────────────── */
+/* Checkbox custom â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .pr-check-wrap { display: flex; align-items: center; justify-content: center; }
 .pr-checkbox {
     width: 18px; height: 18px;
@@ -178,7 +178,7 @@
     cursor: pointer;
 }
 
-/* Stock badge ─────────────────────────────────────────────────── */
+/* Stock badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .stock-badge {
     display: inline-flex;
     align-items: center;
@@ -192,7 +192,7 @@
 .stock-badge.low  { background: #FFF8E1; color: var(--pr-warning); }
 .stock-badge.zero { background: #FFEBEB; color: var(--pr-danger);  }
 
-/* Quantity input ──────────────────────────────────────────────── */
+/* Quantity input â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .qty-input {
     width: 110px;
     padding: 7px 10px;
@@ -210,7 +210,7 @@
 }
 .qty-input:disabled { background: #F5F5F5; cursor: not-allowed; }
 
-/* Value pill ──────────────────────────────────────────────────── */
+/* Value pill â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .val-pill {
     display: inline-block;
     background: #F0EBFF;
@@ -224,7 +224,7 @@
     letter-spacing: .01em;
 }
 
-/* ── Summary Footer ────────────────────────────────────────────── */
+/* â”€â”€ Summary Footer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #summaryBox {
     display: none;
     margin-top: 16px;
@@ -254,7 +254,7 @@
     display: block;
 }
 
-/* ── No Items Empty State ──────────────────────────────────────── */
+/* â”€â”€ No Items Empty State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 #emptyState {
     display: none;
     text-align: center;
@@ -263,7 +263,7 @@
 }
 #emptyState i { font-size: 2.5rem; opacity: .35; margin-bottom: 10px; display: block; }
 
-/* ── Footer ────────────────────────────────────────────────────── */
+/* â”€â”€ Footer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .pr-footer {
     padding: 18px 28px;
     border-top: 1px solid var(--pr-border);
@@ -303,8 +303,9 @@
     display: inline-flex; align-items: center; gap: 6px;
 }
 .btn-pr-cancel:hover { border-color: var(--pr-accent); color: var(--pr-accent); text-decoration: none; }
+.serial-btn{width:38px;height:38px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;position:relative}.serial-count{position:absolute;right:-7px;top:-7px;min-width:19px;height:19px;border-radius:999px;background:var(--pr-accent);color:#fff;font-size:10px;font-weight:800}.serial-pill{display:inline-flex;align-items:center;gap:5px;border:1px solid #99f6e4;background:#f0fdfa;color:#0f766e;border-radius:999px;padding:3px 8px;margin:2px;font-size:11px;font-weight:700}.serial-summary{max-width:260px}.serial-drawer{position:fixed;right:-460px;top:0;width:min(440px,100vw);height:100vh;background:#fff;z-index:2050;box-shadow:-18px 0 50px rgba(15,23,42,.22);transition:right .22s ease;display:flex;flex-direction:column}.serial-drawer.open{right:0}.serial-drawer-head{padding:18px 20px;background:#172033;color:#fff}.serial-drawer-body{padding:16px;overflow:auto;flex:1}.serial-card{border:1px solid #e2e8f0;border-radius:8px;padding:11px;display:grid;grid-template-columns:26px 1fr;gap:8px;margin-bottom:9px;cursor:pointer}.serial-card.selected{border-color:var(--pr-accent);background:#faf5ff}.serial-card.disabled{background:#f8fafc;color:#94a3b8;cursor:not-allowed}.serial-meta{font-size:11px;color:#64748b}.serial-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:2040;display:none}.serial-backdrop.show{display:block}
 
-/* ── Responsive ────────────────────────────────────────────────── */
+/* â”€â”€ Responsive â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 @media (max-width: 768px) {
     .pr-wrapper { padding: 12px; }
     .pr-section  { padding: 16px; }
@@ -320,7 +321,7 @@
 
 <div class="pr-card">
 
-    {{-- ── Header ──────────────────────────────────────────────── --}}
+    {{-- â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ --}}
     <div class="pr-header">
         <div class="pr-header-icon"><i class="fas fa-undo-alt"></i></div>
         <div>
@@ -329,7 +330,7 @@
         </div>
     </div>
 
-    {{-- ── Section 1: Bill & Meta ──────────────────────────────── --}}
+    {{-- â”€â”€ Section 1: Bill & Meta â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ --}}
     <div class="pr-section">
         <div class="pr-section-title"><i class="fas fa-file-invoice"></i> Bill Details</div>
 
@@ -338,12 +339,12 @@
                 <label class="pr-form-label">Purchase Bill <span style="color:var(--pr-danger)">*</span></label>
                 <div class="bill-select-wrap">
                     <select name="purchase_bill_id" id="sourceBill" class="form-control select2" required style="width:100%">
-                        <option value="">— Select a purchase bill —</option>
+                        <option value="">â€” Select a purchase bill â€”</option>
                         @foreach($bills as $bill)
                         <option value="{{ $bill->id }}">
                             {{ $bill->invoice_no }} &nbsp;|&nbsp;
                             {{ $bill->party?->display_name ?: 'Cash' }} &nbsp;|&nbsp;
-                            ₹{{ number_format((float)$bill->grand_total,2) }}
+                            â‚¹{{ number_format((float)$bill->grand_total,2) }}
                         </option>
                         @endforeach
                     </select>
@@ -371,13 +372,13 @@
         </div>
     </div>
 
-    {{-- ── Section 2: Items ────────────────────────────────────── --}}
+    {{-- â”€â”€ Section 2: Items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ --}}
     <div class="pr-section">
         <div class="pr-section-title"><i class="fas fa-boxes"></i> Return Items</div>
 
         {{-- Loader --}}
         <div id="linesLoader">
-            <i class="fas fa-circle-notch spin-icon"></i> Loading bill items…
+            <i class="fas fa-circle-notch spin-icon"></i> Loading bill itemsâ€¦
         </div>
 
         {{-- Empty state --}}
@@ -400,6 +401,7 @@
                             <th>Purchased Qty</th>
                             <th>Current Stock</th>
                             <th>Return Qty</th>
+                            <th>Serials</th>
                             <th>Unit Price</th>
                             <th>Tax %</th>
                             <th>Return Value</th>
@@ -418,24 +420,24 @@
                     </div>
                     <div class="summary-item">
                         <label>Subtotal</label>
-                        <span>₹<span id="sumSubtotal">0.00</span></span>
+                        <span>â‚¹<span id="sumSubtotal">0.00</span></span>
                     </div>
                     <div class="summary-item">
                         <label>Grand Total</label>
-                        <span>₹<span id="sumTotal">0.00</span></span>
+                        <span>â‚¹<span id="sumTotal">0.00</span></span>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 
-    {{-- ── Section 3: Visibility ───────────────────────────────── --}}
+    {{-- â”€â”€ Section 3: Visibility â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ --}}
     <div class="pr-section">
         <div class="pr-section-title"><i class="fas fa-eye"></i> Visibility</div>
         @include('admin.partials.entry-visibility')
     </div>
 
-    {{-- ── Footer ──────────────────────────────────────────────── --}}
+    {{-- â”€â”€ Footer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ --}}
     <div class="pr-footer">
         <a href="{{ route('admin.purchase-returns.index') }}" class="btn-pr-cancel">
             <i class="fas fa-times"></i> Cancel
@@ -448,6 +450,18 @@
 </div>{{-- .pr-card --}}
 </form>
 </div>
+<div class="serial-backdrop" id="serialBackdrop"></div>
+<aside class="serial-drawer" id="serialDrawer">
+    <div class="serial-drawer-head d-flex justify-content-between align-items-center">
+        <div><div class="small text-uppercase" style="opacity:.7;font-weight:800">Purchase Return Serials</div><h5 class="mb-0" id="serialDrawerTitle">Select serials</h5></div>
+        <button type="button" class="btn btn-sm btn-outline-light" id="closeSerialDrawer"><i class="fas fa-times"></i></button>
+    </div>
+    <div class="serial-drawer-body">
+        <div class="d-flex justify-content-between align-items-center mb-3"><b id="serialRequirement">Select serials</b><button type="button" class="btn btn-outline-primary btn-sm" id="autoSelectSerials"><i class="fas fa-magic mr-1"></i>Auto</button></div>
+        <div id="serialGrid"></div>
+    </div>
+    <div class="p-3 border-top text-right"><button type="button" class="btn btn-outline-secondary" id="cancelSerialDrawer">Cancel</button> <button type="button" class="btn btn-primary" id="saveSerialSelection">Use selected</button></div>
+</aside>
 @endsection
 
 @push('scripts')
@@ -459,8 +473,9 @@
     const CSRF           = "{{ csrf_token() }}";
 
     let linesData = [];  // raw data from server
+    let activeSerialIndex = null, modalSelection = [];
 
-    // ── DOM refs ────────────────────────────────────────────────
+    // â”€â”€ DOM refs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     const $billSel    = $('#sourceBill');
     const $loader     = $('#linesLoader');
     const $empty      = $('#emptyState');
@@ -472,12 +487,12 @@
     const $partyText  = $('#partyBannerText');
     const $summaryBox = $('#summaryBox');
 
-    // ── Init empty state ─────────────────────────────────────────
+    // â”€â”€ Init empty state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     $empty.show();
     $loader.hide();
     $table.hide();
 
-    // ── Bill selection ───────────────────────────────────────────
+    // â”€â”€ Bill selection â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     $billSel.on('change', function () {
         const billId = $(this).val();
         if (!billId) {
@@ -513,7 +528,7 @@
         });
     });
 
-    // ── Render table rows ────────────────────────────────────────
+    // â”€â”€ Render table rows â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     function renderLines(lines) {
         $tbody.empty();
         $checkAll.prop('checked', false);
@@ -561,12 +576,16 @@
                            value="${l.purchased_qty}"
                            disabled>
                 </td>
-                <td style="color:var(--pr-muted)">₹${fmt2(l.unit_price)}</td>
+                <td>
+                    <input type="hidden" name="returned_units[]" class="returned-units" data-idx="${i}" value="[]" disabled>
+                    ${hasSerials(l) ? `<button type="button" class="btn btn-outline-primary serial-btn open-serials" data-idx="${i}" disabled><i class="fas fa-barcode"></i><span class="serial-count" data-idx="${i}">0</span></button><div class="serial-summary mt-1" data-idx="${i}"></div>` : `<span class="text-muted small">Not tracked</span>`}
+                </td>
+                <td style="color:var(--pr-muted)">â‚¹${fmt2(l.unit_price)}</td>
                 <td>
                     <span style="color:var(--pr-muted)">${l.tax_percent}%</span>
                 </td>
                 <td>
-                    <span class="val-pill line-val" data-idx="${i}">₹${calcLineVal(l, l.purchased_qty)}</span>
+                    <span class="val-pill line-val" data-idx="${i}">â‚¹${calcLineVal(l, l.purchased_qty)}</span>
                 </td>
             </tr>`;
             $tbody.append(row);
@@ -575,7 +594,7 @@
         bindRowEvents();
     }
 
-    // ── Row events ───────────────────────────────────────────────
+    // â”€â”€ Row events â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     function bindRowEvents() {
 
         // Checkbox toggle
@@ -584,12 +603,16 @@
             const $row = $tbody.find(`tr[data-idx="${idx}"]`);
             const $qtyInp  = $row.find('.line-qty');
             const $hiddenId= $row.find('.line-id-inp');
+            const $unitsInp= $row.find('.returned-units');
             const checked  = $(this).is(':checked');
 
             $row.toggleClass('selected', checked);
             $qtyInp.prop('disabled', !checked);
             $hiddenId.prop('disabled', !checked);
             $hiddenId.val(checked ? linesData[idx].id : '');
+            $unitsInp.prop('disabled', !checked);
+            $row.find('.open-serials').prop('disabled', !checked);
+            if (checked) reconcileSerialSelection(idx); else setSelectedUnits(idx, []);
 
             recalcSummary();
         });
@@ -604,7 +627,8 @@
             if (qty > max) { qty = max; $(this).val(max); }
             if (qty < 0)   { qty = 0;   $(this).val(0); }
 
-            $tbody.find(`.line-val[data-idx="${idx}"]`).text(`₹${calcLineVal(l, qty)}`);
+            $tbody.find(`.line-val[data-idx="${idx}"]`).text(`â‚¹${calcLineVal(l, qty)}`);
+            reconcileSerialSelection(idx);
             recalcSummary();
         });
 
@@ -617,9 +641,18 @@
                 }
             });
         });
+
+        $tbody.find('.open-serials').off('click').on('click', function () {
+            activeSerialIndex = $(this).data('idx');
+            modalSelection = selectedUnits(activeSerialIndex);
+            $('#serialDrawerTitle').text(linesData[activeSerialIndex].item_name);
+            renderSerialDrawer();
+            $('#serialDrawer').addClass('open');
+            $('#serialBackdrop').addClass('show');
+        });
     }
 
-    // ── Summary recalc ───────────────────────────────────────────
+    // â”€â”€ Summary recalc â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     function recalcSummary() {
         let count    = 0;
         let subtotal = 0;
@@ -651,11 +684,39 @@
         }
     }
 
-    // ── Helpers ──────────────────────────────────────────────────
+    // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     function calcLineVal(l, qty) {
         if (!qty || !l.purchased_qty) return '0.00';
         const ratio = qty / l.purchased_qty;
         return fmt2(l.line_total * ratio);
+    }
+
+    function hasSerials(line) { return (line.purchased_units || []).length > 0; }
+    function unitLabel(unit) { return unit.serial_no || unit.vts_sim || unit.sku || unit.batch_no || unit.key || 'Serial'; }
+    function requiredQty(index) { return Math.max(0, Math.floor(parseFloat($tbody.find(`.line-qty[data-idx="${index}"]`).val()) || 0)); }
+    function selectedUnits(index) { try { return JSON.parse($tbody.find(`.returned-units[data-idx="${index}"]`).val() || '[]'); } catch(e) { return []; } }
+    function setSelectedUnits(index, units) {
+        $tbody.find(`.returned-units[data-idx="${index}"]`).val(JSON.stringify(units));
+        $tbody.find(`.serial-count[data-idx="${index}"]`).text(units.length);
+        $tbody.find(`.serial-summary[data-idx="${index}"]`).html(units.length ? units.map(u => `<span class="serial-pill"><i class="fas fa-barcode"></i>${escHtml(unitLabel(u))}</span>`).join('') : '<span class="text-muted small">No serial selected</span>');
+    }
+    function reconcileSerialSelection(index) {
+        const line = linesData[index];
+        if (!line || !hasSerials(line)) return;
+        const required = requiredQty(index);
+        const available = line.available_units || [];
+        let chosen = selectedUnits(index).filter(sel => available.some(u => u.key === sel.key)).slice(0, required);
+        const keys = chosen.map(u => u.key);
+        if (chosen.length < required) chosen = chosen.concat(available.filter(u => !keys.includes(u.key)).slice(0, required - chosen.length));
+        setSelectedUnits(index, chosen);
+    }
+    function renderSerialDrawer() {
+        const line = linesData[activeSerialIndex], required = requiredQty(activeSerialIndex), selectedKeys = modalSelection.map(u => u.key), availableKeys = (line.available_units || []).map(u => u.key);
+        $('#serialRequirement').text(`Select exactly ${required} serial${required === 1 ? '' : 's'} (${modalSelection.length} selected)`);
+        $('#serialGrid').html((line.purchased_units || []).map(unit => {
+            const available = availableKeys.includes(unit.key), selected = selectedKeys.includes(unit.key);
+            return `<label class="serial-card ${available ? '' : 'disabled'} ${selected ? 'selected' : ''}"><input type="checkbox" class="drawer-serial-check" data-key="${escHtml(unit.key)}" ${selected ? 'checked' : ''} ${available ? '' : 'disabled'}><span><b>${escHtml(unitLabel(unit))}</b><div class="serial-meta">Batch ${escHtml(unit.batch_no || '-')} | VTS/SIM ${escHtml(unit.vts_sim || '-')} | SKU ${escHtml(unit.sku || '-')}</div><div class="${available ? 'text-success' : 'text-muted'} small font-weight-bold">${available ? 'Available in stock' : 'Not available in stock'}</div></span></label>`;
+        }).join(''));
     }
 
     function fmt(n)  { return parseFloat(n).toLocaleString('en-IN', { maximumFractionDigits: 3 }); }
@@ -675,7 +736,7 @@
         $submitBtn.prop('disabled', true);
     }
 
-    // ── Form validation before submit ────────────────────────────
+    // â”€â”€ Form validation before submit â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     $('#prForm').on('submit', function (e) {
         const checked = $tbody.find('.line-check:checked').length;
         if (!checked) {
@@ -687,3 +748,5 @@
 })();
 </script>
 @endpush
+
+

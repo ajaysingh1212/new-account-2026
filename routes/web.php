@@ -15,6 +15,7 @@ use App\Http\Controllers\Admin\Production\ProductionBatchController;
 use App\Http\Controllers\Admin\Purchase\PurchaseBillController;
 use App\Http\Controllers\Admin\Purchase\PurchaseEstimateController;
 use App\Http\Controllers\Admin\Purchase\PurchaseReturnController;
+use App\Http\Controllers\Admin\Purchase\SmartPurchaseController;
 use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ExpenseController;
 use App\Http\Controllers\Admin\ExpenseLedgerController;
@@ -111,6 +112,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::post('production-batches/{productionBatch}/revert', [ProductionBatchController::class, 'revert'])->middleware('permission:production.create')->name('production-batches.revert');
         Route::resource('production-batches', ProductionBatchController::class)->only(['index','show']);
     });
+    Route::middleware('permission:smart_purchase.view')->group(function () {
+        Route::get('smart-purchases', [SmartPurchaseController::class, 'index'])->middleware('permission:smart_purchase.view')->name('smart-purchases.index');
+        Route::post('smart-purchases', [SmartPurchaseController::class, 'store'])->middleware('permission:smart_purchase.create')->name('smart-purchases.store');
+    });
     Route::middleware('permission:purchase.view')->group(function () {
         Route::get('purchases/{purchase}/print', [PurchaseBillController::class, 'print'])->middleware('permission:purchase.print')->name('purchases.print');
         Route::resource('purchases', PurchaseBillController::class)->only(['create','store'])->middleware('permission:purchase.create');
@@ -118,7 +123,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('purchases', PurchaseBillController::class)->only(['index','show']);
         Route::get('purchase-returns/bill-items', [PurchaseReturnController::class, 'billItems'])
         ->name('purchase-returns.bill-items');
-        Route::resource('purchase-returns', PurchaseReturnController::class)->only(['index','create','store','show']);
+        Route::resource('purchase-returns', PurchaseReturnController::class)->only(['create','store'])->middleware('permission:purchase.create');
+        Route::resource('purchase-returns', PurchaseReturnController::class)->only(['edit','update'])->middleware('permission:purchase.edit');
+        Route::resource('purchase-returns', PurchaseReturnController::class)->only(['index','show']);
     });
     Route::middleware('permission:purchase_estimates.view')->group(function () {
         Route::get('purchase-estimates/{purchaseEstimate}/print', [PurchaseEstimateController::class, 'print'])->middleware('permission:purchase_estimates.print')->name('purchase-estimates.print');

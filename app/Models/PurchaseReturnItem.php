@@ -8,7 +8,11 @@ class PurchaseReturnItem extends Model
 {
     protected $fillable = [
         'purchase_return_id','purchase_bill_item_id','item_id','quantity','unit','unit_price',
-        'tax_percent','tax_amount','line_total',
+        'tax_percent','tax_amount','line_total','selected_units',
+    ];
+
+    protected $casts = [
+        'selected_units' => 'array',
     ];
 
     public function item() { return $this->belongsTo(Item::class); }

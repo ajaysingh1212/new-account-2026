@@ -55,6 +55,8 @@ class PermissionSeeder extends Seeder
             ['name'=>'Edit Purchase', 'slug'=>'purchase.edit', 'module'=>'purchase'],
             ['name'=>'Delete Purchase', 'slug'=>'purchase.delete', 'module'=>'purchase'],
             ['name'=>'Print Purchase', 'slug'=>'purchase.print', 'module'=>'purchase'],
+            ['name'=>'View Smart Purchase', 'slug'=>'smart_purchase.view', 'module'=>'smart_purchase'],
+            ['name'=>'Create Smart Purchase', 'slug'=>'smart_purchase.create', 'module'=>'smart_purchase'],
 
             ['name'=>'View Purchase Estimates', 'slug'=>'purchase_estimates.view', 'module'=>'purchase_estimates'],
             ['name'=>'Create Purchase Estimates', 'slug'=>'purchase_estimates.create', 'module'=>'purchase_estimates'],

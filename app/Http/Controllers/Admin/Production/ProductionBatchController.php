@@ -383,12 +383,6 @@ class ProductionBatchController extends Controller
             $finishedNet = $netMovements->first(fn($row) => (int) $row['item_id'] === (int) $productionBatch->finished_item_id);
             if ($finishedNet && $finishedNet['quantity'] > 0) {
                 $finished = Item::lockForUpdate()->findOrFail($finishedNet['item_id']);
-                abort_if(
-                    (float) $finished->current_stock < $finishedNet['quantity'],
-                    422,
-                    "Insufficient finished goods stock to revert {$finished->name}."
-                );
-
                 $accounting->moveStock($finished, [
                     'movement_date' => now()->toDateString(),
                     'movement_type' => 'production_batch_revert_output',
@@ -483,7 +477,6 @@ class ProductionBatchController extends Controller
             abort_if(in_array($batch->id . '-' . $unitIndex, $this->soldUnitKeys($batch->company_id), true), 422, 'This serial is already sold. Reverse sale first.');
 
             $finished = Item::lockForUpdate()->findOrFail($batch->finished_item_id);
-            abort_if((float) $finished->current_stock < 1, 422, "Insufficient finished goods stock to revert {$finished->name}.");
 
             $accounting->moveStock($finished, [
                 'movement_date' => now()->toDateString(),
