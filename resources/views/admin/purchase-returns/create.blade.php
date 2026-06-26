@@ -18,9 +18,36 @@
 </div>
 </form>
 @endsection
+
 @push('scripts')
 <script>
-const BILLS=@json($bills->mapWithKeys(fn($bill)=>[$bill->id=>$bill->items->map(fn($line)=>['id'=>$line->id,'item'=>$line->item?->name,'qty'=>(float)$line->quantity,'unit'=>$line->unit])->values()]));
-$('#sourceBill').change(function(){let lines=BILLS[$(this).val()]||[];$('#returnLines').html(`<table class="table table-hover"><thead><tr><th>Item</th><th>Purchased Qty</th><th>Return Qty</th></tr></thead><tbody>${lines.map(l=>`<tr><td>${l.item}<input type="hidden" name="line_id[]" value="${l.id}"></td><td>${l.qty} ${l.unit||''}</td><td><input type="number" step="0.001" max="${l.qty}" min="0" name="quantity[]" class="form-control" value="${l.qty}"></td></tr>`).join('')}</tbody></table>`)});
+const BILLS = {!! json_encode($bills->mapWithKeys(function($bill) {
+    return [$bill->id => $bill->items->map(function($line) {
+        return [
+            'id'   => $line->id,
+            'item' => $line->item?->name,
+            'qty'  => (float) $line->quantity,
+            'unit' => $line->unit,
+        ];
+    })->values()];
+})) !!};
+
+$('#sourceBill').change(function() {
+    let lines = BILLS[$(this).val()] || [];
+    $('#returnLines').html(
+        `<table class="table table-hover">
+            <thead><tr><th>Item</th><th>Purchased Qty</th><th>Return Qty</th></tr></thead>
+            <tbody>` +
+        lines.map(l =>
+            `<tr>
+                <td>${l.item}<input type="hidden" name="line_id[]" value="${l.id}"></td>
+                <td>${l.qty} ${l.unit || ''}</td>
+                <td><input type="number" step="0.001" max="${l.qty}" min="0" name="quantity[]" class="form-control" value="${l.qty}"></td>
+            </tr>`
+        ).join('') +
+        `</tbody></table>`
+    );
+});
 </script>
 @endpush
+

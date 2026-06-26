@@ -6,6 +6,19 @@
         'category_id' => $t->product_category_id,
         'category_name' => $t->productCategory?->name,
     ])->toJson();
+
+    $serviceItemsJson = $serviceItems->keyBy('id')->map(fn($s) => [
+        'id' => $s->id,
+        'name' => $s->name,
+        'item_code' => $s->item_code,
+        'unit' => $s->unit,
+        'purchase_price' => (float) $s->purchase_price,
+    ])->toJson();
+
+    $initialServiceBomJson = (($item->bomMaterials ?? collect())->where('line_type', 'service')->map(fn($bom) => [
+        'id' => $bom->raw_item_id,
+        'qty' => (float) $bom->qty_per_unit,
+    ])->values())->toJson();
 @endphp
 
 @push('styles')
@@ -609,18 +622,10 @@
 
 @push('scripts')
 <script>
-const TYPES = @json($types->keyBy('id')->map(fn($t) => ['nature'=>$t->nature,'name'=>$t->name,'category_id'=>$t->product_category_id]));
-const SERVICE_ITEMS = @json($serviceItems->keyBy('id')->map(fn($s) => [
-    'id' => $s->id,
-    'name' => $s->name,
-    'item_code' => $s->item_code,
-    'unit' => $s->unit,
-    'purchase_price' => (float) $s->purchase_price,
-]));
-const INITIAL_SERVICE_BOM = @json(($item->bomMaterials ?? collect())->where('line_type', 'service')->map(fn($bom) => [
-    'id' => $bom->raw_item_id,
-    'qty' => (float) $bom->qty_per_unit,
-])->values());
+{{-- Use pre-computed JSON variables from @php block above --}}
+const TYPES         = {!! $typesJson !!};
+const SERVICE_ITEMS = {!! $serviceItemsJson !!};
+const INITIAL_SERVICE_BOM = {!! $initialServiceBomJson !!};
 
 // ── State ─────────────────────────────────────────────────────
 let step = 1;
@@ -678,9 +683,7 @@ function updateNatureBadge(){
         .attr('class','nature-badge '+meta.cls)
         .html(`<i class="fas ${meta.icon}"></i> ${meta.label}`);
     $('#natureBadgeWrap').show();
-    // Update is_bom_enabled visibility
     renderBomPane();
-    // product-only fields
     toggleProductOnly();
 }
 
@@ -831,7 +834,6 @@ $('#addBom').click(function(){
     const html = $('#bomTemplate').html();
     const $row = $(html);
     $('#bomTable tbody').append($row);
-    // re-init select2 on the new select
     $row.find('.select2-bom').select2({ width:'100%', placeholder:'— Select raw material —' });
 });
 
@@ -883,10 +885,7 @@ INITIAL_SERVICE_BOM.forEach(row => {
 });
 renderSelectedServices();
 
-// Init select2 on existing BOM rows
 $('.select2-bom').select2({ width:'100%', placeholder:'— Select raw material —' });
-
-// Update stock display for pre-filled BOM rows
 $('.select2-bom').each(function(){ updateBomStockDisplay($(this)); });
 updateFinishedCategory();
 updateBomCostSummary();
