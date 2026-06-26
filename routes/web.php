@@ -116,6 +116,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('purchases', PurchaseBillController::class)->only(['create','store'])->middleware('permission:purchase.create');
         Route::resource('purchases', PurchaseBillController::class)->only(['edit','update'])->middleware('permission:purchase.edit');
         Route::resource('purchases', PurchaseBillController::class)->only(['index','show']);
+        Route::get('purchase-returns/bill-items', [PurchaseReturnController::class, 'billItems'])
+        ->name('purchase-returns.bill-items');
         Route::resource('purchase-returns', PurchaseReturnController::class)->only(['index','create','store','show']);
     });
     Route::middleware('permission:purchase_estimates.view')->group(function () {
