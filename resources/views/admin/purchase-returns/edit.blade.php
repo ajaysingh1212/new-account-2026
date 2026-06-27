@@ -149,6 +149,65 @@
     text-decoration: none; display: inline-flex; align-items: center; gap: 6px;
 }
 .btn-pr-cancel:hover { border-color: var(--pr-accent); color: var(--pr-accent); text-decoration: none; }
+
+/* ── Serial Drawer ─────────────────────────────────────────────────────── */
+.serial-btn {
+    width: 38px; height: 38px; border-radius: 8px;
+    display: inline-flex; align-items: center; justify-content: center;
+    position: relative;
+}
+.serial-count {
+    position: absolute; right: -7px; top: -7px;
+    min-width: 19px; height: 19px; border-radius: 999px;
+    background: var(--pr-accent); color: #fff; font-size: 10px; font-weight: 800;
+    display: flex; align-items: center; justify-content: center;
+}
+.serial-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    border: 1px solid #99f6e4; background: #f0fdfa; color: #0f766e;
+    border-radius: 999px; padding: 3px 8px; margin: 2px;
+    font-size: 11px; font-weight: 700;
+}
+.serial-summary { max-width: 260px; margin-top: 4px; }
+.serial-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(15,23,42,.45);
+    z-index: 2040; display: none;
+}
+.serial-backdrop.show { display: block; }
+.serial-drawer {
+    position: fixed; right: -480px; top: 0;
+    width: min(440px, 100vw); height: 100vh;
+    background: #fff; z-index: 2050;
+    box-shadow: -18px 0 50px rgba(15,23,42,.22);
+    transition: right .25s cubic-bezier(.4,0,.2,1);
+    display: flex; flex-direction: column;
+}
+.serial-drawer.open { right: 0; }
+.serial-drawer-head {
+    padding: 18px 20px;
+    background: #172033; color: #fff;
+    flex-shrink: 0;
+}
+.serial-drawer-body { padding: 16px; overflow-y: auto; flex: 1; }
+.serial-drawer-foot {
+    padding: 14px 16px;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
+    display: flex; justify-content: flex-end; gap: 8px;
+    flex-shrink: 0;
+}
+.serial-card {
+    border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 11px; display: grid; grid-template-columns: 26px 1fr;
+    gap: 8px; margin-bottom: 9px; cursor: pointer;
+    transition: border-color .15s, background .15s;
+}
+.serial-card:hover   { border-color: #c4b5fd; background: #faf5ff; }
+.serial-card.selected { border-color: var(--pr-accent); background: #faf5ff; }
+.serial-card.disabled { background: #f8fafc; color: #94a3b8; cursor: not-allowed; opacity: .65; }
+.serial-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+
 @media (max-width:768px) {
     .pr-wrapper { padding: 12px; }
     .pr-section  { padding: 16px; }
@@ -159,8 +218,9 @@
 
 @section('content')
 @php
-/* ── Pre-compute all row data in PHP — NO complex expressions in Blade ── */
+/* ── Pre-compute row data in PHP ─────────────────────────────────────── */
 $existingQtyArr = $existingQty->toArray();
+
 $rowsData = [];
 foreach ($return->bill->items as $i => $line) {
     $prevQty    = isset($existingQtyArr[$line->id]) ? (float)$existingQtyArr[$line->id] : null;
@@ -171,16 +231,11 @@ foreach ($return->bill->items as $i => $line) {
 
     $stock = (float)\App\Models\StockMovement::where('item_id', $line->item_id)
         ->where('company_id', auth()->user()->current_company_id)
-        ->selectRaw('SUM(CASE WHEN direction = ? THEN quantity ELSE -quantity END) as net', ['in'])
+        ->selectRaw("SUM(CASE WHEN direction='in' THEN quantity ELSE -quantity END) as net")
         ->value('net');
 
-    if ($stock > 0) {
-        $stockClass = $stock < (float)$line->quantity ? 'low' : 'ok';
-        $stockIcon  = 'fa-check-circle';
-    } else {
-        $stockClass = 'zero';
-        $stockIcon  = 'fa-times-circle';
-    }
+    $stockClass = $stock > 0 ? ($stock < (float)$line->quantity ? 'low' : 'ok') : 'zero';
+    $stockIcon  = $stock > 0 ? 'fa-check-circle' : 'fa-times-circle';
 
     $rowsData[] = [
         'line'       => $line,
@@ -194,6 +249,9 @@ foreach ($return->bill->items as $i => $line) {
         'stockIcon'  => $stockIcon,
     ];
 }
+
+/* ── Serial data indexed by row index ───────────────────────────────── */
+$serialByIdx = collect($serialLines)->keyBy('index');
 @endphp
 
 <div class="pr-wrapper">
@@ -208,7 +266,7 @@ foreach ($return->bill->items as $i => $line) {
         <div class="pr-header-icon"><i class="fas fa-edit"></i></div>
         <div>
             <h4>Edit Purchase Return</h4>
-            <span>Modify quantities — old entries will be reversed and re-posted</span>
+            <span>Quantities modify karein &mdash; purani entries reverse hokar re-post hongi</span>
         </div>
         <div class="pr-edit-badge">{{ $return->return_no }}</div>
     </div>
@@ -218,8 +276,8 @@ foreach ($return->bill->items as $i => $line) {
         <div class="warn-alert">
             <i class="fas fa-exclamation-triangle"></i>
             <div>
-                <strong>Editing will reverse existing stock movements and ledger entries</strong>,
-                then re-post them with updated quantities. Verify all changes before saving.
+                <strong>Edit karne se existing stock movements aur ledger entries reverse hongi</strong>,
+                phir updated quantities ke saath re-post hongi. Save karne se pehle sab verify karein.
             </div>
         </div>
     </div>
@@ -231,7 +289,7 @@ foreach ($return->bill->items as $i => $line) {
             <div class="col-md-5 form-group mb-3">
                 <label class="pr-form-label">Purchase Bill</label>
                 <input class="pr-form-control" readonly
-                       value="{{ $return->bill->invoice_no }} | {{ $return->party?->display_name ?: 'Cash' }} | Rs {{ number_format((float)$return->bill->grand_total,2) }}">
+                       value="{{ $return->bill->invoice_no }} | {{ $return->party?->display_name ?: 'Cash' }} | &#8377;{{ number_format((float)$return->bill->grand_total,2) }}">
                 <input type="hidden" name="purchase_bill_id" value="{{ $return->purchase_bill_id }}">
                 <div class="party-banner">
                     <i class="fas fa-building"></i>
@@ -254,7 +312,7 @@ foreach ($return->bill->items as $i => $line) {
             <div class="col-md-3 form-group mb-3">
                 <label class="pr-form-label">Reason</label>
                 <input name="reason" class="pr-form-control"
-                       value="{{ $return->reason }}" placeholder="Reason for return…">
+                       value="{{ $return->reason }}" placeholder="Return ka reason...">
             </div>
         </div>
     </div>
@@ -275,6 +333,7 @@ foreach ($return->bill->items as $i => $line) {
                         <th>Purchased Qty</th>
                         <th>Current Stock</th>
                         <th>Return Qty</th>
+                        <th>Serials</th>
                         <th>Unit Price</th>
                         <th>Tax %</th>
                         <th>Return Value</th>
@@ -283,18 +342,27 @@ foreach ($return->bill->items as $i => $line) {
                 <tbody id="linesBody">
                 @foreach($rowsData as $row)
                 @php
-                $line = $row['line'];
+                    $line      = $row['line'];
+                    $idx       = $row['idx'];
+                    $serial    = $serialByIdx->get($idx);
+                    $hasSerial = $serial && $serial['has_serials'];
+
+                    /* already-selected serials for this row */
+                    $alreadySelected = $hasSerial ? collect($serial['selected_units'])->values()->all() : [];
+                    $alreadyJson     = htmlspecialchars(json_encode($alreadySelected), ENT_QUOTES, 'UTF-8');
                 @endphp
-                <tr data-idx="{{ $row['idx'] }}"
+                <tr data-idx="{{ $idx }}"
                     data-line-total="{{ (float)$line->line_total }}"
                     data-tax-amount="{{ (float)$line->tax_amount }}"
                     data-purchased="{{ (float)$line->quantity }}"
                     class="{{ $row['isSelected'] ? 'selected' : '' }}">
+
+                    {{-- Checkbox --}}
                     <td style="text-align:center">
                         <div class="pr-check-wrap">
                             <input type="checkbox"
                                    class="pr-checkbox line-check"
-                                   data-idx="{{ $row['idx'] }}"
+                                   data-idx="{{ $idx }}"
                                    {{ $row['isSelected'] ? 'checked' : '' }}>
                             <input type="hidden"
                                    name="line_id[]"
@@ -303,38 +371,90 @@ foreach ($return->bill->items as $i => $line) {
                                    {{ $row['isSelected'] ? '' : 'disabled' }}>
                         </div>
                     </td>
-                    <td style="color:var(--pr-muted);font-size:.8rem">{{ $row['idx'] + 1 }}</td>
+
+                    {{-- # --}}
+                    <td style="color:var(--pr-muted);font-size:.8rem">{{ $idx + 1 }}</td>
+
+                    {{-- Item Name --}}
                     <td>
-                        <strong>{{ $line->item?->name ?? '—' }}</strong>
+                        <strong>{{ $line->item?->name ?? '&mdash;' }}</strong>
                         <br><small style="color:var(--pr-muted)">{{ $line->unit }}</small>
                     </td>
+
+                    {{-- Purchased Qty --}}
                     <td>
                         <span style="font-weight:600">{{ number_format((float)$line->quantity, 3) }}</span>
                         <small style="color:var(--pr-muted)"> {{ $line->unit }}</small>
                     </td>
+
+                    {{-- Current Stock --}}
                     <td>
                         <span class="stock-badge {{ $row['stockClass'] }}">
                             <i class="fas {{ $row['stockIcon'] }}"></i>
                             {{ number_format($row['stock'], 3) }} {{ $line->unit }}
                         </span>
                     </td>
+
+                    {{-- Return Qty --}}
                     <td>
                         <input type="number"
                                class="qty-input line-qty"
-                               data-idx="{{ $row['idx'] }}"
+                               data-idx="{{ $idx }}"
                                data-line-id="{{ $line->id }}"
                                step="0.001" min="0.001"
                                max="{{ (float)$line->quantity }}"
                                value="{{ $row['returnQty'] }}"
                                {{ $row['isSelected'] ? '' : 'disabled' }}>
                     </td>
-                    <td style="color:var(--pr-muted)">Rs {{ number_format((float)$line->unit_price, 2) }}</td>
-                    <td><span style="color:var(--pr-muted)">{{ $line->tax_percent }}%</span></td>
+
+                    {{-- Serials --}}
                     <td>
-                        <span class="val-pill line-val" data-idx="{{ $row['idx'] }}">
-                            Rs {{ number_format($row['lineVal'], 2) }}
+                        {{-- Hidden field to carry selected unit keys --}}
+                        <input type="hidden"
+                               name="returned_units[]"
+                               class="returned-units"
+                               data-idx="{{ $idx }}"
+                               value="{{ $alreadyJson }}"
+                               {{ $row['isSelected'] ? '' : 'disabled' }}>
+
+                        @if($hasSerial)
+                            <button type="button"
+                                    class="btn btn-outline-primary serial-btn open-serials"
+                                    data-idx="{{ $idx }}"
+                                    {{ $row['isSelected'] ? '' : 'disabled' }}>
+                                <i class="fas fa-barcode"></i>
+                                <span class="serial-count" data-idx="{{ $idx }}">{{ count($alreadySelected) }}</span>
+                            </button>
+                            <div class="serial-summary" data-idx="{{ $idx }}">
+                                @if(count($alreadySelected))
+                                    @foreach($alreadySelected as $su)
+                                        <span class="serial-pill">
+                                            <i class="fas fa-barcode"></i>
+                                            {{ $su['serial_no'] ?? $su['vts_sim'] ?? $su['sku'] ?? $su['batch_no'] ?? $su['key'] ?? 'Serial' }}
+                                        </span>
+                                    @endforeach
+                                @else
+                                    <span class="text-muted small">Koi serial select nahi</span>
+                                @endif
+                            </div>
+                        @else
+                            <span class="text-muted small">Track nahi</span>
+                        @endif
+                    </td>
+
+                    {{-- Unit Price --}}
+                    <td style="color:var(--pr-muted)">&#8377;{{ number_format((float)$line->unit_price, 2) }}</td>
+
+                    {{-- Tax % --}}
+                    <td><span style="color:var(--pr-muted)">{{ $line->tax_percent }}%</span></td>
+
+                    {{-- Return Value --}}
+                    <td>
+                        <span class="val-pill line-val" data-idx="{{ $idx }}">
+                            &#8377;{{ number_format($row['lineVal'], 2) }}
                         </span>
                     </td>
+
                 </tr>
                 @endforeach
                 </tbody>
@@ -350,11 +470,11 @@ foreach ($return->bill->items as $i => $line) {
                 </div>
                 <div class="summary-item">
                     <label>Subtotal</label>
-                    <span>Rs <span id="sumSubtotal">{{ number_format((float)$return->subtotal, 2) }}</span></span>
+                    <span>&#8377;<span id="sumSubtotal">{{ number_format((float)$return->subtotal, 2) }}</span></span>
                 </div>
                 <div class="summary-item">
                     <label>Grand Total</label>
-                    <span>Rs <span id="sumTotal">{{ number_format((float)$return->grand_total, 2) }}</span></span>
+                    <span>&#8377;<span id="sumTotal">{{ number_format((float)$return->grand_total, 2) }}</span></span>
                 </div>
             </div>
         </div>
@@ -376,39 +496,100 @@ foreach ($return->bill->items as $i => $line) {
         </button>
     </div>
 
-</div>
+</div>{{-- .pr-card --}}
 </form>
 </div>
+
+{{-- ── Serial Drawer (outside form) ──────────────────────────────────── --}}
+<div class="serial-backdrop" id="serialBackdrop"></div>
+<aside class="serial-drawer" id="serialDrawer">
+    <div class="serial-drawer-head d-flex justify-content-between align-items-center">
+        <div>
+            <div class="small text-uppercase" style="opacity:.7;font-weight:800">Purchase Return &mdash; Serials</div>
+            <h5 class="mb-0" id="serialDrawerTitle">Select serials</h5>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-light" id="closeSerialDrawer">
+            <i class="fas fa-times"></i>
+        </button>
+    </div>
+    <div class="serial-drawer-body">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <b id="serialRequirement">Serial select karein</b>
+            <button type="button" class="btn btn-outline-primary btn-sm" id="autoSelectSerials">
+                <i class="fas fa-magic mr-1"></i> Auto
+            </button>
+        </div>
+        <div id="serialGrid"></div>
+    </div>
+    <div class="serial-drawer-foot">
+        <button type="button" class="btn btn-outline-secondary" id="cancelSerialDrawer">Cancel</button>
+        <button type="button" class="btn btn-primary" id="saveSerialSelection">
+            <i class="fas fa-check mr-1"></i> Use Selected
+        </button>
+    </div>
+</aside>
 @endsection
 
 @push('scripts')
+{{-- Pass PHP serial data to JS --}}
+<script>
+    window.__serialLines = @json($serialLines);
+</script>
+
 <script>
 (function () {
     'use strict';
 
+    /* ── Indian Rupee symbol ─────────────────────────────────────────── */
+    var INR = '\u20B9';
+
+    /* ── Serial lines data from PHP ─────────────────────────────────── */
+    var serialLines = window.__serialLines || [];   // array indexed by row position
+    /* Build a map: idx => serialLineData */
+    var serialMap = {};
+    serialLines.forEach(function (s) { serialMap[s.index] = s; });
+
+    /* ── State ───────────────────────────────────────────────────────── */
+    var activeIdx      = null;   // which row's drawer is open
+    var modalSelection = [];     // temp selections inside open drawer
+
+    /* ── DOM ─────────────────────────────────────────────────────────── */
     var $tbody     = $('#linesBody');
     var $checkAll  = $('#checkAll');
     var $submitBtn = $('#submitBtn');
+    var $drawer    = $('#serialDrawer');
+    var $backdrop  = $('#serialBackdrop');
 
-    // Checkbox toggle
+    /* ── Checkbox toggle ─────────────────────────────────────────────── */
     $tbody.on('change', '.line-check', function () {
-        var idx      = $(this).data('idx');
-        var $row     = $tbody.find('tr[data-idx="' + idx + '"]');
-        var $qtyInp  = $row.find('.line-qty');
-        var $hidId   = $row.find('.line-id-inp');
-        var checked  = $(this).is(':checked');
-        var lineId   = $qtyInp.data('line-id');
+        var idx     = parseInt($(this).data('idx'));
+        var $row    = rowEl(idx);
+        var $qty    = $row.find('.line-qty');
+        var $hidId  = $row.find('.line-id-inp');
+        var $units  = $row.find('.returned-units');
+        var checked = $(this).is(':checked');
+        var lineId  = $qty.data('line-id');
 
         $row.toggleClass('selected', checked);
-        $qtyInp.prop('disabled', !checked);
+        $qty.prop('disabled', !checked);
         $hidId.prop('disabled', !checked).val(checked ? lineId : '');
+        $units.prop('disabled', !checked);
+        $row.find('.open-serials').prop('disabled', !checked);
+
+        if (!checked) {
+            /* clear serial pills when unchecked */
+            setSelectedUnits(idx, []);
+        } else {
+            reconcileAuto(idx);
+        }
+
         recalcSummary();
     });
 
-    // Quantity change
+    /* ── Quantity change ─────────────────────────────────────────────── */
     $tbody.on('input', '.line-qty', function () {
-        var idx       = $(this).data('idx');
-        var $row      = $tbody.find('tr[data-idx="' + idx + '"]');
+        var idx       = parseInt($(this).data('idx'));
+        var $row      = rowEl(idx);
         var max       = parseFloat($row.data('purchased')) || 0;
         var lineTotal = parseFloat($row.data('line-total')) || 0;
         var qty       = parseFloat($(this).val()) || 0;
@@ -417,11 +598,13 @@ foreach ($return->bill->items as $i => $line) {
         if (qty < 0)   { qty = 0;   $(this).val(0); }
 
         var ratio = max > 0 ? qty / max : 0;
-        $row.find('.line-val').text('Rs ' + (lineTotal * ratio).toFixed(2));
+        $row.find('.line-val').text(INR + (lineTotal * ratio).toFixed(2));
+
+        reconcileAuto(idx);
         recalcSummary();
     });
 
-    // Check-all
+    /* ── Check-all ───────────────────────────────────────────────────── */
     $checkAll.on('change', function () {
         var checked = $(this).is(':checked');
         $tbody.find('.line-check').each(function () {
@@ -431,13 +614,90 @@ foreach ($return->bill->items as $i => $line) {
         });
     });
 
-    // Summary recalc
+    /* ── Open serial drawer ──────────────────────────────────────────── */
+    $tbody.on('click', '.open-serials', function () {
+        activeIdx      = parseInt($(this).data('idx'));
+        modalSelection = getSelectedUnits(activeIdx).slice(); // clone
+        renderDrawer();
+        openDrawer();
+    });
+
+    /* ── Close / cancel drawer ───────────────────────────────────────── */
+    function openDrawer() {
+        $drawer.addClass('open');
+        $backdrop.addClass('show');
+        $('body').css('overflow', 'hidden');
+    }
+
+    function closeDrawer() {
+        $drawer.removeClass('open');
+        $backdrop.removeClass('show');
+        $('body').css('overflow', '');
+        /* wait for CSS transition to finish before resetting state */
+        setTimeout(function () {
+            activeIdx      = null;
+            modalSelection = [];
+            $('#serialGrid').empty();
+        }, 260);
+    }
+
+    $('#closeSerialDrawer, #cancelSerialDrawer').on('click', closeDrawer);
+    $backdrop.on('click', closeDrawer);
+
+    /* ── Auto-select ─────────────────────────────────────────────────── */
+    $('#autoSelectSerials').on('click', function () {
+        if (activeIdx === null) return;
+        var s        = serialMap[activeIdx];
+        if (!s) return;
+        var required = requiredQty(activeIdx);
+        modalSelection = (s.available_units || []).slice(0, required);
+        renderDrawer();
+    });
+
+    /* ── Drawer checkbox change ──────────────────────────────────────── */
+    $(document).on('change', '.drawer-serial-check', function () {
+        if (activeIdx === null) return;
+        var s        = serialMap[activeIdx];
+        var required = requiredQty(activeIdx);
+        var key      = $(this).data('key');
+        var allUnits = s ? (s.purchased_units || []) : [];
+
+        if ($(this).is(':checked')) {
+            if (modalSelection.length >= required) {
+                $(this).prop('checked', false);
+                toastr.warning('Sirf ' + required + ' serial select kar sakte hain.');
+                return;
+            }
+            var unit = allUnits.find(function (u) { return u.key === key; });
+            if (unit) modalSelection.push(unit);
+        } else {
+            modalSelection = modalSelection.filter(function (u) { return u.key !== key; });
+        }
+        $('#serialRequirement').text(
+            'Exactly ' + required + ' serial' + (required === 1 ? '' : 's') +
+            ' select karein (' + modalSelection.length + ' selected)'
+        );
+    });
+
+    /* ── Save serial selection ───────────────────────────────────────── */
+    $('#saveSerialSelection').on('click', function () {
+        if (activeIdx === null) return;
+        var required = requiredQty(activeIdx);
+        if (modalSelection.length !== required) {
+            toastr.warning('Exactly ' + required + ' serial' + (required === 1 ? '' : 's') + ' select karein.');
+            return;
+        }
+        setSelectedUnits(activeIdx, modalSelection.slice());
+        closeDrawer();          /* ← drawer properly band ho jayega */
+    });
+
+    /* ── Summary recalc ──────────────────────────────────────────────── */
     function recalcSummary() {
         var count = 0, subtotal = 0, total = 0;
 
         $tbody.find('.line-check:checked').each(function () {
-            var idx       = $(this).data('idx');
-            var $row      = $tbody.find('tr[data-idx="' + idx + '"]');
+            var idx       = parseInt($(this).data('idx'));
+            var $row      = rowEl(idx);
             var purchased = parseFloat($row.data('purchased'))  || 0;
             var lineTotal = parseFloat($row.data('line-total')) || 0;
             var taxAmount = parseFloat($row.data('tax-amount')) || 0;
@@ -461,18 +721,113 @@ foreach ($return->bill->items as $i => $line) {
         }
     }
 
-    recalcSummary();
+    /* ── Helpers ─────────────────────────────────────────────────────── */
+    function rowEl(idx)       { return $tbody.find('tr[data-idx="' + idx + '"]'); }
+    function requiredQty(idx) { return Math.max(0, Math.floor(parseFloat(rowEl(idx).find('.line-qty').val()) || 0)); }
 
+    function unitLabel(u) {
+        return u.serial_no || u.vts_sim || u.sku || u.batch_no || u.key || 'Serial';
+    }
+
+    function getSelectedUnits(idx) {
+        try { return JSON.parse(rowEl(idx).find('.returned-units').val() || '[]'); }
+        catch (e) { return []; }
+    }
+
+    function setSelectedUnits(idx, units) {
+        rowEl(idx).find('.returned-units').val(JSON.stringify(units));
+
+        /* Update badge count */
+        rowEl(idx).find('.serial-count[data-idx="' + idx + '"]').text(units.length);
+
+        /* Update pill summary */
+        var $summary = rowEl(idx).find('.serial-summary[data-idx="' + idx + '"]');
+        if (units.length) {
+            $summary.html(units.map(function (u) {
+                return '<span class="serial-pill"><i class="fas fa-barcode"></i>' + escHtml(unitLabel(u)) + '</span>';
+            }).join(''));
+        } else {
+            $summary.html('<span class="text-muted small">Koi serial select nahi</span>');
+        }
+    }
+
+    /* Auto-reconcile: pick available units up to required qty */
+    function reconcileAuto(idx) {
+        var s = serialMap[idx];
+        if (!s || !s.has_serials) return;
+
+        var required  = requiredQty(idx);
+        var available = s.available_units || [];
+        var chosen    = getSelectedUnits(idx)
+            .filter(function (sel) { return available.some(function (u) { return u.key === sel.key; }); })
+            .slice(0, required);
+
+        var keys = chosen.map(function (u) { return u.key; });
+        if (chosen.length < required) {
+            var extra = available.filter(function (u) { return !keys.includes(u.key); }).slice(0, required - chosen.length);
+            chosen = chosen.concat(extra);
+        }
+        setSelectedUnits(idx, chosen);
+    }
+
+    /* Render the drawer grid */
+    function renderDrawer() {
+        var s            = serialMap[activeIdx];
+        if (!s) return;
+        var required     = requiredQty(activeIdx);
+        var selKeys      = modalSelection.map(function (u) { return u.key; });
+        var availKeys    = (s.available_units || []).map(function (u) { return u.key; });
+
+        $('#serialDrawerTitle').text(
+            (rowEl(activeIdx).find('strong').first().text() || 'Serials')
+        );
+        $('#serialRequirement').text(
+            'Exactly ' + required + ' serial' + (required === 1 ? '' : 's') +
+            ' select karein (' + modalSelection.length + ' selected)'
+        );
+
+        var html = '';
+        (s.purchased_units || []).forEach(function (unit) {
+            var available = availKeys.includes(unit.key);
+            var selected  = selKeys.includes(unit.key);
+            html += '<label class="serial-card' +
+                (available ? '' : ' disabled') +
+                (selected  ? ' selected' : '') + '">' +
+                '<input type="checkbox" class="drawer-serial-check"' +
+                ' data-key="' + escHtml(unit.key) + '"' +
+                (selected  ? ' checked'  : '') +
+                (available ? '' : ' disabled') + '>' +
+                '<span>' +
+                '<b>' + escHtml(unitLabel(unit)) + '</b>' +
+                '<div class="serial-meta">' +
+                'Batch: ' + escHtml(unit.batch_no || '-') +
+                ' &nbsp;|&nbsp; VTS/SIM: ' + escHtml(unit.vts_sim || '-') +
+                ' &nbsp;|&nbsp; SKU: ' + escHtml(unit.sku || '-') +
+                '</div>' +
+                '<div class="' + (available ? 'text-success' : 'text-muted') + ' small font-weight-bold">' +
+                (available ? 'Stock mein available' : 'Stock mein nahi hai') +
+                '</div>' +
+                '</span></label>';
+        });
+        $('#serialGrid').html(html || '<p class="text-muted text-center">Koi serial nahi mila.</p>');
+    }
+
+    function escHtml(s) {
+        return String(s == null ? '' : s)
+            .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+            .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    }
+
+    /* ── Form submit validation ───────────────────────────────────────── */
     $('#prForm').on('submit', function (e) {
         if (!$tbody.find('.line-check:checked').length) {
             e.preventDefault();
-            if (typeof toastr !== 'undefined') {
-                toastr.warning('Please select at least one item to return.');
-            } else {
-                alert('Please select at least one item to return.');
-            }
+            toastr.warning('Kam se kam ek item return ke liye select karein.');
         }
     });
+
+    /* ── Init ────────────────────────────────────────────────────────── */
+    recalcSummary();
 
 })();
 </script>
