@@ -150,6 +150,7 @@ class ItemController extends Controller
             'purchase_gst_percent' => ['nullable','numeric','min:0'],
             'sale_price'           => ['nullable','numeric','min:0'],
             'sale_gst_percent'     => ['nullable','numeric','min:0'],
+            'max_discount_percent' => ['nullable','numeric','min:0','max:100'],
             'opening_stock'        => ['nullable','numeric','min:0'],
             'low_stock_qty'        => ['nullable','numeric','min:0'],
             'per_quantity_weight'  => ['nullable','numeric','min:0'],

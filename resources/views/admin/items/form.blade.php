@@ -142,6 +142,13 @@
 .service-pill button{border:0;background:transparent;color:#dc2626;font-weight:900;padding:0;line-height:1}
 .service-empty{color:#94a3b8;font-size:12px;font-weight:700;margin-top:10px}
 @keyframes serviceIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* Max Discount field */
+.max-discount-wrap{background:linear-gradient(135deg,#fff7ed,#fff);border:1px solid #fed7aa;border-radius:12px;padding:14px 16px;margin-top:14px}
+.max-discount-wrap .discount-label{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px;color:#c2410c;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.max-discount-wrap .form-control{border-color:#fed7aa}
+.max-discount-wrap .form-control:focus{border-color:#f97316;box-shadow:0 0 0 3px rgba(249,115,22,.12)}
+.discount-preview{display:inline-flex;align-items:center;gap:6px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;padding:6px 12px;font-size:12px;font-weight:700;color:#c2410c;margin-top:8px}
 </style>
 @endpush
 
@@ -356,6 +363,50 @@
                     </div>
                 </div>
             </div>
+
+            {{-- ── Max Discount — only for Finished Goods ── --}}
+            <div id="maxDiscountBox" style="display:none">
+                <div class="max-discount-wrap mt-3">
+                    <div class="discount-label">
+                        <i class="fas fa-percent"></i> Maximum Discount Allowed (Finished Goods Only)
+                    </div>
+                    <div class="row align-items-end">
+                        <div class="col-md-3 form-group mb-0">
+                            <label>Max Discount %</label>
+                            <div class="input-group">
+                                <input type="number"
+                                       step="0.01"
+                                       min="0"
+                                       max="100"
+                                       name="max_discount_percent"
+                                       id="max_discount_percent"
+                                       class="form-control"
+                                       value="{{ old('max_discount_percent', $item->max_discount_percent ?? '') }}"
+                                       placeholder="e.g. 10.00">
+                                <div class="input-group-append">
+                                    <span class="input-group-text" style="border-radius:0 10px 10px 0;font-weight:800;color:#c2410c;background:#fff7ed;border-color:#fed7aa">%</span>
+                                </div>
+                            </div>
+                            @error('max_discount_percent')
+                                <small class="text-danger">{{ $message }}</small>
+                            @enderror
+                        </div>
+                        <div class="col-md-5 mb-0">
+                            <div class="discount-preview" id="discountPreview" style="display:none">
+                                <i class="fas fa-tag"></i>
+                                <span>Min Sale Price: <b id="discountMinPrice">₹ 0.00</b></span>
+                                <span style="color:#9ca3af">|</span>
+                                <span>Max Saving: <b id="discountMaxSaving">₹ 0.00</b></span>
+                            </div>
+                            <small class="text-muted d-block mt-1" style="font-size:11px">
+                                Sales invoice me is % se zyada discount allow nahi hoga.
+                            </small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            {{-- ── /Max Discount ── --}}
+
         </div>
     </div>
 
@@ -535,7 +586,7 @@
             </div>
         </div>
 
-        {{-- Service type —no BOM --}}
+        {{-- Service type — no BOM --}}
         <div id="serviceNoBom" style="display:none">
             <div style="background:#fdf2f8;border:1px dashed #f9a8d4;border-radius:14px;padding:24px;text-align:center;color:#9d174d;font-size:13px">
                 <i class="fas fa-tools" style="font-size:24px;margin-bottom:8px;display:block"></i>
@@ -697,13 +748,41 @@ function toggleProductOnly(){
 function updateFinishedCategory(){
     const isFinished = itemType() === 'product' && selectedNature() === 'finished_goods';
     const type = selectedType();
+
+    // Show/hide category box
     $('#finishedCategoryBox').toggle(isFinished);
     $('#product_category_id').prop('required', isFinished);
+
+    // ── Show/hide max discount box ──
+    $('#maxDiscountBox').toggle(isFinished);
+    if (!isFinished) {
+        $('#max_discount_percent').val('');
+        $('#discountPreview').hide();
+    } else {
+        updateDiscountPreview();
+    }
+
     if(isFinished && type && type.category_id && !$('#product_category_id').val()){
         $('#product_category_id').val(String(type.category_id)).trigger('change');
     }
     if(!isFinished){
         $('#product_category_id').val('').trigger('change');
+    }
+}
+
+// ── Discount preview ──────────────────────────────────────────
+function updateDiscountPreview(){
+    const discPct = parseFloat($('#max_discount_percent').val()) || 0;
+    const salePrice = parseFloat($('#sale_price').val()) || 0;
+
+    if(discPct > 0 && salePrice > 0){
+        const maxSaving = salePrice * discPct / 100;
+        const minPrice  = salePrice - maxSaving;
+        $('#discountMinPrice').text(money(minPrice));
+        $('#discountMaxSaving').text(money(maxSaving));
+        $('#discountPreview').show();
+    } else {
+        $('#discountPreview').hide();
     }
 }
 
@@ -750,6 +829,7 @@ function calc(){
     $('#saleTaxBreakdown').text('GST '+money(saleTax)+' | Total '+money(saleGross));
     $('#saleModeNote').text(saleInclusive ? 'With tax: GST amount entered price ke andar hai.' : 'Without tax: GST price ke upar add hoga.');
     updateBomCostSummary();
+    updateDiscountPreview();
 }
 
 // ── BOM stock display ─────────────────────────────────────────
@@ -866,6 +946,9 @@ $(document).on('click','.remove-service', function(){
 $('#itemNameInput').on('input', function(){
     $('#carryItemName').text($(this).val().trim() || 'New item');
 });
+
+// ── Discount preview live update ──────────────────────────────
+$('#max_discount_percent, #sale_price').on('input change', updateDiscountPreview);
 
 // ── Event bindings ────────────────────────────────────────────
 $('#product_type_id').on('change', updateNatureBadge);
