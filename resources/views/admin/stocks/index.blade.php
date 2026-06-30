@@ -38,7 +38,7 @@
 
 <div class="stock-table-card table-responsive">
     <table id="stockTable" class="table table-hover">
-        <thead><tr><th>Item</th><th>SKU</th><th>Nature</th><th>Stock</th><th>Serials In Stock</th><th>Purchase Cost</th><th>Value</th><th>Low Warning</th><th>Status</th></tr></thead>
+        <thead><tr><th>Item</th><th>SKU</th><th>Nature</th><th>Stock</th><th>Incoming</th><th>Serials In Stock</th><th>Purchase Cost</th><th>Value</th><th>Low Warning</th><th>Status</th></tr></thead>
         <tbody>
         @foreach($items as $item)
             @php $isLow = $item->low_stock_qty && $item->current_stock <= $item->low_stock_qty; @endphp
@@ -47,6 +47,7 @@
                 <td>{{ $item->sku ?: '-' }}</td>
                 <td>{{ $item->productType?->name }}<br><small>{{ str_replace('_',' ', $item->productType?->nature ?? '-') }}</small></td>
                 <td><b>{{ number_format((float)$item->current_stock,3) }}</b> {{ $item->unit }}</td>
+                <td>@if((float)($incomingByItem[$item->id] ?? 0)>0)<span class="badge badge-info"><i class="fas fa-plus mr-1"></i>{{ number_format((float)$incomingByItem[$item->id],3) }} {{ $item->unit }}</span><small class="d-block text-muted">In transit — not in stock yet</small>@else<span class="text-muted">-</span>@endif</td>
                 <td>
                     @php $stockUnits = collect($serialsByItem[$item->id] ?? []); @endphp
                     @forelse($stockUnits->take(10) as $unit)

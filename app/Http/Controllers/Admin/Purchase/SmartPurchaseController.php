@@ -8,9 +8,11 @@ use App\Models\Item;
 use App\Models\Party;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseBillItem;
-use App\Models\SalesInvoice;
+use App\Models\PurchaseEstimate;
+use App\Models\PurchaseEstimateItem;
+use App\Models\ProductionBatch;
+use App\Models\StockMovement;
 use App\Models\SubCostCenter;
-use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -31,18 +33,18 @@ class SmartPurchaseController extends Controller
             'costCenters' => CostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
             'subCostCenters' => SubCostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
             'invoiceNo' => $this->nextNo(),
+            'partyCode' => 'PTY-' . str_pad((string)(Party::where('company_id', $companyId)->withTrashed()->count() + 1), 5, '0', STR_PAD_LEFT),
+            'smartEstimates' => $visibility->scopeForUser(PurchaseEstimate::with('party')->where('is_smart_purchase',true)->latest(), PurchaseEstimate::class)->get(),
         ]);
     }
 
-    public function store(Request $request, AccountingService $accounting, EntryVisibilityService $visibility)
+    public function store(Request $request, EntryVisibilityService $visibility)
     {
         $data = $request->validate([
-            'party_id' => ['nullable', 'exists:parties,id'],
-            'purchase_type' => ['required', 'in:credit,cash'],
-            'invoice_no' => ['nullable', 'max:20'],
-            'supplier_bill_no' => ['nullable', 'max:255'],
+            'party_id' => ['required', 'array'],
+            'party_id.*' => ['required', 'exists:parties,id'],
+            'estimate_no' => ['nullable', 'max:30'],
             'billing_date' => ['required', 'date'],
-            'purchase_bill_date' => ['nullable', 'date'],
             'reference_no' => ['nullable', 'max:255'],
             'cost_center_id' => ['nullable', 'exists:cost_centers,id'],
             'sub_cost_center_id' => ['nullable', 'exists:sub_cost_centers,id'],
@@ -52,28 +54,30 @@ class SmartPurchaseController extends Controller
             'quantity.*' => ['required', 'numeric', 'min:0.001'],
             'unit_price.*' => ['required', 'numeric', 'min:0'],
             'tax_percent.*' => ['nullable', 'numeric', 'min:0'],
+            'analysis_from' => ['required','date'],
+            'analysis_to' => ['required','date','after_or_equal:analysis_from'],
+            'attachment' => ['nullable','file','max:4096'],
         ]);
 
         $companyId = auth()->user()->current_company_id;
 
-        DB::transaction(function () use ($request, $data, $companyId, $accounting, $visibility) {
-            $bill = PurchaseBill::create([
-                'company_id' => $companyId,
-                'party_id' => $data['party_id'] ?? null,
-                'cost_center_id' => $data['cost_center_id'] ?? null,
-                'sub_cost_center_id' => $data['sub_cost_center_id'] ?? null,
-                'purchase_type' => $data['purchase_type'],
-                'invoice_no' => $data['invoice_no'] ?: $this->nextNo(),
-                'supplier_bill_no' => $data['supplier_bill_no'] ?? null,
-                'billing_date' => $data['billing_date'],
-                'purchase_bill_date' => $data['purchase_bill_date'] ?? null,
-                'reference_no' => $data['reference_no'] ?? null,
-                'notes' => trim('Smart Purchase. ' . ($data['notes'] ?? '')),
-                'created_by' => auth()->id(),
-            ]);
-
-            $subtotal = $tax = 0;
-            foreach ($request->item_id as $i => $itemId) {
+        $created = DB::transaction(function () use ($request, $data, $companyId, $visibility) {
+            $attachment = $request->hasFile('attachment') ? $request->file('attachment')->store('purchase-estimate-attachments', 'public') : null;
+            $groups = collect($request->item_id)->keys()->groupBy(fn($i) => (int)$request->party_id[$i]);
+            $estimates = collect();
+            foreach ($groups as $partyId => $indexes) {
+                abort_unless(Party::where('company_id',$companyId)->whereKey($partyId)->exists(), 422, 'Selected supplier does not belong to this company.');
+                $estimate = PurchaseEstimate::create([
+                    'company_id' => $companyId, 'party_id' => $partyId,
+                    'cost_center_id' => $data['cost_center_id'] ?? null, 'sub_cost_center_id' => $data['sub_cost_center_id'] ?? null,
+                    'estimate_no' => $this->nextEstimateNo(), 'estimate_date' => $data['billing_date'],
+                    'reference_no' => $data['reference_no'] ?? null, 'notes' => trim('[SMART PURCHASE] '.($data['notes'] ?? '')),
+                    'attachment' => $attachment, 'status' => 'draft', 'is_smart_purchase' => true,
+                    'analysis_from' => $data['analysis_from'], 'analysis_to' => $data['analysis_to'], 'created_by' => auth()->id(),
+                ]);
+                $subtotal = $tax = 0;
+                foreach ($indexes as $i) {
+                    $itemId = $request->item_id[$i];
                 $item = Item::where('company_id', $companyId)->findOrFail($itemId);
                 $qty = (float) $request->quantity[$i];
                 $price = (float) $request->unit_price[$i];
@@ -82,8 +86,8 @@ class SmartPurchaseController extends Controller
                 $taxAmount = $base * $taxPercent / 100;
                 $lineTotal = $base + $taxAmount;
 
-                $line = PurchaseBillItem::create([
-                    'purchase_bill_id' => $bill->id,
+                PurchaseEstimateItem::create([
+                    'purchase_estimate_id' => $estimate->id,
                     'item_id' => $item->id,
                     'description' => 'Smart Purchase raw material',
                     'quantity' => $qty,
@@ -95,103 +99,63 @@ class SmartPurchaseController extends Controller
                     'tax_percent' => $taxPercent,
                     'tax_amount' => $taxAmount,
                     'line_total' => $lineTotal,
-                    'selected_units' => [],
                 ]);
-
-                $accounting->moveStock($item, [
-                    'party_id' => $bill->party_id,
-                    'movement_date' => $bill->billing_date,
-                    'movement_type' => 'smart_purchase',
-                    'direction' => 'in',
-                    'quantity' => $qty,
-                    'unit_price' => $price,
-                    'total_value' => $lineTotal,
-                    'reference_type' => PurchaseBill::class,
-                    'reference_id' => $bill->id,
-                    'reference_no' => $bill->invoice_no,
-                    'description' => 'Smart Purchase stock in: ' . $line->description,
-                ]);
-
                 $subtotal += $base;
                 $tax += $taxAmount;
+                }
+                $estimate->update(['subtotal'=>$subtotal,'discount_amount'=>0,'tax_amount'=>$tax,'grand_total'=>$subtotal+$tax]);
+                $visibility->syncFromRequest($request, $estimate);
+                $estimates->push($estimate);
             }
-
-            $bill->update([
-                'subtotal' => $subtotal,
-                'discount_amount' => 0,
-                'tax_amount' => $tax,
-                'grand_total' => $subtotal + $tax,
-            ]);
-
-            if ($bill->purchase_type === 'credit' && $bill->party_id) {
-                $accounting->postPartyLedger($bill->party, [
-                    'entry_date' => $bill->billing_date,
-                    'entry_type' => 'smart_purchase',
-                    'reference_type' => PurchaseBill::class,
-                    'reference_id' => $bill->id,
-                    'reference_no' => $bill->invoice_no,
-                    'credit' => $bill->grand_total,
-                    'debit' => 0,
-                    'description' => 'Smart Purchase payable.',
-                ]);
-            }
-
-            $visibility->syncFromRequest($request, $bill);
+            return $estimates;
         });
 
-        return redirect()->route('admin.purchases.index')->with('success', 'Smart Purchase posted with stock and payable ledger.');
+        return redirect()->route('admin.purchase-estimates.index')->with('success', $created->count().' Smart Purchase estimate(s) created. Stock and ledger will post only after final receipt.');
     }
 
     private function analysisRows(Carbon $from, Carbon $to, EntryVisibilityService $visibility): array
     {
-        $invoices = $visibility->scopeForUser(
-            SalesInvoice::with(['items.item.bomMaterials.rawItem'])->whereBetween('billing_date', [$from->toDateString(), $to->toDateString()]),
-            SalesInvoice::class
-        )->get();
+        $companyId = auth()->user()->current_company_id;
+        $movements = StockMovement::with('item')->where('company_id', $companyId)
+            ->whereBetween('movement_date', [$from->toDateString(),$to->toDateString()])
+            ->whereIn('movement_type',['production_consumption','production_consumption_reversal'])
+            ->get();
+        $batches = ProductionBatch::with('finishedItem')->where('company_id',$companyId)
+            ->whereIn('batch_no',$movements->pluck('reference_no')->filter()->unique())->get()->keyBy('batch_no');
+        $rawRows = $movements->map(function($move) use ($batches) {
+            $sign = $move->movement_type === 'production_consumption' ? 1 : -1;
+            $batch = $batches->get($move->reference_no);
+            return ['item'=>$move->item,'required_qty'=>$sign*(float)$move->quantity,'valuation'=>$sign*(float)$move->total_value,
+                'finished'=>$batch?->finishedItem?->name ?: 'Production '.$move->reference_no,
+                'sold_qty'=>$batch ? (float)$batch->quantity : 0,'batch_no'=>$move->reference_no,'date'=>$move->movement_date?->format('d M Y')];
+        })->filter(fn($row) => $row['item']);
 
-        $rawRows = collect();
-        $invoiceTotal = 0;
-
-        foreach ($invoices as $invoice) {
-            foreach ($invoice->items as $line) {
-                $bom = $line->item?->bomMaterials ?? collect();
-                if ($bom->isEmpty()) {
-                    continue;
-                }
-
-                $invoiceTotal += (float) $line->line_total;
-                foreach ($bom as $row) {
-                    if (!$row->rawItem || ($row->line_type ?? 'raw_material') === 'service' || $row->rawItem->item_type === 'service') {
-                        continue;
-                    }
-
-                    $need = (float) $line->quantity * (float) $row->qty_per_unit;
-                    $rawRows->push([
-                        'item' => $row->rawItem,
-                        'required_qty' => $need,
-                        'valuation' => $need * (float) $row->rawItem->purchase_price,
-                        'finished' => $line->item?->name,
-                        'sold_qty' => (float) $line->quantity,
-                    ]);
-                }
-            }
-        }
-
-        $materials = $rawRows->groupBy(fn($row) => $row['item']->id)->map(function ($rows) {
+        $materials = $rawRows->groupBy(fn($row) => $row['item']->id)->map(function ($rows) use ($companyId) {
             $item = $rows->first()['item'];
+            $previous = PurchaseBillItem::with('purchaseBill.party')->where('item_id',$item->id)
+                ->whereHas('purchaseBill',fn($q)=>$q->where('company_id',$companyId)->whereNotNull('party_id'))
+                ->latest('id')->first()?->purchaseBill?->party;
             return [
                 'item' => $item,
                 'required_qty' => $rows->sum('required_qty'),
                 'valuation' => $rows->sum('valuation'),
                 'sources' => $rows->pluck('finished')->unique()->join(', '),
+                'details' => $rows->groupBy(fn($r)=>$r['batch_no'].'|'.$r['finished'])->map(fn($group)=>[
+                    'batch_no'=>$group->first()['batch_no'],'finished'=>$group->first()['finished'],'finished_qty'=>$group->first()['sold_qty'],
+                    'consumed_qty'=>$group->sum('required_qty'),'valuation'=>$group->sum('valuation'),'date'=>$group->first()['date'],
+                ])->values(),
+                'previous_party_id' => $previous?->id,
+                'previous_party_name' => $previous?->display_name,
             ];
-        })->values();
+        })->filter(fn($row)=>$row['required_qty']>0)->values();
 
         return [
             'materials' => $materials,
-            'invoice_total' => $invoiceTotal,
+            'invoice_total' => $materials->sum('valuation'),
             'raw_total' => $materials->sum('valuation'),
-            'difference' => $invoiceTotal - $materials->sum('valuation'),
+            // Smart Purchase now uses actual production consumption, so there is
+            // no sales-invoice total to compare against.
+            'difference' => 0,
         ];
     }
 
@@ -213,5 +177,11 @@ class SmartPurchaseController extends Controller
     private function nextNo(): string
     {
         return str_pad((string) (PurchaseBill::where('company_id', auth()->user()->current_company_id)->withTrashed()->count() + 1), 8, '0', STR_PAD_LEFT);
+    }
+
+    private function nextEstimateNo(): string
+    {
+        $next = PurchaseEstimate::where('company_id', auth()->user()->current_company_id)->withTrashed()->count() + 1;
+        return 'SP-'.now()->format('Y').str_pad((string)$next,6,'0',STR_PAD_LEFT);
     }
 }

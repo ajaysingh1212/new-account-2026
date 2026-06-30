@@ -4,9 +4,13 @@ namespace App\Http\Controllers\Admin\Purchase;
 
 use App\Http\Controllers\Controller;
 use App\Models\CostCenter;
+use App\Models\BankAccount;
+use App\Models\BankTransaction;
 use App\Models\EntryVisibility;
 use App\Models\Item;
 use App\Models\Party;
+use App\Models\PartyPayment;
+use App\Models\PartyPaymentAllocation;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseBillItem;
 use App\Models\PurchaseEstimate;
@@ -57,15 +61,15 @@ class PurchaseEstimateController extends Controller
     public function show(PurchaseEstimate $purchaseEstimate, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($purchaseEstimate);
-        $purchaseEstimate->load(['party','items.item','convertedBill']);
+        $purchaseEstimate->load(['party','items.item','convertedBill','paymentBankAccount']);
 
-        return view('admin.purchase-estimates.show', ['estimate' => $purchaseEstimate]);
+        return view('admin.purchase-estimates.show', ['estimate' => $purchaseEstimate, 'bankAccounts' => BankAccount::where('company_id',$purchaseEstimate->company_id)->where('status','active')->get()]);
     }
 
     public function edit(PurchaseEstimate $purchaseEstimate, EntryVisibilityService $visibility)
     {
         $visibility->authorizeManage($purchaseEstimate);
-        abort_if($purchaseEstimate->status === 'converted', 422, 'Converted purchase estimate cannot be edited.');
+        abort_if(in_array($purchaseEstimate->status, ['transit','converted']), 422, 'Transit/converted purchase estimate cannot be edited.');
         $purchaseEstimate->load('items');
 
         return view('admin.purchase-estimates.edit', array_merge($this->formData(), ['estimate' => $purchaseEstimate]));
@@ -74,7 +78,7 @@ class PurchaseEstimateController extends Controller
     public function update(Request $request, PurchaseEstimate $purchaseEstimate, EntryVisibilityService $visibility)
     {
         $visibility->authorizeManage($purchaseEstimate);
-        abort_if($purchaseEstimate->status === 'converted', 422, 'Converted purchase estimate cannot be edited.');
+        abort_if(in_array($purchaseEstimate->status, ['transit','converted']), 422, 'Transit/converted purchase estimate cannot be edited.');
         $data = $this->validated($request);
 
         DB::transaction(function () use ($request, $purchaseEstimate, $data, $visibility) {
@@ -115,13 +119,30 @@ class PurchaseEstimateController extends Controller
         return redirect()->route('admin.purchase-estimates.index')->with('success', 'Purchase estimate deleted.');
     }
 
-    public function convert(PurchaseEstimate $purchaseEstimate, AccountingService $accounting, EntryVisibilityService $visibility)
+    public function transit(Request $request, PurchaseEstimate $purchaseEstimate, EntryVisibilityService $visibility)
     {
         $visibility->authorizeManage($purchaseEstimate);
-        abort_if($purchaseEstimate->status === 'cancelled', 422, 'Cancelled purchase estimate cannot be converted.');
-        abort_if($purchaseEstimate->status === 'converted', 422, 'Purchase estimate already converted.');
+        abort_unless($purchaseEstimate->status === 'draft', 422, 'Only a draft estimate can move to transit.');
+        $data = $request->validate([
+            'payment_completed'=>['required','boolean'],
+            'payment_bank_account_id'=>['nullable','required_if:payment_completed,1','exists:bank_accounts,id'],
+            'payment_mode'=>['nullable','required_if:payment_completed,1','max:30'],
+            'payment_reference'=>['nullable','required_if:payment_completed,1','max:255'],
+        ]);
+        if (!empty($data['payment_completed'])) {
+            abort_unless(BankAccount::where('company_id',$purchaseEstimate->company_id)->whereKey($data['payment_bank_account_id'])->exists(), 422, 'Selected bank account does not belong to this company.');
+        }
+        $purchaseEstimate->update(array_merge($data,['status'=>'transit','transit_at'=>now()]));
+        return back()->with('success','Items marked in transit. Incoming quantity is now visible in Stocks.');
+    }
 
-        DB::transaction(function () use ($purchaseEstimate, $accounting) {
+    public function convert(Request $request, PurchaseEstimate $purchaseEstimate, AccountingService $accounting, EntryVisibilityService $visibility)
+    {
+        $visibility->authorizeManage($purchaseEstimate);
+        abort_unless($purchaseEstimate->status === 'transit', 422, 'Move this estimate to transit before final purchase.');
+        $received = $request->validate(['received_quantity'=>['required','array'],'received_quantity.*'=>['required','numeric','min:0']])['received_quantity'];
+
+        DB::transaction(function () use ($purchaseEstimate, $accounting, $received) {
             $purchaseEstimate->load(['items.item','party']);
 
             $bill = PurchaseBill::create([
@@ -129,7 +150,7 @@ class PurchaseEstimateController extends Controller
                 'party_id' => $purchaseEstimate->party_id,
                 'cost_center_id' => $purchaseEstimate->cost_center_id,
                 'sub_cost_center_id' => $purchaseEstimate->sub_cost_center_id,
-                'purchase_type' => 'credit',
+                'purchase_type' => $purchaseEstimate->payment_completed ? 'cash' : 'credit',
                 'invoice_no' => $this->nextPurchaseNo($purchaseEstimate->company_id),
                 'supplier_bill_no' => $purchaseEstimate->estimate_no,
                 'billing_date' => now()->toDateString(),
@@ -138,10 +159,7 @@ class PurchaseEstimateController extends Controller
                 'phone' => $purchaseEstimate->phone,
                 'billing_address' => $purchaseEstimate->billing_address,
                 'shipping_address' => $purchaseEstimate->shipping_address,
-                'subtotal' => $purchaseEstimate->subtotal,
-                'discount_amount' => $purchaseEstimate->discount_amount,
-                'tax_amount' => $purchaseEstimate->tax_amount,
-                'grand_total' => $purchaseEstimate->grand_total,
+                'subtotal' => 0, 'discount_amount' => 0, 'tax_amount' => 0, 'grand_total' => 0,
                 'notes' => $purchaseEstimate->notes,
                 'terms' => $purchaseEstimate->terms,
                 'status' => 'posted',
@@ -149,23 +167,32 @@ class PurchaseEstimateController extends Controller
             ]);
             $this->copyEstimateVisibilityToBill($purchaseEstimate, $bill);
 
+            $subtotal = $tax = $grand = 0;
             foreach ($purchaseEstimate->items as $line) {
                 $item = $line->item;
                 abort_if($item?->productType?->nature === 'finished_goods', 422, 'Finished goods cannot be purchased. Use Production / CRM Assembly.');
 
+                $qty = (float)($received[$line->id] ?? $line->quantity);
+                abort_if($qty > (float)$line->quantity, 422, "Received quantity for {$item->name} cannot exceed ordered quantity.");
+                $base = $qty * (float)$line->unit_price;
+                $discount = $line->discount_type === 'flat' ? min((float)$line->discount_value,$base) : $base*(float)$line->discount_value/100;
+                $taxAmount = max(0,$base-$discount)*(float)$line->tax_percent/100;
+                $lineTotal = max(0,$base-$discount)+$taxAmount;
+                $line->update(['received_quantity'=>$qty]);
+                if ($qty <= 0) continue;
                 PurchaseBillItem::create([
                     'purchase_bill_id' => $bill->id,
                     'item_id' => $line->item_id,
                     'description' => $line->description,
-                    'quantity' => $line->quantity,
+                    'quantity' => $qty,
                     'unit' => $line->unit,
                     'unit_price' => $line->unit_price,
                     'discount_type' => $line->discount_type,
                     'discount_value' => $line->discount_value,
-                    'discount_amount' => $line->discount_amount,
+                    'discount_amount' => $discount,
                     'tax_percent' => $line->tax_percent,
-                    'tax_amount' => $line->tax_amount,
-                    'line_total' => $line->line_total,
+                    'tax_amount' => $taxAmount,
+                    'line_total' => $lineTotal,
                 ]);
 
                 $accounting->moveStock($item, [
@@ -173,15 +200,17 @@ class PurchaseEstimateController extends Controller
                     'movement_date' => $bill->billing_date,
                     'movement_type' => 'purchase',
                     'direction' => 'in',
-                    'quantity' => $line->quantity,
+                    'quantity' => $qty,
                     'unit_price' => $line->unit_price,
-                    'total_value' => $line->line_total,
+                    'total_value' => $lineTotal,
                     'reference_type' => PurchaseBill::class,
                     'reference_id' => $bill->id,
                     'reference_no' => $bill->invoice_no,
                     'description' => 'Purchase stock in from purchase estimate conversion.',
                 ]);
+                $subtotal += $base; $tax += $taxAmount; $grand += $lineTotal;
             }
+            $bill->update(['subtotal'=>$subtotal,'discount_amount'=>max(0,$subtotal+$tax-$grand),'tax_amount'=>$tax,'grand_total'=>$grand]);
 
             if ($bill->party_id) {
                 $accounting->postPartyLedger($bill->party, [
@@ -190,10 +219,28 @@ class PurchaseEstimateController extends Controller
                     'reference_type' => PurchaseBill::class,
                     'reference_id' => $bill->id,
                     'reference_no' => $bill->invoice_no,
-                    'credit' => $bill->grand_total,
+                    'credit' => $grand,
                     'debit' => 0,
                     'description' => "Purchase bill converted from purchase estimate {$purchaseEstimate->estimate_no}.",
                 ]);
+                if ($purchaseEstimate->payment_completed) {
+                    $account = BankAccount::lockForUpdate()->findOrFail($purchaseEstimate->payment_bank_account_id);
+                    abort_if((float)$account->current_balance < $grand, 422, 'Selected bank account has insufficient balance for this paid purchase.');
+                    $payment = PartyPayment::create(['company_id'=>$bill->company_id,'party_id'=>$bill->party_id,'bank_account_id'=>$account->id,
+                        'payment_date'=>now()->toDateString(),'payment_type'=>'payment_out','reference_no'=>$purchaseEstimate->payment_reference,
+                        'amount'=>$grand,'discount_amount'=>0,'total_amount'=>$grand,'payment_mode'=>$purchaseEstimate->payment_mode,
+                        'description'=>'Payment for in-transit purchase '.$purchaseEstimate->estimate_no,'created_by'=>auth()->id()]);
+                    PartyPaymentAllocation::create(['party_payment_id'=>$payment->id,'company_id'=>$bill->company_id,'party_id'=>$bill->party_id,
+                        'bill_type'=>'purchase','bill_model'=>PurchaseBill::class,'bill_id'=>$bill->id,'bill_no'=>$bill->invoice_no,
+                        'bill_date'=>$bill->billing_date,'bill_total'=>$grand,'amount'=>$grand]);
+                    $accounting->postPartyLedger($bill->party,['entry_date'=>now()->toDateString(),'entry_type'=>'payment_out','reference_type'=>PartyPayment::class,
+                        'reference_id'=>$payment->id,'reference_no'=>$payment->reference_no,'debit'=>$grand,'credit'=>0,'description'=>'Paid purchase amount.']);
+                    $balance=(float)$account->current_balance-$grand;$account->update(['current_balance'=>$balance]);
+                    BankTransaction::create(['company_id'=>$bill->company_id,'bank_account_id'=>$account->id,'party_id'=>$bill->party_id,
+                        'transaction_date'=>now()->toDateString(),'transaction_type'=>'payment_out','direction'=>'out','amount'=>$grand,
+                        'balance_after'=>$balance,'reference_no'=>$payment->reference_no,'payment_mode'=>$payment->payment_mode,
+                        'reference_type'=>PartyPayment::class,'reference_id'=>$payment->id,'description'=>$payment->description,'created_by'=>auth()->id()]);
+                }
             }
 
             $purchaseEstimate->update([

@@ -115,6 +115,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
     Route::middleware('permission:smart_purchase.view')->group(function () {
         Route::get('smart-purchases', [SmartPurchaseController::class, 'index'])->middleware('permission:smart_purchase.view')->name('smart-purchases.index');
         Route::post('smart-purchases', [SmartPurchaseController::class, 'store'])->middleware('permission:smart_purchase.create')->name('smart-purchases.store');
+        Route::post('smart-purchases/parties', [PartyController::class, 'store'])->middleware('permission:smart_purchase.create')->name('smart-purchases.parties.store');
     });
     Route::middleware('permission:purchase.view')->group(function () {
         Route::get('purchases/{purchase}/print', [PurchaseBillController::class, 'print'])->middleware('permission:purchase.print')->name('purchases.print');
@@ -156,6 +157,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
     Route::middleware('permission:purchase_estimates.view')->group(function () {
         Route::get('purchase-estimates/{purchaseEstimate}/print', [PurchaseEstimateController::class, 'print'])->middleware('permission:purchase_estimates.print')->name('purchase-estimates.print');
         Route::post('purchase-estimates/{purchaseEstimate}/convert', [PurchaseEstimateController::class, 'convert'])->middleware('permission:purchase_estimates.convert')->name('purchase-estimates.convert');
+        Route::post('purchase-estimates/{purchaseEstimate}/transit', [PurchaseEstimateController::class, 'transit'])->middleware('permission:purchase_estimates.convert')->name('purchase-estimates.transit');
         Route::patch('purchase-estimates/{purchaseEstimate}/cancel', [PurchaseEstimateController::class, 'cancel'])->middleware('permission:purchase_estimates.edit')->name('purchase-estimates.cancel');
         Route::resource('purchase-estimates', PurchaseEstimateController::class)->only(['create','store'])->middleware('permission:purchase_estimates.create');
         Route::resource('purchase-estimates', PurchaseEstimateController::class)->only(['edit','update'])->middleware('permission:purchase_estimates.edit');

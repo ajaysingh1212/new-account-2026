@@ -7,6 +7,7 @@ use App\Models\Item;
 use App\Models\ProductionBatch;
 use App\Models\ProductType;
 use App\Models\PurchaseBillItem;
+use App\Models\PurchaseEstimateItem;
 use App\Models\StockMovement;
 use App\Models\StockOutChallan;
 use App\Services\EntryVisibilityService;
@@ -22,9 +23,12 @@ class StockController extends Controller
         $productTypeId = request('product_type_id');
         $serialSearch = trim((string) request('q', ''));
 
+        $companyId = auth()->user()->current_company_id;
+        $incomingByItem = PurchaseEstimateItem::whereHas('purchaseEstimate', fn($q) => $q->where('company_id',$companyId)->where('status','transit'))
+            ->selectRaw('item_id, SUM(quantity) as incoming_qty')->groupBy('item_id')->pluck('incoming_qty','item_id');
         $items = $visibility->scopeForUser(
             Item::with('productType')
-                ->where('current_stock', '>', 0)
+                ->where(fn($q) => $q->where('current_stock', '>', 0)->orWhereIn('id',$incomingByItem->keys()))
                 ->when($nature, fn($q) => $q->whereHas('productType', fn($type) => $type->where('nature', $nature)))
                 ->when($productTypeId, fn($q) => $q->where('product_type_id', $productTypeId))
                 ->orderBy('name'),
@@ -72,7 +76,7 @@ class StockController extends Controller
         $monthIn = $monthMovements->where('direction', 'in')->sum(fn($m) => (float) $m->total_value);
         $monthOut = $monthMovements->where('direction', 'out')->sum(fn($m) => (float) $m->total_value);
 
-        return view('admin.stocks.index', compact('items', 'overallValue', 'overallQty', 'month', 'nature', 'productTypeId', 'productTypes', 'monthIn', 'monthOut', 'serialsByItem', 'serialSearch'));
+        return view('admin.stocks.index', compact('items', 'overallValue', 'overallQty', 'month', 'nature', 'productTypeId', 'productTypes', 'monthIn', 'monthOut', 'serialsByItem', 'serialSearch','incomingByItem'));
     }
 
     public function history(Request $request, EntryVisibilityService $visibility)

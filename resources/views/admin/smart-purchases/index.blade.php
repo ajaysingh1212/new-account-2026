@@ -14,9 +14,9 @@
     <div class="smart-head d-flex justify-content-between align-items-center">
         <div>
             <h4><i class="fas fa-brain mr-2"></i>Smart Purchase</h4>
-            <small>Sales period ke finished goods ko BOM raw-material demand me convert karke purchase post karein.</small>
+            <small>Actual production/CRM raw-material consumption ko supplier-wise purchase estimates me plan karein.</small>
         </div>
-        <a href="{{ route('admin.purchases.index') }}" class="btn btn-outline-light btn-sm"><i class="fas fa-list mr-1"></i>Purchase Bills</a>
+        <a href="{{ route('admin.purchase-estimates.index') }}" class="btn btn-outline-light btn-sm"><i class="fas fa-list mr-1"></i>Purchase Estimates</a>
     </div>
     <div class="smart-body">
         <form method="GET" class="row align-items-end">
@@ -36,35 +36,36 @@
         </form>
 
         <div class="row mb-3">
-            <div class="col-md-4"><div class="metric"><span>Total Invoice Valuation</span><b>Rs {{ number_format($analysis['invoice_total'],2) }}</b></div></div>
-            <div class="col-md-4"><div class="metric"><span>Total Raw Material Valuation</span><b>Rs {{ number_format($analysis['raw_total'],2) }}</b></div></div>
-            <div class="col-md-4"><div class="metric"><span>Difference</span><b>Rs {{ number_format($analysis['difference'],2) }}</b></div></div>
+            <div class="col-md-4"><div class="metric"><span>Actual Consumed Valuation</span><b>Rs {{ number_format($analysis['raw_total'],2) }}</b></div></div>
+            <div class="col-md-4"><div class="metric"><span>Raw Materials Used</span><b>{{ $analysis['materials']->count() }}</b></div></div>
+            <div class="col-md-4"><div class="metric"><span>Period</span><b style="font-size:15px">{{ $period['from']->format('d M') }} – {{ $period['to']->format('d M Y') }}</b></div></div>
         </div>
 
         <div class="step-tabs">
-            <button type="button" class="active" data-step="1">1. BOM Demand</button>
-            <button type="button" data-step="2">2. Purchase Qty</button>
-            <button type="button" data-step="3">3. Party & Post</button>
+            <button type="button" class="active" data-step="1">1. Consumption</button>
+            <button type="button" data-step="2">2. Qty & Supplier</button>
+            <button type="button" data-step="3">3. Estimate Details</button>
         </div>
 
-        <form method="POST" action="{{ route('admin.smart-purchases.store') }}" id="smartPurchaseForm">
+        <form method="POST" enctype="multipart/form-data" action="{{ route('admin.smart-purchases.store') }}" id="smartPurchaseForm">
             @csrf
+            <input type="hidden" name="analysis_from" value="{{ $period['from']->toDateString() }}"><input type="hidden" name="analysis_to" value="{{ $period['to']->toDateString() }}">
             <div class="step-pane" data-pane="1">
                 <div class="table-responsive">
                     <table class="table table-bordered table-hover sp-table">
-                        <thead><tr><th>Raw Material</th><th>Sold BOM Sources</th><th>Required Qty</th><th>Stock Qty</th><th>Default Price</th><th>Valuation</th></tr></thead>
+                        <thead><tr><th>Raw Material</th><th>Used In</th><th>Consumed Qty</th><th>Stock Qty</th><th>Rate</th><th>Valuation</th></tr></thead>
                         <tbody>
                         @forelse($analysis['materials'] as $row)
                             <tr>
                                 <td><b>{{ $row['item']->name }}</b><br><small>{{ $row['item']->item_code }} | {{ $row['item']->unit }}</small></td>
                                 <td>{{ $row['sources'] ?: '-' }}</td>
-                                <td>{{ number_format($row['required_qty'],3) }}</td>
+                                <td><button type="button" class="btn btn-link p-0 consumption-detail" data-target="#consumption{{ $row['item']->id }}">{{ number_format($row['required_qty'],3) }}</button></td>
                                 <td>{{ number_format((float)$row['item']->current_stock,3) }}</td>
                                 <td>Rs {{ number_format((float)$row['item']->purchase_price,2) }}</td>
                                 <td>Rs {{ number_format($row['valuation'],2) }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="6" class="text-center text-muted">Selected period me BOM-enabled sold item nahi mila.</td></tr>
+                            <tr><td colspan="6" class="text-center text-muted">Selected period me production raw-material consumption nahi mila.</td></tr>
                         @endforelse
                         </tbody>
                     </table>
@@ -75,7 +76,7 @@
             <div class="step-pane d-none" data-pane="2">
                 <div class="table-responsive">
                     <table class="table table-bordered sp-table" id="purchasePlanTable">
-                        <thead><tr><th>Raw Material</th><th>Stock Qty</th><th>Required Qty</th><th>Purchase Qty</th><th>Price</th><th>Tax %</th><th>Total</th></tr></thead>
+                        <thead><tr><th>Raw Material</th><th>Stock</th><th>Consumed</th><th>Purchase Qty</th><th>Previous / Selected Supplier</th><th>Price</th><th>Tax %</th><th>Total</th></tr></thead>
                         <tbody>
                         @foreach($analysis['materials'] as $row)
                             <tr>
@@ -86,6 +87,7 @@
                                 <td>{{ number_format((float)$row['item']->current_stock,3) }}</td>
                                 <td>{{ number_format($row['required_qty'],3) }}</td>
                                 <td><input type="number" step="0.001" min="0.001" name="quantity[]" class="form-control plan-qty" value="{{ max(0, round($row['required_qty'] - (float)$row['item']->current_stock, 3)) ?: round($row['required_qty'],3) }}" required></td>
+                                <td><div class="input-group"><select name="party_id[]" class="form-control supplier-select" required><option value="">Select supplier</option>@foreach($parties as $party)<option value="{{ $party->id }}" @selected((int)$row['previous_party_id']===(int)$party->id)>{{ $party->display_name }}</option>@endforeach</select><div class="input-group-append"><button type="button" class="btn btn-outline-success add-party" title="Add supplier"><i class="fas fa-plus"></i></button></div></div><small class="text-muted">Previous: {{ $row['previous_party_name'] ?: 'Not found' }}</small></td>
                                 <td><input type="number" step="0.01" min="0" name="unit_price[]" class="form-control plan-price" value="{{ (float)$row['item']->purchase_price }}" required></td>
                                 <td><input type="number" step="0.01" min="0" name="tax_percent[]" class="form-control plan-tax" value="{{ (float)$row['item']->purchase_gst_percent }}"></td>
                                 <td class="amount-preview">Rs 0.00</td>
@@ -101,24 +103,30 @@
 
             <div class="step-pane d-none" data-pane="3">
                 <div class="row">
-                    <div class="col-md-2 form-group"><label>Type</label><select name="purchase_type" class="form-control"><option value="credit">Credit</option><option value="cash">Cash</option></select></div>
-                    <div class="col-md-4 form-group"><label>Party</label><select name="party_id" class="form-control select2"><option value="">Cash/No Party</option>@foreach($parties as $party)<option value="{{ $party->id }}">{{ $party->display_name }} | {{ $party->phone }}</option>@endforeach</select></div>
-                    <div class="col-md-2 form-group"><label>PO / Invoice No</label><input name="invoice_no" class="form-control" value="{{ $invoiceNo }}"></div>
-                    <div class="col-md-2 form-group"><label>Billing Date</label><input type="date" name="billing_date" class="form-control" value="{{ now()->toDateString() }}" required></div>
-                    <div class="col-md-2 form-group"><label>Supplier Bill No</label><input name="supplier_bill_no" class="form-control"></div>
-                    <div class="col-md-3 form-group"><label>Purchase Bill Date</label><input type="date" name="purchase_bill_date" class="form-control"></div>
+                    <div class="col-md-3 form-group"><label>Estimate Date</label><input type="date" name="billing_date" class="form-control" value="{{ now()->toDateString() }}" required></div>
                     <div class="col-md-3 form-group"><label>Reference No</label><input name="reference_no" class="form-control"></div>
                     <div class="col-md-3 form-group"><label>Cost Center</label><select name="cost_center_id" class="form-control"><option value="">Select</option>@foreach($costCenters as $cc)<option value="{{ $cc->id }}">{{ $cc->name }}</option>@endforeach</select></div>
                     <div class="col-md-3 form-group"><label>Sub Cost Center</label><select name="sub_cost_center_id" class="form-control"><option value="">Select</option>@foreach($subCostCenters as $scc)<option value="{{ $scc->id }}">{{ $scc->name }}</option>@endforeach</select></div>
-                    <div class="col-md-12 form-group"><label>Notes</label><textarea name="notes" class="form-control" rows="2"></textarea></div>
+                    <div class="col-md-6 form-group"><label>Attachment</label><input type="file" name="attachment" class="form-control"></div>
+                    <div class="col-md-12 form-group"><label>Notes</label><textarea name="notes" class="form-control" rows="2" placeholder="This will be marked as a Smart Purchase entry"></textarea></div>
                 </div>
                 @include('admin.partials.entry-visibility')
                 <button type="button" class="btn btn-outline-secondary prev-step"><i class="fas fa-arrow-left mr-1"></i>Back</button>
-                <button class="btn btn-success"><i class="fas fa-check mr-1"></i>Post Smart Purchase</button>
+                <button class="btn btn-success"><i class="fas fa-check mr-1"></i>Create Purchase Estimate(s)</button>
             </div>
         </form>
     </div>
 </div>
+<div class="card mt-4"><div class="card-header"><h5 class="mb-0"><i class="fas fa-history mr-2"></i>Smart Purchase Entries</h5></div><div class="card-body table-responsive"><table class="table table-hover"><thead><tr><th>Estimate</th><th>Date</th><th>Supplier</th><th>Period</th><th>Total</th><th>Status</th><th>Action</th></tr></thead><tbody>@forelse($smartEstimates as $entry)<tr><td>{{ $entry->estimate_no }}</td><td>{{ $entry->estimate_date?->format('d M Y') }}</td><td>{{ $entry->party?->display_name }}</td><td>{{ $entry->analysis_from?->format('d M') }} – {{ $entry->analysis_to?->format('d M Y') }}</td><td>Rs {{ number_format((float)$entry->grand_total,2) }}</td><td><span class="badge badge-{{ $entry->status==='transit'?'info':($entry->status==='converted'?'success':'secondary') }}">{{ ucfirst($entry->status) }}</span></td><td><a href="{{ route('admin.purchase-estimates.show',$entry) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a>@if($entry->status==='draft')<a href="{{ route('admin.purchase-estimates.edit',$entry) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>@endif</td></tr>@empty<tr><td colspan="7" class="text-center text-muted">No Smart Purchase entry yet.</td></tr>@endforelse</tbody></table></div></div>
+@foreach($analysis['materials'] as $row)
+<div class="modal fade" id="consumption{{ $row['item']->id }}"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">{{ $row['item']->name }} consumption details</h5><button class="close" data-dismiss="modal">&times;</button></div><div class="modal-body"><table class="table table-sm"><thead><tr><th>Date</th><th>Production Batch</th><th>Finished Item</th><th>Produced Qty</th><th>Raw Used</th><th>Value</th></tr></thead><tbody>@foreach($row['details'] as $detail)<tr><td>{{ $detail['date'] }}</td><td>{{ $detail['batch_no'] }}</td><td>{{ $detail['finished'] }}</td><td>{{ number_format($detail['finished_qty'],3) }}</td><td>{{ number_format($detail['consumed_qty'],3) }}</td><td>Rs {{ number_format($detail['valuation'],2) }}</td></tr>@endforeach</tbody><tfoot><tr><th colspan="4">Total</th><th>{{ number_format($row['required_qty'],3) }}</th><th>Rs {{ number_format($row['valuation'],2) }}</th></tr></tfoot></table><p><b>Current stock:</b> {{ number_format((float)$row['item']->current_stock,3) }} {{ $row['item']->unit }} &nbsp; <b>Stock valuation:</b> Rs {{ number_format((float)$row['item']->stock_value,2) }}</p></div></div></div></div>
+@endforeach
+<div class="modal fade" id="partyModal"><div class="modal-dialog modal-xl"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Add Supplier</h5><button class="close" data-dismiss="modal">&times;</button></div><form id="quickPartyForm"><div class="modal-body">
+<input type="hidden" name="party_code" value="{{ $partyCode }}"><input type="hidden" name="party_type" value="supplier"><input type="hidden" name="status" value="active">
+<ul class="nav nav-tabs mb-3"><li class="nav-item"><a class="nav-link active" data-toggle="tab" href="#supplierIdentity">Identity</a></li><li class="nav-item"><a class="nav-link" data-toggle="tab" href="#supplierTax">Tax & Address</a></li><li class="nav-item"><a class="nav-link" data-toggle="tab" href="#supplierCredit">Credit & Bank</a></li></ul>
+<div class="tab-content"><div class="tab-pane fade show active" id="supplierIdentity"><div class="row"><div class="col-md-4 form-group"><label>Display Name *</label><input name="display_name" class="form-control" required></div><div class="col-md-4 form-group"><label>Legal / Trade Name</label><input name="legal_name" class="form-control"></div><div class="col-md-4 form-group"><label>Contact Person</label><input name="contact_person" class="form-control"></div><div class="col-md-3 form-group"><label>Phone</label><input name="phone" class="form-control"></div><div class="col-md-3 form-group"><label>Alternate Phone</label><input name="alternate_phone" class="form-control"></div><div class="col-md-3 form-group"><label>WhatsApp</label><input name="whatsapp_number" class="form-control"></div><div class="col-md-3 form-group"><label>Email</label><input type="email" name="email" class="form-control"></div></div></div>
+<div class="tab-pane fade" id="supplierTax"><div class="row"><div class="col-md-3 form-group"><label>Tax Type *</label><select name="tax_type" class="form-control" required><option value="registered">Registered</option><option value="composition">Composition</option><option value="unregistered" selected>Unregistered</option><option value="consumer">Consumer</option><option value="overseas">Overseas</option></select></div><div class="col-md-3 form-group"><label>GSTIN</label><input name="gstin" class="form-control"></div><div class="col-md-3 form-group"><label>PAN</label><input name="pan_number" class="form-control"></div><div class="col-md-3 form-group"><label>Place of Supply</label><input name="place_of_supply" class="form-control"></div><div class="col-md-3 form-group"><label>City</label><input name="city" class="form-control"></div><div class="col-md-3 form-group"><label>State</label><input name="state" class="form-control"></div><div class="col-md-3 form-group"><label>Pincode</label><input name="pincode" class="form-control"></div><div class="col-md-3 form-group"><label>Country</label><input name="country" value="India" class="form-control"></div><div class="col-md-6 form-group"><label>Billing Address</label><textarea name="billing_address" class="form-control"></textarea></div><div class="col-md-6 form-group"><label>Shipping Address</label><textarea name="shipping_address" class="form-control"></textarea></div></div></div>
+<div class="tab-pane fade" id="supplierCredit"><div class="row"><div class="col-md-3 form-group"><label>Opening Balance</label><input type="number" step="0.01" min="0" name="opening_balance" value="0" class="form-control"></div><div class="col-md-3 form-group"><label>Balance Type *</label><select name="opening_balance_type" class="form-control" required><option value="payable">Payable</option><option value="receivable">Receivable</option></select></div><div class="col-md-3 form-group"><label>Opening Date</label><input type="date" name="opening_balance_date" value="{{ now()->toDateString() }}" class="form-control"></div><div class="col-md-3 form-group"><label>Credit Days</label><input type="number" min="0" name="credit_days" class="form-control"></div><div class="col-md-4 form-group"><label>Bank Name</label><input name="bank_name" class="form-control"></div><div class="col-md-4 form-group"><label>Account Number</label><input name="account_number" class="form-control"></div><div class="col-md-4 form-group"><label>IFSC Code</label><input name="ifsc_code" class="form-control"></div><div class="col-md-4 form-group"><label>UPI ID</label><input name="upi_id" class="form-control"></div><div class="col-md-8 form-group"><label>Notes</label><textarea name="notes" class="form-control"></textarea></div></div></div></div><div id="partyError" class="text-danger"></div></div><div class="modal-footer"><button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button><button class="btn btn-success">Save Supplier</button></div></form></div></div></div>
 @endsection
 
 @push('scripts')
@@ -130,6 +138,9 @@ function calc(){let total=0;$('#purchasePlanTable tbody tr').each(function(){con
 $('.next-step').on('click',()=>showStep(Math.min(3,step+1)));
 $('.prev-step').on('click',()=>showStep(Math.max(1,step-1)));
 $('.step-tabs button').on('click',function(){showStep(+$(this).data('step'));});
+$('.consumption-detail').on('click',function(){$($(this).data('target')).modal('show')});
+let partyTarget=null;$(document).on('click','.add-party',function(){partyTarget=$(this).closest('td').find('.supplier-select');$('#partyModal').modal('show')});
+$('#quickPartyForm').on('submit',function(e){e.preventDefault();$('#partyError').text('');$.ajax({url:'{{ route('admin.smart-purchases.parties.store') }}',method:'POST',data:$(this).serialize()+'&_token={{ csrf_token() }}',headers:{Accept:'application/json'},success:function(p){$('.supplier-select').each(function(){if(!$(this).find(`option[value="${p.id}"]`).length)$(this).append(new Option(p.display_name,p.id))});partyTarget.val(p.id);$('#partyModal').modal('hide');$('#quickPartyForm')[0].reset()},error:function(xhr){$('#partyError').text(Object.values(xhr.responseJSON?.errors||{}).flat().join(' ')||'Supplier could not be saved.')}})});
 $(document).on('input','.plan-qty,.plan-price,.plan-tax',calc);
 calc();
 })();

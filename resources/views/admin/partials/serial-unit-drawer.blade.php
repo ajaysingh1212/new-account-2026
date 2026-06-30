@@ -1,0 +1,26 @@
+<div id="serialDrawerBackdrop" class="serial-drawer-backdrop"></div>
+<aside id="serialDrawer" class="serial-drawer">
+    <div class="serial-drawer-head"><div><b>Select Stock Units</b><small id="serialDrawerHint"></small></div><button type="button" id="closeSerialDrawer" class="btn btn-sm btn-light">&times;</button></div>
+    <div class="p-3"><input id="serialSearch" class="form-control" placeholder="Search serial, VTS/SIM, batch or buyer..."></div>
+    <div id="serialDrawerList" class="serial-drawer-list"></div>
+</aside>
+@push('styles')
+<style>
+.serial-drawer{position:fixed;left:-480px;top:0;width:460px;max-width:calc(100vw - 18px);height:100vh;background:#fff;z-index:1061;box-shadow:18px 0 38px rgba(15,23,42,.24);transition:left .22s;display:flex;flex-direction:column}.serial-drawer.open{left:0}.serial-drawer-backdrop{display:none;position:fixed;inset:0;background:rgba(15,23,42,.38);z-index:1060}.serial-drawer-backdrop.open{display:block}.serial-drawer-head{padding:18px;background:#10233f;color:#fff;display:flex;justify-content:space-between;align-items:center}.serial-drawer-head small{display:block;color:#b8c7dc}.serial-drawer-list{padding:0 14px 20px;overflow:auto}.serial-unit{border:1px solid #dfe7f1;border-radius:9px;padding:11px;margin-bottom:9px;display:flex;gap:10px;cursor:pointer}.serial-unit.is-selected{border-color:#0f766e;background:#ecfdf5}.serial-unit.is-gps-invalid{border-color:#f59e0b;background:#fffbeb}.serial-unit small{display:block;color:#64748b}.serial-summary{display:flex;flex-wrap:wrap;gap:5px;margin-top:6px}.serial-pill{font-size:11px;background:#e8f5f2;color:#0f5f57;padding:3px 7px;border-radius:12px}.choose-units{white-space:nowrap}
+</style>
+@endpush
+@push('scripts')
+<script>
+(function(){
+const UNIT_POOL=@json($unitPool ?? []), ITEM_META=@json($itemMeta ?? []); let activeRow=null;
+function selected(row){try{return JSON.parse(row.find('.selected-units-json').val()||'[]')}catch(e){return []}}
+function save(row,units){row.find('.selected-units-json').val(JSON.stringify(units));row.find('.serial-summary').html(units.map(u=>`<span class="serial-pill">${u.serial_no||'No serial'}${u.vts_sim?' / '+u.vts_sim:''}</span>`).join(''));row.find('.choose-units').toggleClass('btn-success',units.length>0).find('.unit-count').text(units.length)}
+function auto(row){const id=row.find('.item-select').val(), qty=Math.max(0,parseInt(row.find('[name="quantity[]"]').val())||0), gps=!!ITEM_META[id]?.requires_gps;let chosen=selected(row).filter(u=>(UNIT_POOL[id]||[]).some(x=>x.key===u.key&&!x.sold)&&(!gps||u.vts_sim)).slice(0,qty);const keys=chosen.map(u=>u.key);for(const u of (UNIT_POOL[id]||[])){if(chosen.length>=qty)break;if(!u.sold&&!keys.includes(u.key)&&(!gps||u.vts_sim))chosen.push(u)}save(row,chosen);if(gps&&chosen.length<qty&&qty>0)window.alert('Aapka selling item GPS hai. Iske liye SIM/VTS number wala available unit select karna zaroori hai.');}
+function render(){if(!activeRow)return;const id=activeRow.find('.item-select').val(),qty=parseInt(activeRow.find('[name="quantity[]"]').val())||0,gps=!!ITEM_META[id]?.requires_gps,chosen=selected(activeRow),term=($('#serialSearch').val()||'').toLowerCase();$('#serialDrawerHint').text(`${chosen.length}/${qty} selected${gps?' • SIM/VTS mandatory':''}`);const html=(UNIT_POOL[id]||[]).filter(u=>!u.sold&&JSON.stringify(u).toLowerCase().includes(term)).map(u=>{const on=chosen.some(x=>x.key===u.key),bad=gps&&!u.vts_sim;return `<label class="serial-unit ${on?'is-selected':''} ${bad?'is-gps-invalid':''}"><input type="checkbox" class="serial-check" data-key="${u.key}" ${on?'checked':''}><span><b>${u.serial_no||'Serial not entered'}</b><small>SIM/VTS: ${u.vts_sim||'Not available'} • Batch: ${u.production_batch_no||'-'}</small><small>Buyer: ${u.buyer_code||'-'} • Date: ${u.production_date||'-'}</small></span></label>`}).join('');$('#serialDrawerList').html(html||'<div class="alert alert-warning">No matching available stock unit.</div>')}
+$(document).on('click','.choose-units',function(){activeRow=$(this).closest('tr');auto(activeRow);$('#serialDrawer,#serialDrawerBackdrop').addClass('open');render()});
+$(document).on('change','.serial-check',function(){const id=activeRow.find('.item-select').val(),qty=parseInt(activeRow.find('[name="quantity[]"]').val())||0,gps=!!ITEM_META[id]?.requires_gps,u=(UNIT_POOL[id]||[]).find(x=>x.key===$(this).data('key'));let units=selected(activeRow);if(this.checked){if(units.length>=qty){this.checked=false;return alert(`Only ${qty} unit(s) can be selected.`)}if(gps&&!u.vts_sim){this.checked=false;return alert('GPS item ke liye SIM/VTS number wala unit hi select karein.')}units.push(u)}else units=units.filter(x=>x.key!==u.key);save(activeRow,units);render()});
+$(document).on('change','.item-select',function(){save($(this).closest('tr'),[]);auto($(this).closest('tr'))});$(document).on('change input','[name="quantity[]"]',function(){auto($(this).closest('tr'))});$('#serialSearch').on('input',render);$('#closeSerialDrawer,#serialDrawerBackdrop').on('click',()=>$('#serialDrawer,#serialDrawerBackdrop').removeClass('open'));
+$('#lineTable tbody tr').each(function(){save($(this),selected($(this)));if(!selected($(this)).length)auto($(this))});
+})();
+</script>
+@endpush

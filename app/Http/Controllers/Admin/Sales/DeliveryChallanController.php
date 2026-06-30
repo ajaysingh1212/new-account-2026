@@ -10,6 +10,8 @@ use App\Models\Item;
 use App\Models\Party;
 use App\Models\SubCostCenter;
 use App\Services\EntryVisibilityService;
+use App\Services\AccountingService;
+use App\Services\SerialUnitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -30,11 +32,11 @@ class DeliveryChallanController extends Controller
         return view('admin.delivery-challans.create', $this->formData());
     }
 
-    public function store(Request $request, EntryVisibilityService $visibility)
+    public function store(Request $request, EntryVisibilityService $visibility, AccountingService $accounting)
     {
         $data = $this->validated($request);
 
-        DB::transaction(function () use ($request, $data, $visibility) {
+        DB::transaction(function () use ($request, $data, $visibility, $accounting) {
             $attachment = $request->hasFile('attachment')
                 ? $request->file('attachment')->store('challan-attachments', 'public')
                 : null;
@@ -47,7 +49,7 @@ class DeliveryChallanController extends Controller
                 'created_by' => auth()->id(),
             ]));
 
-            $challan->update($this->storeLines($request, $challan));
+            $challan->update($this->storeLines($request, $challan, $accounting));
             $visibility->syncFromRequest($request, $challan);
         });
 
@@ -68,23 +70,25 @@ class DeliveryChallanController extends Controller
         abort_if($deliveryChallan->status === 'cancelled', 422, 'Cancelled challan cannot be edited.');
         $deliveryChallan->load('items');
 
-        return view('admin.delivery-challans.edit', array_merge($this->formData(), compact('deliveryChallan')));
+        return view('admin.delivery-challans.edit', array_merge($this->formData($deliveryChallan), compact('deliveryChallan')));
     }
 
-    public function update(Request $request, DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility)
+    public function update(Request $request, DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility, AccountingService $accounting)
     {
         $visibility->authorizeManage($deliveryChallan);
         abort_if($deliveryChallan->status === 'cancelled', 422, 'Cancelled challan cannot be edited.');
         $data = $this->validated($request);
 
-        DB::transaction(function () use ($request, $deliveryChallan, $data, $visibility) {
+        DB::transaction(function () use ($request, $deliveryChallan, $data, $visibility, $accounting) {
             $attachment = $request->hasFile('attachment')
                 ? $request->file('attachment')->store('challan-attachments', 'public')
                 : $deliveryChallan->attachment;
 
+            $deliveryChallan->load('items.item');
+            $this->reverseStock($deliveryChallan, $accounting, 'delivery_challan_update_reversal');
             $deliveryChallan->update(array_merge($data, ['attachment' => $attachment]));
             $deliveryChallan->items()->delete();
-            $deliveryChallan->update($this->storeLines($request, $deliveryChallan));
+            $deliveryChallan->update($this->storeLines($request, $deliveryChallan, $accounting));
             $visibility->syncFromRequest($request, $deliveryChallan);
         });
 
@@ -99,10 +103,15 @@ class DeliveryChallanController extends Controller
         return view('admin.delivery-challans.print', compact('deliveryChallan'));
     }
 
-    public function cancel(DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility)
+    public function cancel(DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility, AccountingService $accounting)
     {
         $visibility->authorizeManage($deliveryChallan);
-        $deliveryChallan->update(['status' => 'cancelled']);
+        abort_if($deliveryChallan->status === 'cancelled', 422, 'Already cancelled.');
+        DB::transaction(function () use ($deliveryChallan, $accounting) {
+            $deliveryChallan->load('items.item');
+            $this->reverseStock($deliveryChallan, $accounting, 'delivery_challan_cancel_reversal');
+            $deliveryChallan->update(['status' => 'cancelled']);
+        });
 
         return back()->with('success', 'Delivery challan cancelled.');
     }
@@ -110,21 +119,25 @@ class DeliveryChallanController extends Controller
     public function destroy(DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility)
     {
         $visibility->authorizeManage($deliveryChallan);
+        abort_if($deliveryChallan->status !== 'cancelled', 422, 'Cancel the challan before deleting it so stock is restored.');
         $deliveryChallan->delete();
 
         return redirect()->route('admin.delivery-challans.index')->with('success', 'Delivery challan deleted.');
     }
 
-    private function formData(): array
+    private function formData(?DeliveryChallan $deliveryChallan = null): array
     {
         $companyId = auth()->user()->current_company_id;
 
         return [
             'parties' => Party::where('company_id', $companyId)->where('status', 'active')->orderBy('display_name')->get(),
-            'items' => Item::where('company_id', $companyId)->where('status', 'active')->orderBy('name')->get(),
+            'items' => Item::where('company_id', $companyId)->where('status', 'active')
+                ->where(fn($q) => $q->whereDoesntHave('productType')->orWhereHas('productType', fn($type) => $type->where('nature', '<>', 'raw_material')))->orderBy('name')->get(),
             'costCenters' => CostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
             'subCostCenters' => SubCostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
             'challanNo' => $this->nextNo(),
+            'unitPool' => app(SerialUnitService::class)->unitPool($companyId, 'delivery_challan', $deliveryChallan?->id),
+            'itemMeta' => Item::where('company_id', $companyId)->get()->mapWithKeys(fn($item) => [$item->id => ['requires_gps' => app(SerialUnitService::class)->isGpsItem($item)]])->all(),
         ];
     }
 
@@ -154,20 +167,39 @@ class DeliveryChallanController extends Controller
             'item_id.*' => ['required','exists:items,id'],
             'quantity.*' => ['required','numeric','min:0.001'],
             'unit_price.*' => ['nullable','numeric','min:0'],
+            'tax_percent.*' => ['nullable','numeric','min:0'],
+            'discount_value.*' => ['nullable','numeric','min:0'],
+            'selected_units.*' => ['nullable','string'],
         ]);
     }
 
-    private function storeLines(Request $request, DeliveryChallan $challan): array
+    private function storeLines(Request $request, DeliveryChallan $challan, AccountingService $accounting): array
     {
         $subtotal = $tax = $lineDiscount = 0;
+        $reservedKeys = [];
         foreach ($request->item_id as $i => $itemId) {
-            $item = Item::findOrFail($itemId);
+            $item = Item::with('productType')->lockForUpdate()->findOrFail($itemId);
             $qty = (float) $request->quantity[$i];
+            abort_unless((int)$item->company_id === (int)$challan->company_id, 422, 'Selected item does not belong to this company.');
+            abort_if($item->productType?->nature === 'raw_material', 422, 'Raw materials cannot be dispatched from Delivery Challan.');
+            abort_if($item->track_stock && (int)$qty != $qty, 422, "Quantity must be a whole number for {$item->name}.");
+            abort_if($item->track_stock && (float)$item->current_stock < $qty, 422, "Insufficient stock for {$item->name}.");
+            $serials = app(SerialUnitService::class);
+            $pool = collect($serials->unitPool($challan->company_id, 'delivery_challan', $challan->id)[$item->id] ?? [])
+                ->map(function($unit) use ($reservedKeys) { if (in_array($unit['key'] ?? null,$reservedKeys,true)) $unit['sold']=true; return $unit; })->all();
+            $requested = json_decode($request->selected_units[$i] ?? '[]', true) ?: [];
+            $selectedUnits = $item->track_stock ? $serials->reconcile($requested, $pool, (int)$qty, $serials->isGpsItem($item)) : [];
+            abort_if($item->track_stock && count($selectedUnits) !== (int)$qty, 422, "{$item->name} ke liye {$qty} available serial/VTS units required hain.");
+            abort_if($serials->isGpsItem($item) && collect($selectedUnits)->contains(fn($u) => empty($u['vts_sim'])), 422, "GPS item {$item->name} ke liye SIM/VTS number wala unit select karein.");
+            $reservedKeys = array_merge($reservedKeys, collect($selectedUnits)->pluck('key')->all());
             $price = (float) ($request->unit_price[$i] ?? 0);
             $base = $qty * $price;
             $discount = (($request->discount_type[$i] ?? 'percent') === 'flat') ? (float) ($request->discount_value[$i] ?? 0) : $base * (float) ($request->discount_value[$i] ?? 0) / 100;
-            $taxAmount = max(0, $base - $discount) * (float) ($request->tax_percent[$i] ?? 0) / 100;
-            $total = max(0, $base - $discount) + $taxAmount;
+            $gross = max(0, $base - $discount);
+            $taxPercent = (float) ($request->tax_percent[$i] ?? 18);
+            $taxAmount = $taxPercent > 0 ? $gross * $taxPercent / (100 + $taxPercent) : 0;
+            $taxable = $gross - $taxAmount;
+            $total = $gross;
 
             DeliveryChallanItem::create([
                 'delivery_challan_id' => $challan->id,
@@ -179,12 +211,22 @@ class DeliveryChallanController extends Controller
                 'discount_type' => $request->discount_type[$i] ?? 'percent',
                 'discount_value' => $request->discount_value[$i] ?? 0,
                 'discount_amount' => $discount,
-                'tax_percent' => $request->tax_percent[$i] ?? 0,
+                'tax_percent' => $taxPercent,
                 'tax_amount' => $taxAmount,
                 'line_total' => $total,
+                'selected_units' => $selectedUnits,
             ]);
 
-            $subtotal += $base;
+            $accounting->moveStock($item, [
+                'party_id' => $challan->party_id, 'movement_date' => $challan->challan_date,
+                'movement_type' => 'delivery_challan', 'direction' => 'out', 'quantity' => $qty,
+                'unit_price' => $item->purchase_price, 'total_value' => $qty * (float)$item->purchase_price,
+                'reference_type' => DeliveryChallan::class, 'reference_id' => $challan->id,
+                'reference_no' => $challan->challan_no, 'description' => 'Delivery challan stock dispatch.',
+                'movement_units' => $selectedUnits,
+            ]);
+
+            $subtotal += $taxable;
             $tax += $taxAmount;
             $lineDiscount += $discount;
         }
@@ -195,8 +237,23 @@ class DeliveryChallanController extends Controller
             'subtotal' => $subtotal,
             'discount_amount' => $lineDiscount + $overallDiscount,
             'tax_amount' => $tax,
-            'grand_total' => max(0, $subtotal - $lineDiscount - $overallDiscount + $tax),
+            'grand_total' => max(0, $subtotal + $tax - $overallDiscount),
         ];
+    }
+
+    private function reverseStock(DeliveryChallan $challan, AccountingService $accounting, string $type): void
+    {
+        foreach ($challan->items as $line) if ($line->item) {
+            $accounting->moveStock($line->item, [
+                'party_id' => $challan->party_id, 'movement_date' => now()->toDateString(),
+                'movement_type' => $type, 'direction' => 'in', 'quantity' => (float)$line->quantity,
+                'unit_price' => $line->item->purchase_price,
+                'total_value' => (float)$line->quantity * (float)$line->item->purchase_price,
+                'reference_type' => DeliveryChallan::class, 'reference_id' => $challan->id,
+                'reference_no' => $challan->challan_no, 'description' => 'Delivery challan stock reversal.',
+                'movement_units' => $line->selected_units ?? [],
+            ]);
+        }
     }
 
     private function nextNo(): string

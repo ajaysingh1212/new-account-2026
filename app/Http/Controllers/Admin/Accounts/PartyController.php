@@ -48,6 +48,9 @@ class PartyController extends Controller
     public function store(Request $request, EntryVisibilityService $visibility)
     {
         $companyId = auth()->user()->current_company_id;
+        if ($request->expectsJson() && (!$request->filled('party_code') || Party::where('company_id', $companyId)->where('party_code', $request->party_code)->exists())) {
+            $request->merge(['party_code' => $this->nextPartyCode()]);
+        }
         $data = $this->validated($request, $companyId);
 
         $party = DB::transaction(function () use ($data, $companyId) {
@@ -92,6 +95,9 @@ class PartyController extends Controller
             'new_values' => $party->toArray(),
         ]);
 
+        if ($request->expectsJson()) {
+            return response()->json(['id' => $party->id, 'display_name' => $party->display_name, 'phone' => $party->phone], 201);
+        }
         return redirect()->route('admin.parties.index')->with('success', 'Party created successfully.');
     }
 

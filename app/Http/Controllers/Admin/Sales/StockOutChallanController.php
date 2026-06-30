@@ -9,6 +9,7 @@ use App\Models\StockOutChallan;
 use App\Models\StockOutChallanItem;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
+use App\Services\SerialUnitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -121,7 +122,10 @@ class StockOutChallanController extends Controller
         return [
             'stockOutChallan' => $stockOutChallan,
             'parties' => Party::where('company_id', $companyId)->where('status', 'active')->orderBy('display_name')->get(),
-            'items' => Item::where('company_id', $companyId)->where('status', 'active')->where('track_stock', true)->orderBy('name')->get(),
+            'items' => Item::where('company_id', $companyId)->where('status', 'active')->where('track_stock', true)
+                ->where(fn($q) => $q->whereDoesntHave('productType')->orWhereHas('productType', fn($type) => $type->where('nature', '<>', 'raw_material')))->orderBy('name')->get(),
+            'unitPool' => app(SerialUnitService::class)->unitPool($companyId, 'stock_out_challan', $stockOutChallan->id),
+            'itemMeta' => Item::where('company_id', $companyId)->get()->mapWithKeys(fn($item) => [$item->id => ['requires_gps' => app(SerialUnitService::class)->isGpsItem($item)]])->all(),
             'challanNo' => $stockOutChallan->challan_no ?: $this->nextNo(),
         ];
     }
@@ -142,6 +146,7 @@ class StockOutChallanController extends Controller
             'item_id.*' => ['required','exists:items,id'],
             'quantity.*' => ['required','numeric','min:0.001'],
             'unit_price.*' => ['nullable','numeric','min:0'],
+            'selected_units.*' => ['nullable','string'],
             'visible_to_roles' => ['nullable','array'],
             'visible_to_users' => ['nullable','array'],
             'visible_to_all_company' => ['nullable','boolean'],
@@ -151,10 +156,22 @@ class StockOutChallanController extends Controller
     private function storeLines(Request $request, StockOutChallan $challan, AccountingService $accounting): array
     {
         $subtotal = 0;
+        $reservedKeys = [];
         foreach ($request->item_id as $i => $itemId) {
-            $item = Item::lockForUpdate()->findOrFail($itemId);
+            $item = Item::with('productType')->lockForUpdate()->findOrFail($itemId);
             $qty = (float) $request->quantity[$i];
+            abort_unless((int)$item->company_id === (int)$challan->company_id, 422, 'Selected item does not belong to this company.');
+            abort_if($item->productType?->nature === 'raw_material', 422, 'Raw materials cannot be selected in Special Stock Out.');
+            abort_if((int)$qty != $qty, 422, "Quantity must be a whole number for {$item->name}.");
             abort_if((float) $item->current_stock < $qty, 422, "Insufficient stock for {$item->name}.");
+            $serials = app(SerialUnitService::class);
+            $pool = collect($serials->unitPool($challan->company_id, 'stock_out_challan', $challan->id)[$item->id] ?? [])
+                ->map(function($unit) use ($reservedKeys) { if (in_array($unit['key'] ?? null,$reservedKeys,true)) $unit['sold']=true; return $unit; })->all();
+            $requested = json_decode($request->selected_units[$i] ?? '[]', true) ?: [];
+            $selectedUnits = $serials->reconcile($requested, $pool, (int)$qty, $serials->isGpsItem($item));
+            abort_if(count($selectedUnits) !== (int)$qty, 422, "{$item->name} ke liye {$qty} available serial/VTS units required hain.");
+            abort_if($serials->isGpsItem($item) && collect($selectedUnits)->contains(fn($u) => empty($u['vts_sim'])), 422, "GPS item {$item->name} ke liye SIM/VTS number wala unit select karein.");
+            $reservedKeys = array_merge($reservedKeys, collect($selectedUnits)->pluck('key')->all());
             $price = (float) ($request->unit_price[$i] ?? $item->sale_price ?? 0);
             $lineTotal = $qty * $price;
             StockOutChallanItem::create([
@@ -165,6 +182,7 @@ class StockOutChallanController extends Controller
                 'unit' => $request->unit[$i] ?? $item->unit,
                 'unit_price' => $price,
                 'line_total' => $lineTotal,
+                'selected_units' => $selectedUnits,
             ]);
 
             $accounting->moveStock($item, [
@@ -179,6 +197,7 @@ class StockOutChallanController extends Controller
                 'reference_id' => $challan->id,
                 'reference_no' => $challan->challan_no,
                 'description' => 'Special stock out without party ledger for ' . $challan->display_party,
+                'movement_units' => $selectedUnits,
             ]);
             $subtotal += $lineTotal;
         }
@@ -204,6 +223,7 @@ class StockOutChallanController extends Controller
                 'reference_id' => $challan->id,
                 'reference_no' => $challan->challan_no,
                 'description' => 'Special stock out reversal.',
+                'movement_units' => $line->selected_units ?? [],
             ]);
         }
     }
