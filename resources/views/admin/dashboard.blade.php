@@ -56,7 +56,7 @@
     if ($user->can('estimates.view')) $cards[] = ['label'=>'Estimates','value'=>$stats['estimates'] ?? 0,'icon'=>'fa-file-contract','accent'=>'#4338ca'];
     if ($user->can('delivery_challans.view')) $cards[] = ['label'=>'Challans','value'=>$stats['challans'] ?? 0,'icon'=>'fa-truck','accent'=>'#0f766e'];
     if ($user->can('expenses.view')) $cards[] = ['label'=>'Pending Expenses','value'=>$stats['pending_expenses'] ?? 0,'icon'=>'fa-clipboard-check','accent'=>'#10b981'];
-    if ($user->can('reports.transaction')) $cards[] = ['label'=>'Total Profit','value'=>'Rs '.number_format($stats['total_profit'] ?? 0,2),'icon'=>'fa-chart-line','accent'=>'#0f766e','modal'=>'profitSegmentModal'];
+    if ($user->can('reports.transaction')) $cards[] = ['label'=>'Total Profit (on Cost)','value'=>'Rs '.number_format($stats['total_profit'] ?? 0,2).' ('.number_format($stats['total_profit_percent'] ?? 0,2).'%)','icon'=>'fa-chart-line','accent'=>'#0f766e','modal'=>'profitModal'];
     $sales = max(0, (float)($mix['Sales'] ?? 0)); $purchase = max(0, (float)($mix['Purchase'] ?? 0)); $bank = max(0, (float)($mix['Bank'] ?? 0)); $cash = max(0, (float)($mix['Cash'] ?? 0));
     $totalMix = max(1, $sales + $purchase + $bank + $cash);
     $salesEnd = round($sales / $totalMix * 100, 2);
@@ -78,7 +78,8 @@
     </div>
 </div>
 
-<form class="filter-panel" method="GET">
+<form class="filter-panel" method="GET" id="dashboardFilterForm">
+    <input type="hidden" name="period" id="dashboardPeriod" value="{{ $period }}">
     <div class="row align-items-end">
         @if($user->isSuperAdmin())
             <div class="col-md-4 form-group mb-md-0"><label>Company</label><select name="company_id" class="form-control"><option value="">All Companies</option>@foreach($companiesFilter as $company)<option value="{{ $company->id }}" @selected((int)$companyId === (int)$company->id)>{{ $company->name }}</option>@endforeach</select></div>
@@ -87,12 +88,12 @@
             <label>Date Filter</label>
             <div class="period-tabs">
                 @foreach(['today'=>'Today','yesterday'=>'Yesterday','week'=>'Week','month'=>'Month','three_months'=>'3 Month','six_months'=>'6 Month','nine_months'=>'9 Month','year'=>'1 Year','all'=>'All','custom'=>'Custom Date'] as $value => $label)
-                    <button type="submit" name="period" value="{{ $value }}" class="period-tab {{ $period === $value ? 'active' : '' }}">{{ $label }}</button>
+                    <button type="button" data-period="{{ $value }}" class="period-tab {{ $period === $value ? 'active' : '' }}">{{ $label }}</button>
                 @endforeach
             </div>
         </div>
-        <div class="col-md-3 form-group mb-md-0 custom-date-box" style="{{ $period === 'custom' ? '' : 'display:none' }}"><label>From Date</label><input type="date" name="from_date" value="{{ $from }}" class="form-control"></div>
-        <div class="col-md-3 form-group mb-md-0 custom-date-box" style="{{ $period === 'custom' ? '' : 'display:none' }}"><label>To Date</label><input type="date" name="to_date" value="{{ $to }}" class="form-control"></div>
+        <div class="col-md-3 form-group mb-md-0 custom-date-box" style="{{ $period === 'custom' ? '' : 'display:none' }}"><label>From Date</label><input type="date" name="from_date" value="{{ $from }}" class="form-control" @required($period === 'custom')></div>
+        <div class="col-md-3 form-group mb-md-0 custom-date-box" style="{{ $period === 'custom' ? '' : 'display:none' }}"><label>To Date</label><input type="date" name="to_date" value="{{ $to }}" class="form-control" @required($period === 'custom')></div>
         <div class="col-md-2"><button class="btn btn-primary btn-block"><i class="fas fa-filter mr-1"></i> Filter</button></div>
     </div>
 </form>
@@ -275,13 +276,14 @@
             </div>
             <div class="modal-body">
                 <div class="row mb-3">
-                    <div class="col-md-4"><div class="modal-metric"><span>Total Sale</span><b>Rs {{ number_format($profitRows->sum('sale'),2) }}</b></div></div>
-                    <div class="col-md-4"><div class="modal-metric"><span>Total Cost</span><b>Rs {{ number_format($profitRows->sum('cost'),2) }}</b></div></div>
-                    <div class="col-md-4"><div class="modal-metric"><span>Total Profit</span><b>Rs {{ number_format($profitRows->sum('profit'),2) }}</b></div></div>
+                    <div class="col-md-3"><div class="modal-metric"><span>Total Sale</span><b>Rs {{ number_format($profitRows->sum('sale'),2) }}</b></div></div>
+                    <div class="col-md-3"><div class="modal-metric"><span>Total Cost</span><b>Rs {{ number_format($profitRows->sum('cost'),2) }}</b></div></div>
+                    <div class="col-md-3"><div class="modal-metric"><span>Total Profit</span><b>Rs {{ number_format($profitRows->sum('profit'),2) }}</b></div></div>
+                    <div class="col-md-3"><div class="modal-metric"><span>Profit % on Cost</span><b>{{ number_format($stats['total_profit_percent'] ?? 0,2) }}%</b></div></div>
                 </div>
-                <div class="modal-table-wrap"><table class="table mb-0"><thead><tr><th>Date</th><th>Invoice</th><th>Party</th><th>Sale</th><th>Cost</th><th>Profit</th></tr></thead><tbody>
-                    @forelse($profitRows as $row)<tr><td>{{ $row['date'] }}</td><td>{{ $row['invoice'] }}</td><td>{{ $row['party'] }}</td><td>Rs {{ number_format($row['sale'],2) }}</td><td>Rs {{ number_format($row['cost'],2) }}</td><td><b class="{{ $row['profit'] >= 0 ? 'text-success' : 'text-danger' }}">Rs {{ number_format($row['profit'],2) }}</b></td></tr>@empty
-                    <tr><td colspan="6" class="text-center text-muted py-4">No invoice profit found for this filter.</td></tr>@endforelse
+                <div class="modal-table-wrap"><table class="table mb-0"><thead><tr><th>Date</th><th>Invoice</th><th>Party</th><th>Sale</th><th>Cost</th><th>Profit</th><th>Profit %</th></tr></thead><tbody>
+                    @forelse($profitRows as $row)<tr><td>{{ $row['date'] }}</td><td>{{ $row['invoice'] }}</td><td>{{ $row['party'] }}</td><td>Rs {{ number_format($row['sale'],2) }}</td><td>Rs {{ number_format($row['cost'],2) }}</td><td><b class="{{ $row['profit'] >= 0 ? 'text-success' : 'text-danger' }}">Rs {{ number_format($row['profit'],2) }}</b></td><td><b class="{{ $row['profit_percent'] >= 0 ? 'text-success' : 'text-danger' }}">{{ number_format($row['profit_percent'],2) }}%</b></td></tr>@empty
+                    <tr><td colspan="7" class="text-center text-muted py-4">No invoice profit found for this filter.</td></tr>@endforelse
                 </tbody></table></div>
             </div>
         </div>
@@ -381,6 +383,15 @@
 
 @push('scripts')
 <script>
+$('.period-tab').on('click', function(){
+    const period = $(this).data('period');
+    $('#dashboardPeriod').val(period);
+    $('.period-tab').removeClass('active');
+    $(this).addClass('active');
+    const isCustom = period === 'custom';
+    $('.custom-date-box').toggle(isCustom).find('input').prop('required', isCustom);
+    if (!isCustom) $('#dashboardFilterForm').trigger('submit');
+});
 function dashMoney(value){return 'Rs '+(Number(value)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});}
 $('#openQuickDrawer').on('click',function(){
     $('#quickDrawer,#quickDrawerBackdrop').addClass('open');

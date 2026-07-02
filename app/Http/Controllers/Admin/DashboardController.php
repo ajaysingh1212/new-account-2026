@@ -125,6 +125,10 @@ class DashboardController extends Controller
         $purchaseProducts = $this->productSummary(PurchaseBillItem::class, 'purchaseBill', 'billing_date', $companyId, $visibility, $user, $from, $to);
         $profitRows = $this->profitRows($companyId, $visibility, $user, $from, $to, $profits);
         $stats['total_profit'] = $profitRows->sum('profit');
+        $stats['total_profit_percent'] = $profits->profitPercentage(
+            (float) $stats['total_profit'],
+            (float) $profitRows->sum('cost')
+        );
         $salesSegments = $this->normalizeSegmentTotal(
             $this->tradeSegments(SalesInvoiceItem::class, 'salesInvoice', SalesInvoice::class, 'billing_date', $companyId, $visibility, $user, $from, $to, 'sale'),
             (float) ($stats['sales'] ?? 0)
@@ -168,8 +172,14 @@ class DashboardController extends Controller
             'all' => [$period, '1970-01-01', $today->toDateString()],
             'custom' => [
                 $period,
-                $request->date('from_date')?->toDateString() ?? $today->copy()->startOfMonth()->toDateString(),
-                $request->date('to_date')?->toDateString() ?? $today->toDateString(),
+                min(
+                    $request->date('from_date')?->toDateString() ?? $today->copy()->startOfMonth()->toDateString(),
+                    $request->date('to_date')?->toDateString() ?? $today->toDateString()
+                ),
+                max(
+                    $request->date('from_date')?->toDateString() ?? $today->copy()->startOfMonth()->toDateString(),
+                    $request->date('to_date')?->toDateString() ?? $today->toDateString()
+                ),
             ],
             default => ['week', $today->copy()->startOfWeek()->toDateString(), $today->copy()->endOfWeek()->toDateString()],
         };
@@ -337,6 +347,7 @@ class DashboardController extends Controller
 
         return $query->latest('billing_date')->get()->map(function (SalesInvoice $bill) use ($profits) {
             $cost = $profits->invoiceCost($bill);
+            $profit = (float) $bill->grand_total - (float) $cost;
 
             return [
                 'invoice' => $bill->invoice_no,
@@ -344,7 +355,8 @@ class DashboardController extends Controller
                 'date' => $bill->billing_date?->format('d M Y'),
                 'cost' => (float) $cost,
                 'sale' => (float) $bill->grand_total,
-                'profit' => (float) $bill->grand_total - (float) $cost,
+                'profit' => $profit,
+                'profit_percent' => $profits->profitPercentage($profit, $cost),
             ];
         })->values();
     }

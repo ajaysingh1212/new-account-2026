@@ -45,10 +45,28 @@ class SalesProfitService
         return round($this->invoiceSale($invoice) - $this->invoiceCost($invoice), 2);
     }
 
+    public function profitPercentage(float $profit, float $cost): float
+    {
+        if (abs($cost) < 0.00001) {
+            return 0.0;
+        }
+
+        return round(($profit / $cost) * 100, 2);
+    }
+
+    public function invoiceProfitPercentage(SalesInvoice $invoice): float
+    {
+        $cost = $this->invoiceCost($invoice);
+
+        return $this->profitPercentage($this->invoiceSale($invoice) - $cost, $cost);
+    }
+
     public function invoiceDetail(SalesInvoice $invoice): array
     {
         $cost = $this->invoiceCost($invoice);
         $sale = $this->invoiceSale($invoice);
+
+        $profit = $sale - $cost;
 
         return [
             'invoice' => $invoice->invoice_no,
@@ -72,10 +90,13 @@ class SalesProfitService
                 'tax' => (float) $invoice->tax_amount,
                 'total' => $sale,
                 'cost' => $cost,
-                'profit' => $sale - $cost,
+                'profit' => $profit,
+                'profit_percent' => $this->profitPercentage($profit, $cost),
             ],
             'items' => $invoice->items->map(function (SalesInvoiceItem $line) {
                 $units = collect($line->selected_units ?? [])->values();
+                $cost = $this->lineCost($line);
+                $profit = (float) $line->line_total - $cost;
 
                 return [
                     'name' => $line->item?->name ?: 'Item',
@@ -87,8 +108,9 @@ class SalesProfitService
                     'purchase_cost' => (float) ($line->item?->purchase_price ?? 0),
                     'tax' => (float) $line->tax_amount,
                     'amount' => (float) $line->line_total,
-                    'cost' => $this->lineCost($line),
-                    'profit' => (float) $line->line_total - $this->lineCost($line),
+                    'cost' => $cost,
+                    'profit' => $profit,
+                    'profit_percent' => $this->profitPercentage($profit, $cost),
                     'bom' => $line->item?->bomMaterials?->map(fn($bom) => [
                         'name' => $bom->rawItem?->name ?: 'Raw material',
                         'qty_per_unit' => (float) $bom->qty_per_unit,

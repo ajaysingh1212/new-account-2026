@@ -188,6 +188,7 @@ class ReportController extends Controller
                     'cost' => $cost,
                     'sale' => $sale,
                     'profit' => $sale - $cost,
+                    'profit_percent' => $profits->profitPercentage($sale - $cost, $cost),
                     'detail' => $profits->invoiceDetail($bill),
                 ];
             });

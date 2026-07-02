@@ -44,7 +44,7 @@
                 <div class="row" id="saleDetailMetrics"></div>
                 <div class="row">
                     <div class="col-lg-5 mb-3"><div class="p-3 bg-white rounded border h-100"><h6 class="font-weight-bold">Party & CRM</h6><div id="saleDetailParty" class="small"></div></div></div>
-                    <div class="col-lg-7 mb-3"><div class="p-3 bg-white rounded border h-100"><h6 class="font-weight-bold">Items, Pricing, BOM & Units</h6><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Item</th><th>Qty</th><th>Sale</th><th>Cost</th><th>Profit</th></tr></thead><tbody id="saleDetailItems"></tbody></table></div></div></div>
+                    <div class="col-lg-7 mb-3"><div class="p-3 bg-white rounded border h-100"><h6 class="font-weight-bold">Items, Pricing, BOM & Units</h6><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Item</th><th>Qty</th><th>Sale</th><th>Cost</th><th>Profit</th><th>Profit %</th></tr></thead><tbody id="saleDetailItems"></tbody></table></div></div></div>
                 </div>
             </div>
         </div>
@@ -63,15 +63,15 @@ $(document).on('click', '.sale-detail-btn', function() {
         ['Sale Total', detail.amounts?.total],
         ['Purchase Cost', detail.amounts?.cost],
         ['Profit / Loss', detail.amounts?.profit],
-        ['Tax', detail.amounts?.tax],
+        ['Profit % on Cost', detail.amounts?.profit_percent, '%'],
     ];
-    $('#saleDetailMetrics').html(metrics.map(([label, value]) => `<div class="col-md-3 mb-3"><div class="p-3 bg-white rounded border"><small class="text-muted text-uppercase font-weight-bold">${label}</small><div class="h5 mb-0 ${Number(value) < 0 ? 'text-danger' : ''}">${money(value)}</div></div></div>`).join(''));
+    $('#saleDetailMetrics').html(metrics.map(([label, value, suffix]) => `<div class="col-md-3 mb-3"><div class="p-3 bg-white rounded border"><small class="text-muted text-uppercase font-weight-bold">${label}</small><div class="h5 mb-0 ${Number(value) < 0 ? 'text-danger' : ''}">${suffix === '%' ? Number(value || 0).toFixed(2) + '%' : money(value)}</div></div></div>`).join(''));
     $('#saleDetailParty').html(`<b>${detail.party?.name || 'Cash / Walk-in'}</b><br>Legal: ${detail.party?.legal_name || '-'}<br>Phone: ${detail.party?.phone || detail.phone || '-'}<br>Email: ${detail.party?.email || '-'}<br>GSTIN: ${detail.party?.gstin || '-'}<br>City: ${detail.party?.city || '-'}<hr class="my-2">Billing: ${detail.billing_address || '-'}<br>Shipping: ${detail.shipping_address || '-'}`);
     $('#saleDetailItems').html((detail.items || []).map(item => {
         const bom = (item.bom || []).map(row => `${row.name}: ${Number(row.qty_per_unit || 0)} ${row.unit || ''} @ ${money(row.purchase_price)}`).join('<br>') || '-';
         const units = (item.units || []).map(unit => `${unit.serial_no || '-'} / ${unit.vts_sim || '-'} / ${unit.batch_no || '-'} / ${unit.buyer_code || '-'}`).join('<br>') || '-';
-        return `<tr><td><b>${item.name}</b><br><small>${item.description || '-'}</small><br><small><b>BOM:</b><br>${bom}</small><br><small><b>CRM Units:</b><br>${units}</small></td><td>${Number(item.qty || 0).toFixed(2)} ${item.unit || ''}</td><td>${money(item.amount)}</td><td>${money(item.cost)}</td><td class="${Number(item.profit) < 0 ? 'text-danger' : 'text-success'}"><b>${money(item.profit)}</b></td></tr>`;
-    }).join('') || '<tr><td colspan="5" class="text-center text-muted">No item details.</td></tr>');
+        return `<tr><td><b>${item.name}</b><br><small>${item.description || '-'}</small><br><small><b>BOM:</b><br>${bom}</small><br><small><b>CRM Units:</b><br>${units}</small></td><td>${Number(item.qty || 0).toFixed(2)} ${item.unit || ''}</td><td>${money(item.amount)}</td><td>${money(item.cost)}</td><td class="${Number(item.profit) < 0 ? 'text-danger' : 'text-success'}"><b>${money(item.profit)}</b></td><td class="${Number(item.profit_percent) < 0 ? 'text-danger' : 'text-success'}"><b>${Number(item.profit_percent || 0).toFixed(2)}%</b></td></tr>`;
+    }).join('') || '<tr><td colspan="6" class="text-center text-muted">No item details.</td></tr>');
     $('#saleDetailModal').modal('show');
 });
 </script>@endpush

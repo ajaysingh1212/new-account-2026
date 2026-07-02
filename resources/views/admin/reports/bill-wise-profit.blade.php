@@ -11,8 +11,10 @@
 <div class="report-hero">
     <h1>Bill Wise Profit</h1>
     <form class="report-filter" method="GET">
-        <div><label>Filter</label><select name="period" class="form-control"><option value="month" @selected($filters['period']==='month')>Selected Month</option><option value="all" @selected($filters['period']==='all')>All</option></select></div>
+        <div><label>Filter</label><select name="period" id="profitPeriod" class="form-control"><option value="month" @selected($filters['period']==='month')>Selected Month</option><option value="custom" @selected($filters['period']==='custom')>Custom Date</option><option value="all" @selected($filters['period']==='all')>All</option></select></div>
         <div><label>Month</label><input type="month" name="month" class="form-control" value="{{ $filters['month'] }}"></div>
+        <div class="profit-custom-date"><label>From</label><input type="date" name="from_date" class="form-control" value="{{ $filters['from'] }}"></div>
+        <div class="profit-custom-date"><label>To</label><input type="date" name="to_date" class="form-control" value="{{ $filters['to'] }}"></div>
         <div><label>Party</label><select name="party_id" class="form-control"><option value="">All Parties</option>@foreach($parties as $party)<option value="{{ $party->id }}" @selected($filters['partyId']==$party->id)>{{ $party->display_name }}</option>@endforeach</select></div>
         <button class="btn btn-info report-btn">Apply</button>
     </form>
@@ -24,8 +26,8 @@
 </div>
 <div class="report-card">
     <table id="profitTable" class="table report-table">
-        <thead><tr><th>Date</th><th>Invoice</th><th>Party</th><th>Cost</th><th>Sale</th><th>Profit / Loss</th><th>Details</th></tr></thead>
-        <tbody>@foreach($bills as $row)<tr><td>{{ $row['bill']->billing_date?->format('d-m-Y') }}</td><td>{{ $row['bill']->invoice_no }}</td><td>{{ $row['bill']->party?->display_name ?: 'Cash / Walk-in' }}</td><td>Rs {{ number_format($row['cost'],2) }}</td><td>Rs {{ number_format($row['sale'],2) }}</td><td><strong class="{{ $row['profit'] >= 0 ? 'text-success' : 'text-danger' }}">Rs {{ number_format($row['profit'],2) }}</strong></td><td><button type="button" class="btn btn-sm btn-outline-primary profit-detail-btn" data-detail='@json($row["detail"])' data-print-url="{{ route('admin.sales.detail-pdf', $row['bill']) }}"><i class="fas fa-eye mr-1"></i>View Details</button></td></tr>@endforeach</tbody>
+        <thead><tr><th>Date</th><th>Invoice</th><th>Party</th><th>Cost</th><th>Sale</th><th>Profit / Loss</th><th>Profit %</th><th>Details</th></tr></thead>
+        <tbody>@foreach($bills as $row)<tr><td>{{ $row['bill']->billing_date?->format('d-m-Y') }}</td><td>{{ $row['bill']->invoice_no }}</td><td>{{ $row['bill']->party?->display_name ?: 'Cash / Walk-in' }}</td><td>Rs {{ number_format($row['cost'],2) }}</td><td>Rs {{ number_format($row['sale'],2) }}</td><td><strong class="{{ $row['profit'] >= 0 ? 'text-success' : 'text-danger' }}">Rs {{ number_format($row['profit'],2) }}</strong></td><td><strong class="{{ $row['profit_percent'] >= 0 ? 'text-success' : 'text-danger' }}">{{ number_format($row['profit_percent'],2) }}%</strong></td><td><button type="button" class="btn btn-sm btn-outline-primary profit-detail-btn" data-detail='@json($row["detail"])' data-print-url="{{ route('admin.sales.detail-pdf', $row['bill']) }}"><i class="fas fa-eye mr-1"></i>View Details</button></td></tr>@endforeach</tbody>
     </table>
 </div>
 
@@ -41,7 +43,7 @@
                     <div class="col-md-3 mb-3"><div class="detail-box"><span>Total</span><b id="detailGrandTotal">Rs 0.00</b></div></div>
                     <div class="col-md-3 mb-3"><div class="detail-box"><span>Cost</span><b id="detailCost">Rs 0.00</b></div></div>
                     <div class="col-md-3 mb-3"><div class="detail-box"><span>Profit / Loss</span><b id="detailProfit" class="profit-pill">Rs 0.00</b></div></div>
-                    <div class="col-md-3 mb-3"><div class="detail-box"><span>Reference</span><b id="detailReference">-</b></div></div>
+                    <div class="col-md-3 mb-3"><div class="detail-box"><span>Profit % on Cost</span><b id="detailProfitPercent" class="profit-pill">0.00%</b></div></div>
                 </div>
                 <div class="row mb-3">
                     <div class="col-lg-6 mb-3"><div class="detail-box"><span>Billing Details</span><b id="detailBilling"></b><hr><span>Shipping Details</span><b id="detailShipping"></b></div></div>
@@ -49,7 +51,7 @@
                 </div>
                 <div class="detail-table table-responsive">
                     <table class="table mb-0">
-                        <thead><tr><th>Item</th><th>HSN</th><th>Qty</th><th>Rate</th><th>Tax</th><th>Cost</th><th>Total</th></tr></thead>
+                        <thead><tr><th>Item</th><th>HSN</th><th>Qty</th><th>Rate</th><th>Tax</th><th>Cost</th><th>Total</th><th>Profit</th><th>Profit %</th></tr></thead>
                         <tbody id="detailItemRows"></tbody>
                     </table>
                 </div>
@@ -66,6 +68,13 @@
 <script>
 $('#profitTable').DataTable({pageLength:25});
 function money(value){return 'Rs '+(Number(value)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function syncProfitDateFilter(){
+    const custom = $('#profitPeriod').val() === 'custom';
+    $('.profit-custom-date').toggle(custom).find('input').prop('disabled', !custom).prop('required', custom);
+    $('input[name="month"]').prop('disabled', custom || $('#profitPeriod').val() === 'all');
+}
+$('#profitPeriod').on('change', syncProfitDateFilter);
+syncProfitDateFilter();
 $(document).on('click','.profit-detail-btn',function(){
     const detail = $(this).data('detail');
     $('#profitDetailTitle').text('Invoice ' + detail.invoice);
@@ -73,12 +82,12 @@ $(document).on('click','.profit-detail-btn',function(){
     $('#detailGrandTotal').text(money(detail.amounts.total));
     $('#detailCost').text(money(detail.amounts.cost));
     $('#detailProfit').text(money(detail.amounts.profit)).toggleClass('text-danger', Number(detail.amounts.profit) < 0);
-    $('#detailReference').text(detail.reference || '-');
+    $('#detailProfitPercent').text(`${Number(detail.amounts.profit_percent || 0).toFixed(2)}%`).toggleClass('text-danger', Number(detail.amounts.profit_percent) < 0);
     $('#detailBilling').text(`${detail.phone || '-'} | ${detail.billing_address || '-'}`);
     $('#detailShipping').text(detail.shipping_address || '-');
     $('#detailPartyName').text(detail.party.name || 'Cash / Walk-in');
     $('#detailPartyMeta').html(`${detail.party.legal_name || '-'}<br>${detail.party.phone || '-'} | ${detail.party.email || '-'}<br>GSTIN: ${detail.party.gstin || '-'}<br>${detail.party.city || '-'}`);
-    $('#detailItemRows').html((detail.items || []).map(item => `<tr><td><b>${item.name}</b><br><small>${item.description || '-'}</small></td><td>${item.hsn || '-'}</td><td>${Number(item.qty||0).toFixed(2)} ${item.unit || ''}</td><td>${money(item.rate)}</td><td>${money(item.tax)}</td><td>${money(item.cost)}</td><td>${money(item.amount)}</td></tr>`).join('') || '<tr><td colspan="7" class="text-center text-muted">No items.</td></tr>');
+    $('#detailItemRows').html((detail.items || []).map(item => `<tr><td><b>${item.name}</b><br><small>${item.description || '-'}</small></td><td>${item.hsn || '-'}</td><td>${Number(item.qty||0).toFixed(2)} ${item.unit || ''}</td><td>${money(item.rate)}</td><td>${money(item.tax)}</td><td>${money(item.cost)}</td><td>${money(item.amount)}</td><td class="${Number(item.profit) < 0 ? 'text-danger' : 'text-success'}"><b>${money(item.profit)}</b></td><td class="${Number(item.profit_percent) < 0 ? 'text-danger' : 'text-success'}"><b>${Number(item.profit_percent || 0).toFixed(2)}%</b></td></tr>`).join('') || '<tr><td colspan="9" class="text-center text-muted">No items.</td></tr>');
     $('#detailPrintUrl').attr('href', $(this).data('print-url'));
     $('#billProfitDetailModal').modal('show');
 });
