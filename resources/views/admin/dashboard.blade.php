@@ -56,7 +56,7 @@
     if ($user->can('estimates.view')) $cards[] = ['label'=>'Estimates','value'=>$stats['estimates'] ?? 0,'icon'=>'fa-file-contract','accent'=>'#4338ca'];
     if ($user->can('delivery_challans.view')) $cards[] = ['label'=>'Challans','value'=>$stats['challans'] ?? 0,'icon'=>'fa-truck','accent'=>'#0f766e'];
     if ($user->can('expenses.view')) $cards[] = ['label'=>'Pending Expenses','value'=>$stats['pending_expenses'] ?? 0,'icon'=>'fa-clipboard-check','accent'=>'#10b981'];
-    if ($user->can('reports.transaction')) $cards[] = ['label'=>'Total Profit (on Cost)','value'=>'Rs '.number_format($stats['total_profit'] ?? 0,2).' ('.number_format($stats['total_profit_percent'] ?? 0,2).'%)','icon'=>'fa-chart-line','accent'=>'#0f766e','modal'=>'profitModal'];
+    if ($user->can('reports.transaction')) $cards[] = ['label'=>'Total Profit (on Cost)','value'=>'Rs '.number_format($stats['total_profit'] ?? 0,2).' ('.number_format($stats['total_profit_percent'] ?? 0,2).'%)','icon'=>'fa-chart-line','accent'=>'#0f766e','modal'=>'profitSegmentModal'];
     $sales = max(0, (float)($mix['Sales'] ?? 0)); $purchase = max(0, (float)($mix['Purchase'] ?? 0)); $bank = max(0, (float)($mix['Bank'] ?? 0)); $cash = max(0, (float)($mix['Cash'] ?? 0));
     $totalMix = max(1, $sales + $purchase + $bank + $cash);
     $salesEnd = round($sales / $totalMix * 100, 2);
@@ -408,6 +408,7 @@ $(document).on('click','.sales-viz-tab',function(){
     $(this).addClass('active');
     $shell.find('.sales-viz-pane').removeClass('active');
     $shell.find(`[data-sales-pane="${pane}"]`).addClass('active');
+    replaySegmentAnimations($(this).closest('.segment-report-modal'));
 });
 $(document).on('click','.view-detail-btn',function(){
     const row = $(this).data('invoice');
@@ -441,17 +442,28 @@ function segmentSetOptions($select, values, selected) {
     $select.val(validSelected);
 }
 
-function refreshSegmentLocationOptions($modal, changedFilter) {
+function refreshSegmentFilterOptions($modal, changedFilter) {
     const allItems = segmentModalItems($modal);
+    const categorySelect = $modal.find('[data-filter="category"]');
+    const productTypeSelect = $modal.find('[data-filter="product_type"]');
     const party = $modal.find('[data-filter="party"]').val();
     const stateSelect = $modal.find('[data-filter="state"]');
     const districtSelect = $modal.find('[data-filter="district"]');
     const citySelect = $modal.find('[data-filter="city"]');
+    const currentCategory = categorySelect.val();
+    const currentProductType = productTypeSelect.val();
     const currentState = stateSelect.val();
     const currentDistrict = districtSelect.val();
     const currentCity = citySelect.val();
 
-    const partyItems = party ? allItems.filter(item => item.party === party) : allItems;
+    segmentSetOptions(categorySelect, segmentUniqueValues(allItems, 'category'), currentCategory);
+    const category = categorySelect.val();
+    const categoryItems = category ? allItems.filter(item => item.category === category) : allItems;
+    segmentSetOptions(productTypeSelect, segmentUniqueValues(categoryItems, 'product_type').filter(value => value !== '-'), changedFilter === 'category' ? '' : currentProductType);
+    const productType = productTypeSelect.val();
+    const productItems = productType ? categoryItems.filter(item => item.product_type === productType) : categoryItems;
+
+    const partyItems = party ? productItems.filter(item => item.party === party) : productItems;
     segmentSetOptions(stateSelect, segmentUniqueValues(partyItems, 'state'), changedFilter === 'party' ? '' : currentState);
 
     const state = stateSelect.val();
@@ -463,14 +475,25 @@ function refreshSegmentLocationOptions($modal, changedFilter) {
     segmentSetOptions(citySelect, segmentUniqueValues(districtItems, 'city'), ['party','state','district'].includes(changedFilter) ? '' : currentCity);
 }
 
+function replaySegmentAnimations($modal) {
+    const $animated = $modal.find('.category-pie,.category-meter span,.candle-body,.bar-fill,.segment-wave-path');
+    $animated.each(function(){
+        this.style.animation = 'none';
+        void this.offsetHeight;
+        this.style.animation = '';
+    });
+}
+
 function applySegmentFilters() {
     const $modal = $(this).closest('.segment-report-modal');
     const filters = {};
     $modal.find('.segment-filter').each(function(){ filters[$(this).data('filter')] = this.value; });
     let modalTotal = 0;
+    let modalAbsTotal = 0;
     const matches = item => Object.keys(filters).every(key => !filters[key] || item[key] === filters[key]);
     const segmentAmount = segment => (segment.items || []).filter(matches).reduce((sum,item) => sum + (Number(item.amount)||0), 0);
     const segmentQty = segment => (segment.items || []).filter(matches).reduce((sum,item) => sum + (Number(item.qty)||0), 0);
+    const chartRows = [];
     $modal.find('.segment-card-filterable').each(function(){
         const segment = $(this).data('segment') || {};
         const items = segment.items || [];
@@ -478,6 +501,8 @@ function applySegmentFilters() {
         const amount = matching.reduce((sum,item) => sum + (Number(item.amount)||0), 0);
         const qty = matching.reduce((sum,item) => sum + (Number(item.qty)||0), 0);
         modalTotal += amount;
+        modalAbsTotal += Math.abs(amount);
+        chartRows.push({segment, amount, qty});
         $(this).toggle(matching.length > 0 || amount !== 0);
         $(this).find('.segment-top strong').text(dashMoney(amount));
         $(this).find('.segment-card-meta').text(`${qty.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})} qty`);
@@ -491,7 +516,7 @@ function applySegmentFilters() {
         const segment = $(this).data('segment') || {};
         const amount = segmentAmount(segment);
         const qty = segmentQty(segment);
-        const pct = Math.abs(modalTotal) > 0 ? (Math.abs(amount) / Math.abs(modalTotal) * 100) : 0;
+        const pct = modalAbsTotal > 0 ? (Math.abs(amount) / modalAbsTotal * 100) : 0;
         const height = Math.max(8, Math.abs(amount) / maxAmount * 230);
         $(this).toggle(amount !== 0);
         $(this).css({'--h': `${height}px`, '--wick': `${Math.min(260, height + 46)}px`, '--w': `${Math.min(100, pct)}%`});
@@ -500,17 +525,48 @@ function applySegmentFilters() {
         $(this).find('strong').last().text(dashMoney(amount));
         $(this).find('small').first().text(`${qty.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})} qty | ${pct.toFixed(2)}%`);
     });
+    let cursor = 0;
+    const pieParts = chartRows.filter(row => row.amount !== 0).map(row => {
+        const pct = modalAbsTotal > 0 ? Math.abs(row.amount) / modalAbsTotal * 100 : 0;
+        const part = `${row.segment.color || '#64748b'} ${cursor}% ${Math.min(100, cursor + pct)}%`;
+        cursor += pct;
+        return part;
+    });
+    $modal.find('.segment-pie').css('--pie-gradient', pieParts.length ? `conic-gradient(${pieParts.join(',')})` : 'conic-gradient(#e2e8f0 0 100%)');
+    $modal.find('.category-pie-center').html(`${modalAbsTotal > 0 ? '100%' : '0%'}<br><span style="font-size:11px;color:#64748b">${$modal.find('.segment-total-label').text().replace('Total ', '')}</span>`);
+    const visibleRows = chartRows.filter(row => row.amount !== 0);
+    const pointDenominator = Math.max(1, visibleRows.length - 1);
+    const wavePoints = visibleRows.map((row, index) => {
+        const x = 35 + (index * (690 / pointDenominator));
+        const y = 285 - ((Math.abs(row.amount) / maxAmount) * 220);
+        return `${x},${y}`;
+    }).join(' ');
+    $modal.find('.segment-wave-path').attr('d', wavePoints ? `M ${wavePoints}` : 'M 35,285');
+    let waveIndex = 0;
+    $modal.find('.segment-wave-point').each(function(){
+        const segment = $(this).data('segment') || {};
+        const amount = segmentAmount(segment);
+        if (amount === 0) return;
+        const row = visibleRows[waveIndex];
+        if (!row) return;
+        const index = waveIndex++;
+        const x = 35 + (index * (690 / pointDenominator));
+        const y = 285 - ((Math.abs(row.amount) / maxAmount) * 220);
+        $(this).find('circle').attr({cx:x, cy:y, fill:row.segment.color || '#64748b'});
+        $(this).find('text').attr({x:x}).text(String(row.segment.label || '').slice(0, 10));
+    });
     $modal.find('.segment-total-value').text(dashMoney(modalTotal));
+    replaySegmentAnimations($modal);
 }
 
 $(document).on('change','.segment-report-modal .segment-filter',function(){
     const $modal = $(this).closest('.segment-report-modal');
-    refreshSegmentLocationOptions($modal, $(this).data('filter'));
+    refreshSegmentFilterOptions($modal, $(this).data('filter'));
     applySegmentFilters.call(this);
 });
 $('.segment-report-modal').on('shown.bs.modal', function(){
     const $modal = $(this);
-    refreshSegmentLocationOptions($modal, null);
+    refreshSegmentFilterOptions($modal, null);
     applySegmentFilters.call($modal.find('.segment-filter').first()[0] || this);
 });
 </script>

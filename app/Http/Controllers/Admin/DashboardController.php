@@ -413,7 +413,7 @@ class DashboardController extends Controller
             'items' => collect(),
         ]);
 
-        $query->get()->each(function ($line) use ($segments, $invoiceRelation, $dateColumn, $kind) {
+        $query->get()->each(function ($line) use ($segments, $invoiceRelation, $dateColumn, $kind, $profits) {
             $bill = $line->{$invoiceRelation};
             $category = $line->item?->productCategory ?: $line->item?->productType?->productCategory;
             $key = $category ? (string) $category->id : 'uncategorized';

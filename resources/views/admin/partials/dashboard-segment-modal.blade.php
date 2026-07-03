@@ -10,6 +10,8 @@
     $states = $segments->flatMap(fn($row) => collect($row['items'])->pluck('state'))->filter()->unique()->sort()->values();
     $districts = $segments->flatMap(fn($row) => collect($row['items'])->pluck('district'))->filter()->unique()->sort()->values();
     $cities = $segments->flatMap(fn($row) => collect($row['items'])->pluck('city'))->filter()->unique()->sort()->values();
+    $categories = $segments->flatMap(fn($row) => collect($row['items'])->pluck('category'))->filter()->unique()->sort()->values();
+    $productTypes = $segments->flatMap(fn($row) => collect($row['items'])->pluck('product_type'))->filter(fn($value) => filled($value) && $value !== '-')->unique()->sort()->values();
     $cursor = 0;
     $pieParts = [];
     foreach ($segments as $segment) {
@@ -36,6 +38,8 @@
             </div>
             <div class="modal-body">
                 <div class="segment-filter-grid">
+                    <select class="form-control segment-filter segment-product-filter" data-filter="category" data-placeholder="All Categories"><option value="">All Categories</option>@foreach($categories as $category)<option value="{{ $category }}">{{ $category }}</option>@endforeach</select>
+                    <select class="form-control segment-filter segment-product-filter" data-filter="product_type" data-placeholder="All Product Types"><option value="">All Product Types</option>@foreach($productTypes as $productType)<option value="{{ $productType }}">{{ $productType }}</option>@endforeach</select>
                     <select class="form-control segment-filter segment-party-filter" data-filter="party" data-placeholder="All Parties"><option value="">All Parties</option>@foreach($parties as $party)<option value="{{ $party }}">{{ $party }}</option>@endforeach</select>
                     <select class="form-control segment-filter segment-location-filter" data-filter="state" data-placeholder="All States"><option value="">All States</option>@foreach($states as $state)<option value="{{ $state }}">{{ $state }}</option>@endforeach</select>
                     <select class="form-control segment-filter segment-location-filter" data-filter="district" data-placeholder="All Districts"><option value="">All Districts</option>@foreach($districts as $district)<option value="{{ $district }}">{{ $district }}</option>@endforeach</select>
