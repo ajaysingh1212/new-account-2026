@@ -69,6 +69,12 @@ class PermissionSeeder extends Seeder
             ['name'=>'Add Stocks', 'slug'=>'stocks.create', 'module'=>'stocks'],
             ['name'=>'Edit Stocks', 'slug'=>'stocks.edit', 'module'=>'stocks'],
 
+            ['name'=>'View Replacements', 'slug'=>'replacements.view', 'module'=>'replacements'],
+            ['name'=>'Create Replacements', 'slug'=>'replacements.create', 'module'=>'replacements'],
+            ['name'=>'Edit Replacements', 'slug'=>'replacements.edit', 'module'=>'replacements'],
+            ['name'=>'Delete Replacements', 'slug'=>'replacements.delete', 'module'=>'replacements'],
+            ['name'=>'Approve Replacements', 'slug'=>'replacements.approve', 'module'=>'replacements'],
+
             ['name'=>'View Items', 'slug'=>'items.view', 'module'=>'items'],
             ['name'=>'Create Items', 'slug'=>'items.create', 'module'=>'items'],
             ['name'=>'Edit Items', 'slug'=>'items.edit', 'module'=>'items'],

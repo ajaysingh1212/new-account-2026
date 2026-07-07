@@ -17,6 +17,7 @@ use App\Http\Controllers\Admin\Purchase\PurchaseEstimateController;
 use App\Http\Controllers\Admin\Purchase\PurchaseReturnController;
 use App\Http\Controllers\Admin\Purchase\SmartPurchaseController;
 use App\Http\Controllers\Admin\ReportController;
+use App\Http\Controllers\Admin\ReplacementController;
 use App\Http\Controllers\Admin\ExpenseController;
 use App\Http\Controllers\Admin\ExpenseLedgerController;
 use App\Http\Controllers\Admin\TermsTemplateController;
@@ -101,6 +102,17 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::get('stocks', [StockController::class, 'index'])->name('stocks.index');
         Route::get('stocks/history', [StockController::class, 'history'])->name('stocks.history');
         Route::get('stocks/special-stock-out', [StockController::class, 'specialStockOut'])->name('stocks.special-stock-out');
+    });
+    Route::middleware('permission:replacements.view')->group(function () {
+        Route::get('replacements/lookup', [ReplacementController::class, 'lookup'])->middleware('permission:replacements.create')->name('replacements.lookup');
+        Route::post('replacements/{replacement}/approve', [ReplacementController::class, 'approve'])->middleware('permission:replacements.approve')->name('replacements.approve');
+        Route::post('replacements/{replacement}/reject', [ReplacementController::class, 'reject'])->middleware('permission:replacements.approve')->name('replacements.reject');
+        Route::post('replacements/{replacement}/issue', [ReplacementController::class, 'issue'])->middleware('permission:replacements.approve')->name('replacements.issue');
+        Route::resource('replacements', ReplacementController::class)->only(['index']);
+        Route::resource('replacements', ReplacementController::class)->only(['create','store'])->middleware('permission:replacements.create');
+        Route::resource('replacements', ReplacementController::class)->only(['edit','update'])->middleware('permission:replacements.edit');
+        Route::resource('replacements', ReplacementController::class)->only(['show']);
+        Route::resource('replacements', ReplacementController::class)->only(['destroy'])->middleware('permission:replacements.delete');
     });
     Route::middleware(['permission:production.view', 'crm_access'])->group(function () {
         Route::resource('buyers', BuyerController::class)->only(['index','create','store','edit','update']);
@@ -220,6 +232,10 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::get('reports/profit-loss', [ReportController::class, 'profitLoss'])->name('reports.profit-loss');
         Route::get('reports/bill-wise-profit', [ReportController::class, 'billWiseProfit'])->name('reports.bill-wise-profit');
         Route::get('reports/ageing', [ReportController::class, 'ageing'])->name('reports.ageing');
+        Route::get('reports/ageing/party/{party}/print', [ReportController::class, 'ageingPartyPrint'])->name('reports.ageing.party-print');
+        Route::get('reports/ageing/party/{party}/diagnosis', [ReportController::class, 'ageingPartyDiagnosis'])->name('reports.ageing.party-diagnosis');
+        Route::get('reports/ageing/{kind}/{bill}/print', [ReportController::class, 'ageingBillPrint'])->name('reports.ageing.print');
+        Route::get('reports/ageing/{kind}/{bill}/diagnosis', [ReportController::class, 'ageingBillDiagnosis'])->name('reports.ageing.diagnosis');
         Route::get('reports/balance-sheet', [ReportController::class, 'balanceSheet'])->name('reports.balance-sheet');
         Route::get('reports/item-trace', [ReportController::class, 'itemTrace'])->name('reports.item-trace');
     });

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Models\BankAccount;
 use App\Models\BankTransaction;
 use App\Models\Company;
 use App\Models\Expense;
@@ -226,6 +227,86 @@ class ReportController extends Controller
         $slabs = AgeingSlabService::SLABS;
 
         return view('admin.reports.ageing', compact('rows', 'billRows', 'partyId', 'kind', 'to', 'slabs') + ['parties' => $companyParties]);
+    }
+
+    public function ageingBillPrint(string $kind, string $bill, EntryVisibilityService $visibility)
+    {
+        $modelClass = $kind === 'payable' ? PurchaseBill::class : SalesInvoice::class;
+        $record = $visibility->scopeForUser(
+            $modelClass::query()->with(['party','items.item','company']),
+            $modelClass
+        )->where(function ($query) use ($bill) {
+            $query->where('id', $bill)->orWhere('invoice_no', $bill);
+        })->firstOrFail();
+
+        $payments = PartyPaymentAllocation::with('payment.bankAccount')
+            ->where('bill_model', $modelClass)
+            ->where('bill_id', $record->id)
+            ->orderBy('created_at')
+            ->get();
+        $company = $record->company ?? Company::find(auth()->user()->current_company_id);
+        $status = $record->grand_total > 0 ? ($record->grand_total - $payments->sum('amount') > 0 ? 'Outstanding' : 'Settled') : 'Settled';
+
+        return view('admin.reports.ageing-bill-pdf', [
+            'kind' => $kind,
+            'bill' => $record,
+            'company' => $company,
+            'party' => $record->party,
+            'payments' => $payments,
+            'totals' => [
+                'grand_total' => (float) $record->grand_total,
+                'paid' => (float) $payments->sum('amount'),
+                'balance' => max(0, (float) $record->grand_total - (float) $payments->sum('amount')),
+            ],
+            'status' => $status,
+        ]);
+    }
+
+    public function ageingBillDiagnosis(string $kind, string $bill, EntryVisibilityService $visibility)
+    {
+        $modelClass = $kind === 'payable' ? PurchaseBill::class : SalesInvoice::class;
+        $record = $visibility->scopeForUser(
+            $modelClass::query()->with(['party','items.item','company']),
+            $modelClass
+        )->where(function ($query) use ($bill) {
+            $query->where('id', $bill)->orWhere('invoice_no', $bill);
+        })->firstOrFail();
+
+        $payments = PartyPaymentAllocation::with('payment.bankAccount')
+            ->where('bill_model', $modelClass)
+            ->where('bill_id', $record->id)
+            ->orderBy('created_at')
+            ->get();
+        $company = $record->company ?? Company::find(auth()->user()->current_company_id);
+        $asOf = now()->endOfDay();
+        $days = $record->billing_date ? (int) floor($record->billing_date->startOfDay()->diffInDays($asOf)) : 0;
+        $balance = max(0, (float) $record->grand_total - (float) $payments->sum('amount'));
+
+        return view('admin.reports.ageing-bill-diagnosis', [
+            'kind' => $kind,
+            'bill' => $record,
+            'company' => $company,
+            'party' => $record->party,
+            'payments' => $payments,
+            'days' => $days,
+            'balance' => $balance,
+            'summary' => [
+                'total' => (float) $record->grand_total,
+                'paid' => (float) $payments->sum('amount'),
+                'pending' => $balance,
+                'payment_count' => $payments->count(),
+            ],
+        ]);
+    }
+
+    public function ageingPartyPrint(string $party, Request $request, EntryVisibilityService $visibility, AgeingSlabService $ageingSlabs, SalesProfitService $profits)
+    {
+        return view('admin.reports.ageing-party-pdf', $this->ageingPartyPayload($party, $request, $visibility, $ageingSlabs, $profits));
+    }
+
+    public function ageingPartyDiagnosis(string $party, Request $request, EntryVisibilityService $visibility, AgeingSlabService $ageingSlabs, SalesProfitService $profits)
+    {
+        return view('admin.reports.ageing-party-diagnosis', $this->ageingPartyPayload($party, $request, $visibility, $ageingSlabs, $profits));
     }
 
     public function balanceSheet(Request $request, EntryVisibilityService $visibility)
@@ -470,6 +551,137 @@ class ReportController extends Controller
             'total' => (float) $bill->grand_total,
             'paid' => $paid,
             'due' => max(0, (float) $bill->grand_total - $paid),
+            'bill_id' => $bill->id,
+        ];
+    }
+
+    private function ageingPartyPayload(string $party, Request $request, EntryVisibilityService $visibility, AgeingSlabService $ageingSlabs, SalesProfitService $profits): array
+    {
+        $kind = $request->input('kind', 'both');
+        abort_unless(in_array($kind, ['receivable', 'payable', 'both'], true), 422, 'Invalid ageing type.');
+
+        $to = $request->date('to_date')?->toDateString() ?? now()->toDateString();
+        $asOf = Carbon::parse($to)->endOfDay();
+        $partyId = $party === 'cash' ? null : (int) $party;
+
+        $sales = $visibility->scopeForUser(SalesInvoice::with(['party','items.item.bomMaterials.rawItem','company'])->where('sale_type', 'credit'), SalesInvoice::class)
+            ->whereDate('billing_date', '<=', $to)
+            ->when($partyId, fn($q) => $q->where('party_id', $partyId), fn($q) => $q->whereNull('party_id'))
+            ->get()
+            ->map(fn($bill) => $this->ageingBillPayload($bill, SalesInvoice::class, 'receivable', $asOf, $profits));
+
+        $purchases = $visibility->scopeForUser(PurchaseBill::with(['party','items.item','company'])->where('purchase_type', 'credit'), PurchaseBill::class)
+            ->whereDate('billing_date', '<=', $to)
+            ->when($partyId, fn($q) => $q->where('party_id', $partyId), fn($q) => $q->whereNull('party_id'))
+            ->get()
+            ->map(fn($bill) => $this->ageingBillPayload($bill, PurchaseBill::class, 'payable', $asOf, $profits));
+
+        $bills = $sales->merge($purchases)
+            ->when($kind !== 'both', fn($rows) => $rows->where('kind', $kind))
+            ->filter(fn($row) => $row['due'] > 0)
+            ->sortByDesc('date')
+            ->values();
+
+        abort_if($bills->isEmpty(), 404, 'No ageing bills found for this party.');
+
+        $partyModel = $partyId ? Party::find($partyId) : null;
+        $company = $bills->first()['record']->company ?? Company::find(auth()->user()->current_company_id);
+        $slabRows = $ageingSlabs->matrix($bills->map(fn($row) => [
+            'kind' => $row['kind'],
+            'party_id' => $partyId,
+            'party' => $partyModel?->display_name ?: 'Cash / Walk-in',
+            'age' => $row['age'],
+            'due' => $row['due'],
+            'bill_id' => $row['record']->id,
+        ]));
+
+        return [
+            'kind' => $kind,
+            'to' => $to,
+            'asOf' => $asOf,
+            'partyKey' => $party,
+            'party' => $partyModel,
+            'company' => $company,
+            'bankAccount' => BankAccount::where('company_id', auth()->user()->current_company_id)->first(),
+            'bills' => $bills,
+            'slabs' => AgeingSlabService::SLABS,
+            'slabRow' => $slabRows->first(),
+            'slabBills' => collect(AgeingSlabService::SLABS)->mapWithKeys(function ($label, $key) use ($bills, $ageingSlabs) {
+                $rows = $bills->filter(fn($bill) => $ageingSlabs->slabKey((int) $bill['age']) === $key)->values();
+
+                return [$key => [
+                    'label' => $label,
+                    'bills' => $rows,
+                    'count' => $rows->count(),
+                    'due' => (float) $rows->sum('due'),
+                    'receivable' => (float) $rows->where('kind', 'receivable')->sum('due'),
+                    'payable' => (float) $rows->where('kind', 'payable')->sum('due'),
+                ]];
+            }),
+            'totals' => [
+                'receivable' => (float) $bills->where('kind', 'receivable')->sum('due'),
+                'payable' => (float) $bills->where('kind', 'payable')->sum('due'),
+                'subtotal' => (float) $bills->sum('subtotal'),
+                'discount' => (float) $bills->sum('discount'),
+                'tax' => (float) $bills->sum('tax'),
+                'grand_total' => (float) $bills->sum('total'),
+                'paid' => (float) $bills->sum('paid'),
+                'due' => (float) $bills->sum('due'),
+                'sale' => (float) $bills->where('kind', 'receivable')->sum('total'),
+                'cost' => (float) $bills->sum('cost'),
+                'profit' => (float) $bills->sum('profit'),
+                'payment_count' => (int) $bills->sum(fn($row) => $row['payments']->count()),
+            ],
+        ];
+    }
+
+    private function ageingBillPayload($bill, string $modelClass, string $kind, Carbon $asOf, SalesProfitService $profits): array
+    {
+        $payments = PartyPaymentAllocation::with('payment.bankAccount')
+            ->where('bill_model', $modelClass)
+            ->where('bill_id', $bill->id)
+            ->orderBy('created_at')
+            ->get();
+        $paid = (float) $payments->sum('amount');
+        $cost = $modelClass === SalesInvoice::class ? $profits->invoiceCost($bill) : (float) $bill->grand_total;
+        $profit = $modelClass === SalesInvoice::class ? ((float) $bill->grand_total - $cost) : 0.0;
+
+        return [
+            'kind' => $kind,
+            'record' => $bill,
+            'date' => $bill->billing_date,
+            'age' => $bill->billing_date ? (int) floor($bill->billing_date->startOfDay()->diffInDays($asOf)) : 0,
+            'subtotal' => (float) $bill->subtotal,
+            'discount' => (float) $bill->discount_amount,
+            'tax' => (float) $bill->tax_amount,
+            'total' => (float) $bill->grand_total,
+            'paid' => $paid,
+            'due' => max(0, (float) $bill->grand_total - $paid),
+            'payments' => $payments,
+            'cost' => $cost,
+            'profit' => $profit,
+            'profit_percent' => $modelClass === SalesInvoice::class ? $profits->profitPercentage($profit, $cost) : 0.0,
+            'items' => $bill->items->map(function ($line) use ($modelClass, $profits) {
+                $lineCost = $modelClass === SalesInvoice::class ? $profits->lineCost($line) : (float) $line->line_total;
+                $lineProfit = $modelClass === SalesInvoice::class ? ((float) $line->line_total - $lineCost) : 0.0;
+
+                return [
+                    'name' => $line->item?->name ?: 'Item',
+                    'description' => $line->description ?: '-',
+                    'hsn' => $line->item?->hsn_code ?: '-',
+                    'qty' => (float) $line->quantity,
+                    'unit' => $line->unit ?: $line->item?->unit,
+                    'rate' => (float) $line->unit_price,
+                    'discount' => (float) ($line->discount_amount ?? 0),
+                    'tax_percent' => (float) ($line->tax_percent ?? 0),
+                    'tax' => (float) ($line->tax_amount ?? 0),
+                    'amount' => (float) $line->line_total,
+                    'cost' => $lineCost,
+                    'profit' => $lineProfit,
+                    'profit_percent' => $modelClass === SalesInvoice::class ? $profits->profitPercentage($lineProfit, $lineCost) : 0.0,
+                    'units' => collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit))->values(),
+                ];
+            })->values(),
         ];
     }
 

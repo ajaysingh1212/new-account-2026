@@ -3,7 +3,7 @@
 
 @push('styles')
 <style>
-.stock-head{background:#111827;color:#fff;border-radius:8px;padding:22px;margin-bottom:16px;display:flex;justify-content:space-between;gap:16px;align-items:center}.stock-head h2{margin:0;font-weight:800}.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}.metric{background:#fff;border:1px solid #e8edf5;border-radius:8px;padding:16px;box-shadow:0 10px 24px rgba(15,23,42,.06)}.metric small{display:block;text-transform:uppercase;color:#667085;font-weight:800;font-size:11px}.metric b{font-size:22px;color:#111827}.filter-card{background:#fff;border:1px solid #e8edf5;border-radius:8px;padding:14px;margin-bottom:16px}.stock-table-card{background:#fff;border:1px solid #e8edf5;border-radius:8px;padding:16px}.low-row{background:#fff7ed}@media(max-width:992px){.metric-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:576px){.metric-grid{grid-template-columns:1fr}.stock-head{display:block}}
+.stock-head{background:#111827;color:#fff;border-radius:8px;padding:22px;margin-bottom:16px;display:flex;justify-content:space-between;gap:16px;align-items:center}.stock-head h2{margin:0;font-weight:800}.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}.metric{background:#fff;border:1px solid #e8edf5;border-radius:8px;padding:16px;box-shadow:0 10px 24px rgba(15,23,42,.06)}.metric small{display:block;text-transform:uppercase;color:#667085;font-weight:800;font-size:11px}.metric b{font-size:22px;color:#111827}.filter-card{background:#fff;border:1px solid #e8edf5;border-radius:8px;padding:14px;margin-bottom:16px}.stock-table-card{background:#fff;border:1px solid #e8edf5;border-radius:8px;padding:16px}.low-row{background:#fff7ed}.replacement-drawer{position:fixed;top:0;right:-480px;width:460px;max-width:100%;height:100vh;background:#fff;z-index:1050;box-shadow:-20px 0 45px rgba(15,23,42,.2);transition:.25s;padding:20px;overflow:auto}.replacement-drawer.open{right:0}.replacement-item{border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:10px;cursor:pointer;background:#f8fafc}.replacement-item:hover{border-color:#0ea5e9;background:#f0f9ff}.mini-label{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:800}@media(max-width:992px){.metric-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:576px){.metric-grid{grid-template-columns:1fr}.stock-head{display:block}}
 </style>
 @endpush
 
@@ -14,6 +14,7 @@
         <small>Overall value, monthly stock movement value and item-level balance.</small>
     </div>
     <div>
+        <button type="button" id="openReplacementItems" class="btn btn-info btn-sm"><i class="fas fa-sync-alt mr-1"></i>Replacement Items</button>
         <a href="{{ route('admin.stocks.special-stock-out') }}" class="btn btn-warning btn-sm"><i class="fas fa-dolly mr-1"></i>Special Stock Out</a>
         <a href="{{ route('admin.stocks.history') }}" class="btn btn-outline-light btn-sm"><i class="fas fa-history mr-1"></i>Movement History</a>
     </div>
@@ -67,6 +68,54 @@
         </tbody>
     </table>
 </div>
+
+<div id="replacementDrawer" class="replacement-drawer">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <div class="mini-label">Received through approval</div>
+            <h4 class="m-0">Replacement Items</h4>
+        </div>
+        <button type="button" id="closeReplacementItems" class="btn btn-light btn-sm"><i class="fas fa-times"></i></button>
+    </div>
+    @forelse($replacementReceived as $group)
+        <div class="replacement-item" data-toggle="modal" data-target="#stockReplacementModal{{ $group['item']->id }}">
+            <div class="d-flex justify-content-between">
+                <strong>{{ $group['item']->name }}</strong>
+                <span class="badge badge-primary">{{ $group['quantity'] }} PCS</span>
+            </div>
+            <small class="text-muted">{{ $group['item']->sku ?: $group['item']->item_code }}</small>
+        </div>
+        <div class="modal fade" id="stockReplacementModal{{ $group['item']->id }}" tabindex="-1">
+            <div class="modal-dialog modal-xl"><div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">{{ $group['item']->name }} Replacement History</h5>
+                    <button class="close" data-dismiss="modal">&times;</button>
+                </div>
+                <div class="modal-body table-responsive">
+                    <table class="table table-sm table-striped">
+                        <thead><tr><th>Date</th><th>Party Details</th><th>Returned Serial</th><th>Issued Serial</th><th>Invoice / Sale</th><th>Customer</th><th>Status</th><th>Detail</th></tr></thead>
+                        <tbody>
+                        @foreach($group['rows'] as $row)
+                            <tr>
+                                <td>{{ $row->request_date?->format('d M Y') }}</td>
+                                <td>{{ $row->party?->display_name ?: '-' }}<br><small>{{ $row->party?->phone }} {{ $row->party?->gstin ? '| GST '.$row->party?->gstin : '' }}</small></td>
+                                <td>{{ $row->returned_unit['serial_no'] ?? $row->returned_unit['vts_sim'] ?? $row->returned_unit['buyer_code'] ?? $row->returned_unit['key'] ?? '-' }}<br><small>Batch: {{ $row->returned_unit['production_batch_no'] ?? $row->returned_unit['batch_no'] ?? '-' }} | {{ $row->returned_unit['production_date'] ?? '-' }}</small></td>
+                                <td>{{ $row->issued_unit['serial_no'] ?? $row->issued_unit['vts_sim'] ?? $row->issued_unit['buyer_code'] ?? $row->issued_unit['key'] ?? '-' }}<br><small>Batch: {{ $row->issued_unit['production_batch_no'] ?? $row->issued_unit['batch_no'] ?? '-' }} | {{ $row->issued_unit['production_date'] ?? '-' }}</small></td>
+                                <td>{{ $row->invoice?->invoice_no ?: '-' }}<br><small>{{ $row->invoice?->billing_date?->format('d M Y') }} | Sale Rs {{ number_format((float)($row->invoiceItem?->unit_price ?? 0),2) }}</small></td>
+                                <td>{{ $row->customer_name }}<br><small>{{ $row->customer_phone }}</small></td>
+                                <td><span class="badge badge-{{ $row->status === 'completed' ? 'success' : 'info' }}">{{ ucfirst($row->status) }}</span></td>
+                                <td><a href="{{ route('admin.replacements.show', $row) }}" class="btn btn-outline-primary btn-xs">Open</a></td>
+                            </tr>
+                        @endforeach
+                        </tbody>
+                    </table>
+                </div>
+            </div></div>
+        </div>
+    @empty
+        <div class="alert alert-light border">No approved replacement item has been received yet.</div>
+    @endforelse
+</div>
 @endsection
 
-@push('scripts')<script>$('#stockTable').DataTable({pageLength:25,order:[[0,'asc']]});</script>@endpush
+@push('scripts')<script>$('#stockTable').DataTable({pageLength:25,order:[[0,'asc']]});$('#openReplacementItems').on('click',function(){$('#replacementDrawer').addClass('open');});$('#closeReplacementItems').on('click',function(){$('#replacementDrawer').removeClass('open');});</script>@endpush

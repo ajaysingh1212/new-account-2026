@@ -26,7 +26,7 @@ class AgeingSlabService
                         'due' => (float) $rows->sum('due'),
                         'receivable' => (float) $rows->where('kind', 'receivable')->sum('due'),
                         'payable' => (float) $rows->where('kind', 'payable')->sum('due'),
-                        'invoices' => $rows->pluck('invoice')->filter()->implode(', '),
+                        'invoices' => $rows->pluck('bill_id')->filter()->implode(','),
                     ]];
                 })->all();
 

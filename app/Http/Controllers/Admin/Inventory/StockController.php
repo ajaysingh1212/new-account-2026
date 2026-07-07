@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Item;
 use App\Models\ProductType;
 use App\Models\PurchaseEstimateItem;
+use App\Models\Replacement;
 use App\Models\StockMovement;
 use App\Models\StockOutChallan;
 use App\Services\EntryVisibilityService;
@@ -73,8 +74,20 @@ class StockController extends Controller
         )->get();
         $monthIn = $monthMovements->where('direction', 'in')->sum(fn($m) => (float) $m->total_value);
         $monthOut = $monthMovements->where('direction', 'out')->sum(fn($m) => (float) $m->total_value);
+        $replacementReceived = Replacement::with(['item','party','invoice','invoiceItem'])
+            ->where('company_id', $companyId)
+            ->whereIn('status', ['approved', 'completed'])
+            ->latest('request_date')
+            ->get()
+            ->groupBy('item_id')
+            ->map(fn($rows) => [
+                'item' => $rows->first()->item,
+                'quantity' => $rows->count(),
+                'rows' => $rows->values(),
+            ])
+            ->values();
 
-        return view('admin.stocks.index', compact('items', 'overallValue', 'overallQty', 'month', 'nature', 'productTypeId', 'productTypes', 'monthIn', 'monthOut', 'serialsByItem', 'serialSearch','incomingByItem'));
+        return view('admin.stocks.index', compact('items', 'overallValue', 'overallQty', 'month', 'nature', 'productTypeId', 'productTypes', 'monthIn', 'monthOut', 'serialsByItem', 'serialSearch','incomingByItem', 'replacementReceived'));
     }
 
     public function history(Request $request, EntryVisibilityService $visibility)
