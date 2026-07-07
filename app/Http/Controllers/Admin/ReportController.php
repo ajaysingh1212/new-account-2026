@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\BankTransaction;
+use App\Models\Company;
 use App\Models\Expense;
 use App\Models\Item;
 use App\Models\Party;
@@ -12,8 +13,10 @@ use App\Models\PartyPaymentAllocation;
 use App\Models\PurchaseBill;
 use App\Models\ProductionBatch;
 use App\Models\SalesInvoice;
+use App\Models\StockMovement;
 use App\Services\EntryVisibilityService;
 use App\Services\AgeingSlabService;
+use App\Services\SerialUnitService;
 use App\Services\SalesProfitService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -233,9 +236,9 @@ class ReportController extends Controller
         return view('admin.reports.balance-sheet', compact('filters','parties','banks'));
     }
 
-    public function itemTrace(Request $request, EntryVisibilityService $visibility)
+    public function itemTrace(Request $request, EntryVisibilityService $visibility, SerialUnitService $serialUnits)
     {
-        $type = $request->input('type', 'invoice');
+        $type = $request->input('type', 'serial');
         $term = trim((string) $request->input('q', ''));
         $result = null;
 
@@ -255,26 +258,106 @@ class ReportController extends Controller
                     )->first(),
                 ];
             } else {
-                $batches = $visibility->scopeForUser(
-                    ProductionBatch::with('finishedItem.bomMaterials.rawItem'),
-                    ProductionBatch::class
-                )->get();
-                $matches = $batches->flatMap(function (ProductionBatch $batch) use ($term) {
-                    return collect($batch->units_data ?? [])
-                        ->filter(fn($unit) => in_array($term, [$unit['buyer_code'] ?? null, $unit['serial_no'] ?? null, $unit['batch_no'] ?? null], true))
-                        ->map(fn($unit, $index) => ['batch' => $batch, 'unit' => $unit, 'key' => $batch->id.'-'.$index]);
-                })->values();
-
-                $sales = SalesInvoice::with(['party','items.item'])
-                    ->whereHas('items', fn($q) => $q->where('selected_units', 'like', '%' . $term . '%'))
-                    ->where('company_id', auth()->user()->current_company_id)
-                    ->get();
-
-                $result = ['unitMatches' => $matches, 'sales' => $sales];
+                $result = $this->serialTrace($term, $visibility, $serialUnits);
             }
         }
 
         return view('admin.reports.item-trace', compact('type', 'term', 'result'));
+    }
+
+    private function serialTrace(string $term, EntryVisibilityService $visibility, SerialUnitService $serialUnits): array
+    {
+        $needle = mb_strtolower($term);
+        $matchesTerm = function (array $unit) use ($needle): bool {
+            return collect(['key', 'serial_no', 'vts_sim', 'sku', 'batch_no', 'production_batch_no', 'buyer_code'])
+                ->contains(fn($field) => isset($unit[$field]) && mb_strtolower((string) $unit[$field]) === $needle);
+        };
+
+        $productionMatches = $visibility->scopeForUser(
+            ProductionBatch::with('finishedItem.bomMaterials.rawItem'),
+            ProductionBatch::class
+        )->get()->flatMap(function (ProductionBatch $batch) use ($matchesTerm) {
+            return collect($batch->units_data ?? [])
+                ->filter(fn($unit) => is_array($unit) && $matchesTerm($unit))
+                ->map(fn($unit, $index) => ['batch' => $batch, 'unit' => $unit, 'key' => $batch->id . '-' . $index]);
+        })->values();
+
+        $movements = $visibility->scopeForUser(
+            StockMovement::with(['item', 'party', 'creator'])->orderBy('movement_date')->orderBy('id'),
+            StockMovement::class
+        )->get()->map(function (StockMovement $movement) use ($serialUnits) {
+            $movement->setRelation('trace_units', collect($serialUnits->movementUnits($movement)));
+            return $movement;
+        })->filter(function (StockMovement $movement) use ($matchesTerm) {
+            return $movement->trace_units->contains(fn($unit) => is_array($unit) && $matchesTerm($unit));
+        })->values();
+
+        $companies = Company::whereIn('id', $movements->pluck('company_id')->merge($productionMatches->pluck('batch.company_id'))->filter()->unique())
+            ->pluck('name', 'id');
+
+        $timeline = collect();
+        foreach ($productionMatches as $match) {
+            $timeline->push([
+                'date' => $match['batch']->production_date,
+                'company' => $companies[$match['batch']->company_id] ?? '-',
+                'item' => $match['batch']->finishedItem?->name,
+                'type' => 'CRM / Production',
+                'direction' => 'in',
+                'qty' => 1,
+                'party' => '-',
+                'reference' => $match['batch']->batch_no,
+                'description' => 'Serial generated in CRM production.',
+                'unit' => array_merge($match['unit'], ['key' => $match['key']]),
+            ]);
+        }
+
+        foreach ($movements as $movement) {
+            foreach ($movement->trace_units->filter(fn($unit) => is_array($unit) && $matchesTerm($unit)) as $unit) {
+                $timeline->push([
+                    'date' => $movement->movement_date,
+                    'company' => $companies[$movement->company_id] ?? '-',
+                    'company_id' => $movement->company_id,
+                    'item' => $movement->item?->name,
+                    'item_id' => $movement->item_id,
+                    'type' => str_replace('_', ' ', $movement->movement_type),
+                    'direction' => $movement->direction,
+                    'qty' => 1,
+                    'party' => $movement->party?->display_name ?: '-',
+                    'reference' => $movement->reference_no,
+                    'description' => $movement->description,
+                    'unit' => $unit,
+                ]);
+            }
+        }
+
+        $locations = $timeline
+            ->whereNotNull('company_id')
+            ->groupBy(fn($row) => $row['company_id'] . ':' . $row['item_id'])
+            ->map(function ($rows) {
+                $net = $rows->sum(fn($row) => $row['direction'] === 'in' ? 1 : -1);
+                $last = $rows->sortBy([['date', 'asc']])->last();
+
+                return [
+                    'company' => $last['company'] ?? '-',
+                    'item' => $last['item'] ?? '-',
+                    'net' => $net,
+                    'last_type' => $last['type'] ?? '-',
+                    'last_date' => $last['date'] ?? null,
+                    'last_party' => $last['party'] ?? '-',
+                    'reference' => $last['reference'] ?? '-',
+                ];
+            })
+            ->filter(fn($row) => $row['net'] > 0)
+            ->values();
+
+        $lastEvent = $timeline->sortBy([['date', 'asc']])->last();
+
+        return [
+            'unitMatches' => $productionMatches,
+            'timeline' => $timeline->sortBy([['date', 'asc']])->values(),
+            'locations' => $locations,
+            'lastEvent' => $lastEvent,
+        ];
     }
 
     private function gstReport(Request $request, EntryVisibilityService $visibility, string $type): array

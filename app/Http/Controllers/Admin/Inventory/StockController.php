@@ -4,9 +4,7 @@ namespace App\Http\Controllers\Admin\Inventory;
 
 use App\Http\Controllers\Controller;
 use App\Models\Item;
-use App\Models\ProductionBatch;
 use App\Models\ProductType;
-use App\Models\PurchaseBillItem;
 use App\Models\PurchaseEstimateItem;
 use App\Models\StockMovement;
 use App\Models\StockOutChallan;
@@ -142,83 +140,7 @@ class StockController extends Controller
 
     private function currentSerialsByItem(): array
     {
-        $balances = [];
-        $companyId = auth()->user()->current_company_id;
-        $soldKeys = app(SerialUnitService::class)->activeSoldKeys($companyId);
-
-        ProductionBatch::with('finishedItem')
-            ->where('company_id', $companyId)
-            ->where('status', 'posted')
-            ->get()
-            ->each(function (ProductionBatch $batch) use (&$balances, $soldKeys) {
-                foreach ($batch->units_data ?? [] as $index => $unit) {
-                    if (!is_array($unit) || !empty($unit['reverted_at'])) {
-                        continue;
-                    }
-
-                    $unit = array_merge($unit, [
-                        'key' => $batch->id . '-' . $index,
-                        'item_id' => $batch->finished_item_id,
-                        'item_name' => $batch->finishedItem?->name,
-                        'production_batch_no' => $batch->batch_no,
-                        'production_date' => $batch->production_date?->format('Y-m-d'),
-                        'cost_per_unit' => (float) $batch->cost_per_unit,
-                    ]);
-
-                    if (in_array($unit['key'], $soldKeys, true)) {
-                        continue;
-                    }
-
-                    $identity = $this->unitIdentity($unit);
-                    if ($identity) {
-                        $balances[$batch->finished_item_id][$identity] = $unit;
-                    }
-                }
-            });
-
-        PurchaseBillItem::with(['purchaseBill', 'item'])
-            ->whereHas('purchaseBill', fn($q) => $q->where('company_id', $companyId))
-            ->get()
-            ->each(function (PurchaseBillItem $line) use (&$balances, $soldKeys) {
-                foreach ($line->selected_units ?? [] as $index => $unit) {
-                    if (!is_array($unit)) {
-                        continue;
-                    }
-
-                    $unit = array_merge($unit, [
-                        'key' => 'PBI-' . $line->id . '-' . $index,
-                        'item_id' => $line->item_id,
-                        'item_name' => $line->item?->name,
-                        'production_batch_no' => $unit['production_batch_no'] ?? $line->purchaseBill?->invoice_no,
-                        'production_date' => $line->purchaseBill?->billing_date?->format('Y-m-d'),
-                        'cost_per_unit' => (float) $line->unit_price,
-                    ]);
-
-                    if (in_array($unit['key'], $soldKeys, true)) {
-                        continue;
-                    }
-
-                    $identity = $this->unitIdentity($unit);
-                    if ($identity) {
-                        $balances[$line->item_id][$identity] = $unit;
-                    }
-                }
-            });
-
-        return collect($balances)
-            ->map(fn($units) => array_values($units))
-            ->all();
-    }
-
-    private function unitIdentity(array $unit): ?string
-    {
-        foreach (['serial_no', 'vts_sim', 'sku', 'key'] as $field) {
-            if (!empty($unit[$field])) {
-                return $field . ':' . (string) $unit[$field];
-            }
-        }
-
-        return null;
+        return app(SerialUnitService::class)->currentStockUnitsByItem(auth()->user()->current_company_id);
     }
 
     private function movementDateRange(Request $request): array

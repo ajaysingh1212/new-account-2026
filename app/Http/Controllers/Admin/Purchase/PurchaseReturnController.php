@@ -10,6 +10,7 @@ use App\Models\PurchaseReturnItem;
 use App\Models\StockMovement;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
+use App\Services\SerialUnitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -355,18 +356,19 @@ class PurchaseReturnController extends Controller
             return [];
         }
 
+        $serialUnits = app(SerialUnitService::class);
         $activeStockCounts = StockMovement::where('company_id', $companyId)
             ->where('item_id', $line->item_id)
             ->get()
-            ->flatMap(function (StockMovement $movement) {
+            ->flatMap(function (StockMovement $movement) use ($serialUnits) {
                 $multiplier = $movement->direction === 'in' ? 1 : -1;
 
-                return collect($movement->movement_units ?? [])
-                    ->pluck('key')
+                return collect($serialUnits->movementUnits($movement))
+                    ->map(fn($unit) => is_array($unit) ? $serialUnits->unitIdentity($unit) : null)
                     ->filter()
-                    ->map(fn($key) => ['key' => $key, 'count' => $multiplier]);
+                    ->map(fn($identity) => ['identity' => $identity, 'count' => $multiplier]);
             })
-            ->groupBy('key')
+            ->groupBy('identity')
             ->map(fn($rows) => $rows->sum('count'));
 
         $returnedElsewhere = PurchaseReturnItem::where('purchase_bill_item_id', $line->id)
@@ -378,7 +380,7 @@ class PurchaseReturnController extends Controller
 
         return $purchasedUnits
             ->reject(fn($unit) => in_array($unit['key'], $returnedElsewhere, true))
-            ->filter(fn($unit) => (int) ($activeStockCounts->get($unit['key'], 0)) > 0)
+            ->filter(fn($unit) => (int) ($activeStockCounts->get($serialUnits->unitIdentity($unit), 0)) > 0)
             ->values()
             ->all();
     }

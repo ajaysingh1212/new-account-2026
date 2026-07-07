@@ -166,6 +166,7 @@ class SalesReturnController extends Controller
                     'reference_id' => $return->id,
                     'reference_no' => $return->return_no,
                     'description' => 'Sales return stock in.',
+                    'movement_units' => $selectedUnits->all(),
                 ]);
                 $subtotal += max(0, $lineTotal - $taxAmount);
                 $tax += $taxAmount;

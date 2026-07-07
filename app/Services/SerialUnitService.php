@@ -6,8 +6,11 @@ use App\Models\DeliveryChallanItem;
 use App\Models\Item;
 use App\Models\ProductionBatch;
 use App\Models\PurchaseBillItem;
+use App\Models\PurchaseReturn;
 use App\Models\SalesInvoiceItem;
+use App\Models\SalesReturn;
 use App\Models\SalesReturnItem;
+use App\Models\StockMovement;
 use App\Models\StockOutChallanItem;
 
 class SerialUnitService
@@ -86,7 +89,7 @@ class SerialUnitService
             ->whereHas('item.productType', fn($q) => $q->where('nature', '<>', 'raw_material'))
             ->get()->each(function (PurchaseBillItem $line) use (&$produced, $usedKeys) {
                 foreach (($line->selected_units ?? []) as $index => $unit) {
-                    $key = 'PBI-'.$line->id.'-'.$index;
+                    $key = $unit['key'] ?? 'PBI-'.$line->id.'-'.$index;
                     $produced[$line->item_id][] = array_merge($unit, [
                         'key' => $key, 'item_id' => $line->item_id, 'item_name' => $line->item?->name,
                         'production_batch_no' => $unit['production_batch_no'] ?? $line->purchaseBill?->invoice_no,
@@ -117,6 +120,103 @@ class SerialUnitService
         return str_contains(strtolower(implode(' ', array_filter([
             $item->name, $item->item_code, $item->sku, $item->brand, $item->model, $item->description,
         ]))), 'gps');
+    }
+
+    public function currentStockUnitsByItem(int $companyId, ?int $itemId = null): array
+    {
+        $balances = [];
+
+        StockMovement::with(['item', 'party'])
+            ->where('company_id', $companyId)
+            ->when($itemId, fn($query) => $query->where('item_id', $itemId))
+            ->orderBy('movement_date')
+            ->orderBy('id')
+            ->get()
+            ->each(function (StockMovement $movement) use (&$balances) {
+                $units = $this->movementUnits($movement);
+                if (empty($units)) {
+                    return;
+                }
+
+                $delta = $movement->direction === 'in' ? 1 : -1;
+                foreach ($units as $unit) {
+                    if (!is_array($unit)) {
+                        continue;
+                    }
+
+                    $identity = $this->unitIdentity($unit);
+                    if (!$identity) {
+                        continue;
+                    }
+
+                    $itemId = (int) $movement->item_id;
+                    $balances[$itemId][$identity] ??= [
+                        'count' => 0,
+                        'unit' => $unit,
+                        'last_movement' => null,
+                    ];
+                    $balances[$itemId][$identity]['count'] += $delta;
+                    $balances[$itemId][$identity]['unit'] = array_merge($unit, [
+                        'item_id' => $itemId,
+                        'item_name' => $movement->item?->name,
+                        'last_movement_type' => $movement->movement_type,
+                        'last_movement_date' => $movement->movement_date?->format('Y-m-d'),
+                        'last_reference_no' => $movement->reference_no,
+                        'last_party' => $movement->party?->display_name,
+                    ]);
+                    $balances[$itemId][$identity]['last_movement'] = $movement;
+                }
+            });
+
+        return collect($balances)
+            ->map(fn($rows) => collect($rows)
+                ->filter(fn($row) => (int) $row['count'] > 0)
+                ->map(fn($row) => $row['unit'])
+                ->values()
+                ->all())
+            ->filter(fn($rows) => !empty($rows))
+            ->all();
+    }
+
+    public function movementUnits(StockMovement $movement): array
+    {
+        $units = collect($movement->movement_units ?? [])->filter(fn($unit) => is_array($unit))->values();
+        if ($units->isNotEmpty()) {
+            return $units->all();
+        }
+
+        if ($movement->reference_type === SalesReturn::class && $movement->reference_id) {
+            $return = SalesReturn::with('items')->find($movement->reference_id);
+
+            return collect($return?->items ?? [])
+                ->flatMap(fn($line) => (int) $line->item_id === (int) $movement->item_id ? ($line->selected_units ?? []) : [])
+                ->filter(fn($unit) => is_array($unit))
+                ->values()
+                ->all();
+        }
+
+        if ($movement->reference_type === PurchaseReturn::class && $movement->reference_id) {
+            $return = PurchaseReturn::with('items')->find($movement->reference_id);
+
+            return collect($return?->items ?? [])
+                ->flatMap(fn($line) => (int) $line->item_id === (int) $movement->item_id ? ($line->selected_units ?? []) : [])
+                ->filter(fn($unit) => is_array($unit))
+                ->values()
+                ->all();
+        }
+
+        return [];
+    }
+
+    public function unitIdentity(array $unit): ?string
+    {
+        foreach (['serial_no', 'vts_sim', 'key', 'sku'] as $field) {
+            if (!empty($unit[$field])) {
+                return $field . ':' . (string) $unit[$field];
+            }
+        }
+
+        return null;
     }
 
     private function activeSoldKeysWithoutOtherDocuments(int $companyId): array

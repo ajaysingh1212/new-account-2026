@@ -501,7 +501,7 @@ class SalesInvoiceController extends Controller
             ->get()
             ->flatMap(function (PurchaseBillItem $line) use ($soldKeys) {
                 return collect($line->selected_units ?? [])->map(function ($unit, $index) use ($line, $soldKeys) {
-                    $key = 'PBI-' . $line->id . '-' . $index;
+                    $key = $unit['key'] ?? 'PBI-' . $line->id . '-' . $index;
                     return array_merge($unit, [
                         'key' => $key,
                         'item_id' => $line->item_id,
