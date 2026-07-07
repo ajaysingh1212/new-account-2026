@@ -6,7 +6,6 @@
 <style>
 :root{
     --accent:#2563eb;--accent-dark:#1e40af;--bg:#f1f5fb;--sheet:#fff;--border:#e2e8f0;--text:#0f172a;--muted:#64748b;--row:#f8faff;
-    /* extra accent palette (used only outside the ageing slab table) */
     --purple:#7c3aed;--purple-dark:#5b21b6;
     --green:#16a34a;--green-bg:#ecfdf5;--green-border:#a7f3d0;
     --red:#dc2626;--red-bg:#fef2f2;--red-border:#fecaca;
@@ -20,7 +19,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--te
 .print{background:var(--purple);color:#fff;border:0;border-radius:7px;padding:9px 18px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(124,58,237,.35)}
 .sheet{max-width:1180px;margin:0 auto;background:var(--sheet);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 8px 40px rgba(15,23,42,.1)}
 
-/* ===== Header (multi-color gradient) ===== */
+/* ===== Header ===== */
 .header{background:linear-gradient(120deg,var(--purple) 0%,var(--accent) 55%,var(--accent-dark) 100%);color:#fff;padding:28px 30px;display:flex;justify-content:space-between;gap:20px;position:relative;overflow:hidden}
 .header::after{content:"";position:absolute;right:-40px;top:-60px;width:200px;height:200px;border-radius:50%;background:rgba(255,255,255,.08)}
 .brand{display:flex;gap:16px;position:relative;z-index:1}
@@ -32,8 +31,64 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--te
 .doc-type{font-size:30px;font-weight:900;letter-spacing:.08em}
 .doc-num{font-size:13px;opacity:.9}
 
-/* ===== KPI strip (multi-color cards) ===== */
-.strip{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;padding:16px 24px;background:var(--slate-bg);border-bottom:1px solid var(--border)}
+.content{padding:22px 24px}
+
+/* ===== Letter (expanded, detailed content) ===== */
+.letter{
+    position:relative;
+    border:1px solid var(--border);
+    border-left:5px solid var(--purple);
+    background:linear-gradient(180deg,#faf9ff 0%,#f8fafc 100%);
+    border-radius:10px;
+    padding:18px 22px;
+    margin-bottom:18px;
+    line-height:1.7;
+}
+.letter .subject-badge{
+    display:inline-block;background:var(--purple);color:#fff;font-size:10.5px;font-weight:800;
+    letter-spacing:.04em;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin-bottom:10px;
+}
+.letter .salutation{font-weight:700;margin-bottom:8px;color:var(--accent-dark);font-size:13px}
+.letter .body-text{font-size:12px;color:#1e293b;text-align:justify}
+.letter .body-text p{margin:0 0 9px 0}
+.letter .body-text p:last-child{margin-bottom:0}
+.letter .amt{color:var(--red);font-weight:800}
+.letter .closing{margin-top:10px;font-size:12px}
+.letter .closing strong{display:block;color:var(--purple-dark)}
+
+/* ===== Payment / QR card (moved up, prominent) ===== */
+.payment-card{
+    display:flex;border-radius:12px;overflow:hidden;border:1px solid var(--border);
+    margin-bottom:18px;box-shadow:0 6px 18px rgba(37,99,235,.1);
+}
+.payment-card .qr-side{
+    background:linear-gradient(135deg,var(--blue),var(--purple));
+    padding:16px 20px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:8px;width:210px;flex-shrink:0;
+}
+.payment-card .qr-side img{width:170px;height:170px;background:#fff;border-radius:10px;padding:8px;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.payment-card .qr-side .scan-label{color:#fff;font-weight:800;font-size:11.5px;letter-spacing:.05em;text-transform:uppercase;text-align:center}
+.payment-card .qr-side .no-qr{width:170px;height:170px;background:rgba(255,255,255,.15);border:2px dashed rgba(255,255,255,.5);border-radius:10px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:11px;text-align:center;padding:10px}
+.payment-card .info-side{flex:1;padding:16px 22px;background:#fff}
+.payment-card .info-side .ptitle{font-size:12.5px;font-weight:800;color:var(--purple-dark);margin-bottom:10px;text-transform:uppercase;letter-spacing:.03em}
+.payment-card .info-row{display:flex;justify-content:space-between;padding:6px 0;font-size:12px;border-bottom:1px dashed var(--border)}
+.payment-card .info-row:last-child{border-bottom:0}
+.payment-card .info-row .k{color:var(--muted);font-weight:600}
+.payment-card .info-row .v{font-weight:800;text-align:right}
+.payment-card .info-note{margin-top:10px;font-size:10.5px;color:var(--muted);border-top:1px solid var(--border);padding-top:8px}
+
+/* ===== Ageing pivot table — UNCHANGED ===== */
+.ageing-table{width:100%;border-collapse:collapse;font-size:12px}
+.ageing-table th{background:#111827;color:#fff;text-align:left;padding:9px 8px;border:1px solid #111827;font-size:10px;text-transform:uppercase}
+.ageing-table td{border:1px solid var(--border);padding:8px;vertical-align:top}
+.num{text-align:right;white-space:nowrap}
+.bill-line{border-top:1px dashed #cbd5e1;margin-top:5px;padding-top:5px}
+.bill-line:first-of-type{border-top:0}
+.muted{color:var(--muted)}
+.old-detail{display:none}
+
+/* ===== KPI strip — moved below the ageing table ===== */
+.strip{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:16px}
 .cell{padding:12px 14px;border-radius:10px;border:1px solid var(--border);background:#fff;border-top:3px solid var(--border)}
 .cell.c-neutral{border-top-color:#64748b}
 .cell.c-green{border-top-color:var(--green);background:var(--green-bg)}
@@ -47,77 +102,25 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--te
 .c-blue .value{color:var(--blue)}
 .c-amber .value{color:var(--amber)}
 
-.content{padding:20px 24px}
-
-/* ===== Ageing pivot table — UNCHANGED (kept exactly as original design) ===== */
-.ageing-table{width:100%;border-collapse:collapse;font-size:12px}
-.ageing-table th{background:#111827;color:#fff;text-align:left;padding:9px 8px;border:1px solid #111827;font-size:10px;text-transform:uppercase}
-.ageing-table td{border:1px solid var(--border);padding:8px;vertical-align:top}
-.num{text-align:right;white-space:nowrap}
-.bill-line{border-top:1px dashed #cbd5e1;margin-top:5px;padding-top:5px}
-.bill-line:first-of-type{border-top:0}
-.muted{color:var(--muted)}
-.old-detail{display:none}
+/* ===== Signature ===== */
+.signature{display:flex;justify-content:flex-end;padding:26px 24px 22px;gap:14px}
+.sign-box{width:260px;text-align:center;border-top:2px solid var(--purple);padding-top:8px;font-weight:800;color:#1e293b}
+.sign-box .muted{font-weight:500}
 
 /* ===== Footer ===== */
-.footer{border-top:1px solid var(--border);background:#f8faff;padding:12px 24px;color:var(--muted);font-size:11px}
+.footer{border-top:1px solid var(--border);background:#f8faff;padding:12px 24px;color:var(--muted);font-size:11px;text-align:center}
 
 @media print{
     body{background:#fff;padding:0}
     .toolbar{display:none}
     .sheet{box-shadow:none;border:0;border-radius:0;max-width:none}
     @page{size:A4 landscape;margin:10mm}
-    .header{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .cell{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .letter{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    .header,.cell,.letter,.payment-card,.qr-side{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     .ageing-table{font-size:10.5px}
     .ageing-table th,.ageing-table td{padding:6px}
     .ageing-table tr,.bill-line{page-break-inside:avoid}
-    .letter,.signature,.footer{page-break-inside:avoid}
+    .letter,.payment-card,.signature,.footer,.strip{page-break-inside:avoid}
 }
-</style>
-<style>
-/* ===== Letter section (redesigned) ===== */
-.letter{
-    position:relative;
-    border:1px solid var(--border);
-    border-left:5px solid var(--purple);
-    background:linear-gradient(180deg,#faf9ff 0%,#f8fafc 100%);
-    border-radius:10px;
-    padding:18px 20px 18px 22px;
-    margin-bottom:18px;
-    line-height:1.65;
-}
-.letter .subject-badge{
-    display:inline-block;
-    background:var(--purple);
-    color:#fff;
-    font-size:10.5px;
-    font-weight:800;
-    letter-spacing:.04em;
-    text-transform:uppercase;
-    padding:4px 10px;
-    border-radius:999px;
-    margin-bottom:10px;
-}
-.letter .salutation{font-weight:700;margin-bottom:6px;color:var(--accent-dark)}
-.letter .body-text{font-size:12.5px;color:#1e293b;text-align:justify}
-.letter .amt{color:var(--red);font-weight:800}
-
-/* ===== Signature ===== */
-.signature{display:flex;justify-content:flex-end;padding:26px 24px 22px;gap:14px}
-.sign-box{width:260px;text-align:center;border-top:2px solid var(--purple);padding-top:8px;font-weight:800;color:#1e293b}
-.sign-box .muted{font-weight:500}
-
-/* ===== Redesigned footer ===== */
-.footer-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
-.footer-box{border-radius:8px;padding:10px 14px;font-size:11px}
-.footer-box.bank{background:var(--blue-bg);border:1px solid var(--blue-border)}
-.footer-box.pay{background:var(--green-bg);border:1px solid var(--green-border)}
-.footer-box .ftitle{font-weight:800;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
-.footer-box.bank .ftitle{color:var(--blue)}
-.footer-box.pay .ftitle{color:var(--green)}
-.footer-note{margin-top:10px;font-size:10.5px;color:var(--muted);text-align:center}
 </style>
 </head>
 <body>
@@ -142,25 +145,75 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--te
         </div>
     </div>
 
-    <div class="strip">
-        <div class="cell c-neutral"><div class="label">Open Bills</div><div class="value">{{ $bills->count() }}</div></div>
-        <div class="cell c-green"><div class="label">Receivable</div><div class="value">Rs {{ number_format($totals['receivable'],2) }}</div></div>
-        <div class="cell c-red"><div class="label">Payable</div><div class="value">Rs {{ number_format($totals['payable'],2) }}</div></div>
-        <div class="cell c-blue"><div class="label">Paid</div><div class="value">Rs {{ number_format($totals['paid'],2) }}</div></div>
-        <div class="cell c-amber"><div class="label">Total Due</div><div class="value">Rs {{ number_format($totals['due'],2) }}</div></div>
-    </div>
-
     <div class="content">
+
+        {{-- ===== Letter — expanded, detailed content ===== --}}
         <div class="letter">
             <span class="subject-badge">Subject: Request for Clearance of Outstanding Ageing Balance</span>
             <div class="salutation">Dear {{ $party?->display_name ?: 'Customer' }},</div>
             <div class="body-text">
-                With due respect, this ageing statement is being shared for your review and prompt action.
-                As per our records, an amount of <span class="amt">Rs {{ number_format($totals['due'],2) }}</span>
-                is outstanding as on <strong>{{ \Carbon\Carbon::parse($to)->format('d M Y') }}</strong>.
-                Kindly verify the listed invoice numbers and dates below, and arrange clearance of the pending
-                balance at the earliest. We request your cooperation in settling the dues strictly within the
-                agreed business terms.
+                <p>
+                    We hope this letter finds you well. This is a formal yet cordial reminder regarding the
+                    outstanding balance currently reflected against your account in our books of accounts.
+                </p>
+                <p>
+                    As per our latest reconciliation carried out as on <strong>{{ \Carbon\Carbon::parse($to)->format('d M Y') }}</strong>,
+                    an amount of <span class="amt">Rs {{ number_format($totals['due'],2) }}</span> remains
+                    outstanding against <strong>{{ $bills->count() }}</strong> invoice(s) raised in the ordinary
+                    course of our business dealings. A complete invoice-wise break-up, along with the applicable
+                    ageing buckets, has been enclosed below for your convenient reference and verification.
+                </p>
+                <p>
+                    We sincerely value the business relationship we share and have consistently extended
+                    flexibility and goodwill wherever required. However, in the interest of maintaining smooth
+                    and healthy financial operations on both ends, we kindly request you to arrange for
+                    clearance of the above outstanding amount at the earliest, and preferably within
+                    <strong>7 (seven) working days</strong> from the date of this letter.
+                </p>
+                <p>
+                    To make the process as convenient as possible, we have shared our complete payment
+                    details along with a scannable UPI QR code below — please feel free to use whichever mode
+                    of payment suits you best.
+                </p>
+                <p>
+                    Should the payment already stand cleared from your end, we would be grateful if you could
+                    share the transaction reference so that our records may be updated without delay. Likewise,
+                    should there be any discrepancy in the figures mentioned above, please do not hesitate to
+                    reach out to us immediately so that the matter can be resolved promptly.
+                </p>
+                <div class="closing">
+                    We sincerely thank you for your continued trust and cooperation, and look forward to
+                    receiving the outstanding payment at the earliest.<br><br>
+                    Warm regards,
+                    <strong>{{ $company?->name ?? 'the Company' }}</strong>
+                </div>
+            </div>
+        </div>
+
+        {{-- ===== Payment / QR card — moved up, prominent and enlarged ===== --}}
+        <div class="payment-card">
+            <div class="qr-side">
+                @if($bankAccount?->upi_qr_code)
+                    <img src="{{ asset('storage/'.$bankAccount->upi_qr_code) }}" alt="UPI QR Code">
+                @else
+                    <div class="no-qr">QR Code<br>Not Available</div>
+                @endif
+                <div class="scan-label">Scan &amp; Pay Instantly</div>
+            </div>
+            <div class="info-side">
+                <div class="ptitle">Payment Details for Clearance of Dues</div>
+                @if($bankAccount)
+                    <div class="info-row"><span class="k">Bank Name</span><span class="v">{{ $bankAccount->bank_name ?: '-' }}</span></div>
+                    <div class="info-row"><span class="k">Account Number</span><span class="v">{{ $bankAccount->account_number ?: '-' }}</span></div>
+                    <div class="info-row"><span class="k">IFSC Code</span><span class="v">{{ $bankAccount->ifsc_code ?: '-' }}</span></div>
+                    <div class="info-row"><span class="k">UPI ID</span><span class="v">{{ $bankAccount->upi_id ?: '-' }}</span></div>
+                @else
+                    <div class="muted">No bank account linked for this company.</div>
+                @endif
+                <div class="info-note">
+                    Payments found on record: <strong>{{ $totals['payment_count'] }}</strong>.
+                    This report combines all open invoices for the selected party and ageing filters.
+                </div>
             </div>
         </div>
 
@@ -214,6 +267,15 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--te
         </table>
         {{-- ===================== END OF UNCHANGED SLAB TABLE ===================== --}}
 
+        {{-- ===== KPI summary strip — now placed just below the table ===== --}}
+        <div class="strip">
+            <div class="cell c-neutral"><div class="label">Open Bills</div><div class="value">{{ $bills->count() }}</div></div>
+            <div class="cell c-green"><div class="label">Receivable</div><div class="value">Rs {{ number_format($totals['receivable'],2) }}</div></div>
+            <div class="cell c-red"><div class="label">Payable</div><div class="value">Rs {{ number_format($totals['payable'],2) }}</div></div>
+            <div class="cell c-blue"><div class="label">Paid</div><div class="value">Rs {{ number_format($totals['paid'],2) }}</div></div>
+            <div class="cell c-amber"><div class="label">Total Due</div><div class="value">Rs {{ number_format($totals['due'],2) }}</div></div>
+        </div>
+
     </div>
 
     <div class="signature">
@@ -221,35 +283,7 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--te
     </div>
 
     <div class="footer">
-        <div class="footer-grid">
-            <div class="footer-box bank" style="display:flex;justify-content:space-between;align-items:center;gap:12px">
-                <div>
-                    <div class="ftitle">Banking Details</div>
-                    @if($bankAccount)
-                        Bank: <strong>{{ $bankAccount->bank_name }}</strong><br>
-                        A/C: {{ $bankAccount->account_number ?: '-' }} | IFSC: {{ $bankAccount->ifsc_code ?: '-' }}<br>
-                        UPI: {{ $bankAccount->upi_id ?: '-' }}
-                    @else
-                        <span class="muted">No bank account linked.</span>
-                    @endif
-                </div>
-                @if($bankAccount?->upi_qr_code)
-                    <div style="flex-shrink:0;text-align:center">
-                        <img src="{{ asset('storage/'.$bankAccount->upi_qr_code) }}" alt="UPI QR"
-                             style="width:78px;height:78px;object-fit:contain;border:1px solid var(--blue-border);border-radius:6px;background:#fff;padding:3px">
-                        <div style="font-size:9px;color:var(--blue);font-weight:700;margin-top:2px">SCAN TO PAY</div>
-                    </div>
-                @endif
-            </div>
-            <div class="footer-box pay">
-                <div class="ftitle">Payment Details</div>
-                Payments found: <strong>{{ $totals['payment_count'] }}</strong><br>
-                This report combines all open invoices for the selected party and ageing filters.
-            </div>
-        </div>
-        <div class="footer-note">
-            Filter applied: {{ ucfirst($kind) }}. Payable shows payable only, receivable shows receivable only, both shows both.
-        </div>
+        Filter applied: {{ ucfirst($kind) }}. Payable shows payable only, receivable shows receivable only, both shows both.
     </div>
 
     <div class="old-detail">
