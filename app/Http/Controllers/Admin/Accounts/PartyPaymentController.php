@@ -115,7 +115,7 @@ class PartyPaymentController extends Controller
             ? $request->file('attachment')->store('payment-attachments', 'public')
             : null;
 
-        DB::transaction(function () use ($data, $companyId, $accounting) {
+        DB::transaction(function () use ($data, $companyId, $accounting, $visibility, $outstanding) {
             $party = Party::where('company_id', $companyId)->lockForUpdate()->findOrFail($data['party_id']);
             $account = BankAccount::where('company_id', $companyId)->lockForUpdate()->findOrFail($data['bank_account_id']);
             $allocations = collect($data['allocations'] ?? [])
