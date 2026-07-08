@@ -151,6 +151,20 @@ class PartyOutstandingServiceTest extends TestCase
         $this->assertFalse($rows->contains(fn(array $row) => $row['invoice'] === 'S-SETTLED'));
     }
 
+    public function test_ageing_party_print_includes_opening_balance_due(): void
+    {
+        [$user, $party] = $this->context();
+        $party->update(['opening_balance' => 5000.00, 'opening_balance_type' => 'receivable', 'opening_balance_date' => '2026-06-01']);
+        $this->actingAs($user);
+
+        $response = $this->get(route('admin.reports.ageing.party-print', ['party' => $party->id, 'kind' => 'receivable', 'to_date' => '2026-07-08']));
+
+        $response->assertStatus(200);
+        $response->assertSeeText('Opening Balance');
+        $response->assertSeeText('Rs 5,000.00');
+        $this->assertEquals(5000.00, $response->viewData('totals')['due']);
+    }
+
     private function context(): array
     {
         $user = User::factory()->create(['user_type' => 'super_admin']);

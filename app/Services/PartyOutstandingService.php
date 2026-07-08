@@ -14,7 +14,7 @@ use Illuminate\Support\Collection;
 
 class PartyOutstandingService
 {
-    public function billRows(EntryVisibilityService $visibility, ?int $partyId = null, ?string $to = null, string $kind = 'both'): Collection
+    public function billRows(EntryVisibilityService $visibility, ?int $partyId = null, ?string $to = null, string $kind = 'both', ?int $companyId = null): Collection
     {
         $toDate = $to ?: now()->toDateString();
         $asOf = Carbon::parse($toDate)->endOfDay();
@@ -23,6 +23,7 @@ class PartyOutstandingService
         if ($kind === 'both' || $kind === 'receivable') {
             $sales = $visibility->scopeForUser(SalesInvoice::with('party')->where('sale_type', 'credit'), SalesInvoice::class)
                 ->whereDate('billing_date', '<=', $toDate)
+                ->when($companyId, fn($query) => $query->where('company_id', $companyId))
                 ->when($partyId, fn($query) => $query->where('party_id', $partyId))
                 ->get();
 
@@ -32,13 +33,14 @@ class PartyOutstandingService
         if ($kind === 'both' || $kind === 'payable') {
             $purchases = $visibility->scopeForUser(PurchaseBill::with('party')->where('purchase_type', 'credit'), PurchaseBill::class)
                 ->whereDate('billing_date', '<=', $toDate)
+                ->when($companyId, fn($query) => $query->where('company_id', $companyId))
                 ->when($partyId, fn($query) => $query->where('party_id', $partyId))
                 ->get();
 
             $rows = $rows->merge($this->rowsForBills($purchases, PurchaseBill::class, 'payable', $asOf, $toDate));
         }
 
-        return $this->openingRows($visibility, $partyId, $toDate, $kind, $asOf)
+        return $this->openingRows($visibility, $partyId, $toDate, $kind, $asOf, $companyId)
             ->merge($rows)
             ->filter(fn(array $row) => $row['due'] > 0)
             ->sortByDesc('date')
@@ -235,10 +237,11 @@ class PartyOutstandingService
             ->pluck('returned', 'bill_id');
     }
 
-    private function openingRows(EntryVisibilityService $visibility, ?int $partyId, string $toDate, string $kind, Carbon $asOf): Collection
+    private function openingRows(EntryVisibilityService $visibility, ?int $partyId, string $toDate, string $kind, Carbon $asOf, ?int $companyId = null): Collection
     {
         return $visibility->scopeForUser(Party::query(), Party::class)
             ->when($partyId, fn($query) => $query->where('id', $partyId))
+            ->when($companyId, fn($query) => $query->where('company_id', $companyId))
             ->whereDate('opening_balance_date', '<=', $toDate)
             ->where('opening_balance', '>', 0)
             ->get()

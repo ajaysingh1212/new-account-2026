@@ -535,8 +535,41 @@ class ReportController extends Controller
         $partyId = $party === 'cash' ? null : (int) $party;
 
         $bills = $outstanding->billRows($visibility, $partyId, $to, $kind)
-            ->reject(fn(array $row) => $row['model'] === Party::class)
             ->map(function (array $row) use ($visibility, $profits, $asOf) {
+                if ($row['model'] === Party::class) {
+                    return [
+                        'model' => Party::class,
+                        'kind' => $row['kind'],
+                        'record' => (object) [
+                            'invoice_no' => $row['invoice'] ?: 'Opening Balance',
+                            'billing_date' => $row['date'],
+                        ],
+                        'date' => $row['date'],
+                        'age' => $row['age'],
+                        'subtotal' => (float) $row['total'],
+                        'discount' => 0.0,
+                        'tax' => 0.0,
+                        'total' => (float) $row['total'],
+                        'returned' => 0.0,
+                        'effective_total' => (float) $row['effective_total'],
+                        'paid' => (float) $row['paid'],
+                        'due' => (float) $row['due'],
+                        'payments' => collect($row['history'])->map(fn($allocation) => (object) [
+                            'payment' => (object) [
+                                'payment_date' => $allocation['date'] ? \Carbon\Carbon::createFromFormat('d M Y', $allocation['date']) : null,
+                                'payment_mode' => $allocation['mode'] ?? '-',
+                                'bankAccount' => (object) ['bank_name' => '-'],
+                                'reference_no' => $allocation['reference_no'] ?? '-',
+                            ],
+                            'amount' => $allocation['amount'] ?? 0,
+                        ])->values(),
+                        'cost' => 0.0,
+                        'profit' => 0.0,
+                        'profit_percent' => 0.0,
+                        'items' => collect(),
+                    ];
+                }
+
                 $modelClass = $row['model'];
                 $record = $visibility->scopeForUser(
                     $modelClass::query()->with($modelClass === SalesInvoice::class
@@ -558,14 +591,14 @@ class ReportController extends Controller
         abort_if($bills->isEmpty(), 404, 'No ageing bills found for this party.');
 
         $partyModel = $partyId ? Party::find($partyId) : null;
-        $company = $bills->first()['record']->company ?? Company::find(auth()->user()->current_company_id);
+        $company = collect($bills)->first(fn($row) => isset($row['record']->company))['record']->company ?? Company::find(auth()->user()->current_company_id);
         $slabRows = $ageingSlabs->matrix($bills->map(fn($row) => [
             'kind' => $row['kind'],
             'party_id' => $partyId,
             'party' => $partyModel?->display_name ?: 'Cash / Walk-in',
             'age' => $row['age'],
             'due' => $row['due'],
-            'bill_id' => $row['record']->id,
+            'bill_id' => $row['model'] === Party::class ? null : $row['record']->id,
         ]));
 
         return [

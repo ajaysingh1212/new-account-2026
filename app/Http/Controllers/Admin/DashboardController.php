@@ -22,13 +22,14 @@ use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\EntryVisibilityService;
 use App\Services\AgeingSlabService;
+use App\Services\PartyOutstandingService;
 use App\Services\SalesProfitService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
-    public function index(Request $request, EntryVisibilityService $visibility, AgeingSlabService $ageingSlabs, SalesProfitService $profits)
+    public function index(Request $request, EntryVisibilityService $visibility, AgeingSlabService $ageingSlabs, PartyOutstandingService $outstanding, SalesProfitService $profits)
     {
         $user = auth()->user();
         $companyId = $user->isSuperAdmin() ? $request->integer('company_id') : $user->current_company_id;
@@ -85,29 +86,8 @@ class DashboardController extends Controller
             $companies = collect();
         }
 
-        $salesDueRows = collect(
-            $this->dueRows(
-                SalesInvoice::class,
-                'sale_type',
-                $companyId,
-                $visibility,
-                $user,
-                $from,
-                $to
-            )->all()
-        );
-
-        $purchaseDueRows = collect(
-            $this->dueRows(
-                PurchaseBill::class,
-                'purchase_type',
-                $companyId,
-                $visibility,
-                $user,
-                $from,
-                $to
-            )->all()
-        );
+        $salesDueRows = $this->dueRows($outstanding, $visibility, 'receivable', $companyId, $to);
+        $purchaseDueRows = $this->dueRows($outstanding, $visibility, 'payable', $companyId, $to);
                 $stats['sales_due'] = $salesDueRows->sum('due');
                 $stats['purchase_due'] = $purchaseDueRows->sum('due');
         $ageingKind = $request->input('ageing_kind', 'both');
@@ -265,47 +245,44 @@ class DashboardController extends Controller
         return collect($actions)->filter(fn($action) => $user->can($action['can']) || ($user->isSuperAdmin() && $action['route'] === 'admin.companies.create'))->values()->all();
     }
 
-    private function dueRows(string $model, string $typeColumn, ?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to)
+    private function dueRows(PartyOutstandingService $outstanding, EntryVisibilityService $visibility, string $kind, ?int $companyId, string $to)
     {
-        $query = $model::with(['party', 'items.item'])->where($typeColumn, 'credit')->whereBetween('billing_date', [$from, $to]);
-        $query = $user->isSuperAdmin() ? $this->scope($query, $companyId) : $visibility->scopeForUser($query, $model);
+        return $outstanding->billRows($visibility, null, $to, $kind, $companyId)
+            ->map(function (array $row) {
+                $record = null;
+                if ($row['model'] !== Party::class && $row['bill_id']) {
+                    $record = $row['model']::with(['items.item'])->find($row['bill_id']);
+                }
 
-        return $query->get()
-            ->map(function ($bill) use ($model) {
-                $allocations = PartyPaymentAllocation::with('payment.bankAccount')
-                    ->where('bill_model', $model)
-                    ->where('bill_id', $bill->id)
-                    ->get();
-                $paid = (float) $allocations->sum('amount');
-                $due = max(0, (float) $bill->grand_total - $paid);
                 return [
-                    'kind' => $model === SalesInvoice::class ? 'receivable' : 'payable',
-                    'bill_id' => $bill->id,
-                    'party_id' => $bill->party_id,
-                    'party' => $bill->party?->display_name ?: 'Cash / Walk-in',
-                    'invoice' => $bill->invoice_no,
-                    'date' => $bill->billing_date,
-                    'age' => $bill->billing_date ? (int) round($bill->billing_date->diffInDays(now())) : 0,
-                    'total' => (float) $bill->grand_total,
-                    'paid' => $paid,
-                    'due' => $due,
-                    'items' => $bill->items->map(fn($line) => [
+                    'kind' => $row['kind'],
+                    'bill_id' => $row['bill_id'],
+                    'party_id' => $row['party_id'],
+                    'party' => $row['party'],
+                    'invoice' => $row['invoice'],
+                    'date' => $row['date'],
+                    'age' => $row['age'],
+                    'total' => (float) $row['total'],
+                    'returned' => (float) $row['returned'],
+                    'effective_total' => (float) $row['effective_total'],
+                    'paid' => (float) $row['paid'],
+                    'due' => (float) $row['due'],
+                    'items' => $record?->items?->map(fn($line) => [
                         'name' => $line->item?->name ?: 'Item',
                         'qty' => (float) $line->quantity,
                         'unit' => $line->unit,
                         'rate' => (float) $line->unit_price,
                         'amount' => (float) $line->line_total,
-                    ])->values(),
-                    'payments' => $allocations->map(fn($allocation) => [
-                        'date' => $allocation->payment?->payment_date?->format('d M Y') ?: '-',
-                        'amount' => (float) $allocation->amount,
-                        'mode' => $allocation->payment?->payment_mode ?: '-',
-                        'bank' => $allocation->payment?->bankAccount?->account_name ?: $allocation->payment?->bankAccount?->bank_name ?: '-',
-                        'reference' => $allocation->payment?->reference_no ?: '-',
+                    ])->values() ?? collect(),
+                    'payments' => collect($row['history'])->map(fn($allocation) => [
+                        'date' => $allocation['date'] ?? '-',
+                        'amount' => (float) ($allocation['amount'] ?? 0),
+                        'mode' => $allocation['mode'] ?? '-',
+                        'bank' => '-',
+                        'reference' => $allocation['reference_no'] ?? '-',
                     ])->values(),
                 ];
             })
-            ->filter(fn($row) => $row['due'] > 0)
             ->values();
     }
 
