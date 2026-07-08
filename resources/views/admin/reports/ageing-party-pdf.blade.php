@@ -15,9 +15,9 @@
 }
 *{box-sizing:border-box}
 body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--text);padding:24px 16px;margin:0}
-.toolbar{max-width:1180px;margin:0 auto 14px;text-align:right}
+.toolbar{max-width:820px;margin:0 auto 14px;text-align:right}
 .print{background:var(--purple);color:#fff;border:0;border-radius:7px;padding:9px 18px;font-weight:800;cursor:pointer;box-shadow:0 4px 14px rgba(124,58,237,.35)}
-.sheet{max-width:1180px;margin:0 auto;background:var(--sheet);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 8px 40px rgba(15,23,42,.1)}
+.sheet{max-width:820px;margin:0 auto;background:var(--sheet);border:1.5px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:0 8px 40px rgba(15,23,42,.1)}
 
 /* ===== Header ===== */
 .header{background:linear-gradient(120deg,var(--purple) 0%,var(--accent) 55%,var(--accent-dark) 100%);color:#fff;padding:28px 30px;display:flex;justify-content:space-between;gap:20px;position:relative;overflow:hidden}
@@ -114,10 +114,26 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--te
     body{background:#fff;padding:0}
     .toolbar{display:none}
     .sheet{box-shadow:none;border:0;border-radius:0;max-width:none}
-    @page{size:A4 landscape;margin:10mm}
+    @page{size:A4 portrait;margin:8mm}
     .header,.cell,.letter,.payment-card,.qr-side{-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .ageing-table{font-size:10.5px}
-    .ageing-table th,.ageing-table td{padding:6px}
+    .header{padding:18px 20px}
+    .content{padding:14px 16px}
+    .letter{padding:12px 14px;line-height:1.5}
+    .letter .body-text{font-size:10px}
+    .letter .body-text p{margin:0 0 6px 0}
+    .payment-card .qr-side{width:120px;padding:10px}
+    .payment-card .qr-side img{width:95px;height:95px}
+    .payment-card .info-side{padding:10px 14px}
+    .payment-card .info-row{font-size:10px;padding:3px 0}
+    .ageing-table{font-size:8.3px;table-layout:auto}
+    .ageing-table th,.ageing-table td{padding:3px 4px;word-break:break-word}
+    .ageing-table th{font-size:7.5px}
+    .bill-line{font-size:8px}
+    .strip{grid-template-columns:repeat(5,1fr);gap:6px;margin-top:10px}
+    .cell{padding:7px 8px}
+    .cell .label{font-size:7.5px}
+    .cell .value{font-size:11px}
+    .signature{padding:14px 16px 10px}
     .ageing-table tr,.bill-line{page-break-inside:avoid}
     .letter,.payment-card,.signature,.footer,.strip{page-break-inside:avoid}
 }
@@ -223,10 +239,10 @@ body{font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);color:var(--te
         <table class="ageing-table">
             <thead>
                 <tr>
-                    <th style="min-width:190px">Party</th>
+                    <th>Party</th>
                     <th class="num">Receivable</th>
                     <th class="num">Payable</th>
-                    @foreach($slabs as $label)<th style="min-width:150px">{{ $label }}</th>@endforeach
+                    @foreach($slabs as $label)<th>{{ $label }}</th>@endforeach
                     <th class="num">Total Due</th>
                 </tr>
             </thead>
