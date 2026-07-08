@@ -59,11 +59,22 @@
                             <div style="font-size:12px;color:#9090B0;">{{ $party->pan_number }}</div>
                         </td>
                         <td>
-                            @php $balance = (float) $party->current_balance; @endphp
-                            <strong class="{{ $balance < 0 ? 'text-success' : ($balance > 0 ? 'text-danger' : 'text-muted') }}">
-                                ₹ {{ number_format(abs($balance), 2) }}
-                            </strong>
-                            <div style="font-size:12px;color:#9090B0;">{{ $party->balance_label }}</div>
+                            @php
+                                $receivable = (float) $party->ageing_receivable;
+                                $payable = (float) $party->ageing_payable;
+                            @endphp
+                            @if($receivable > 0)
+                                <strong class="text-success">₹ {{ number_format($receivable, 2) }}</strong>
+                                <div style="font-size:12px;color:#9090B0;">Receivable</div>
+                            @endif
+                            @if($payable > 0)
+                                <strong class="text-danger">₹ {{ number_format($payable, 2) }}</strong>
+                                <div style="font-size:12px;color:#9090B0;">Payable</div>
+                            @endif
+                            @if($receivable <= 0 && $payable <= 0)
+                                <strong class="text-muted">₹ 0.00</strong>
+                                <div style="font-size:12px;color:#9090B0;">Settled</div>
+                            @endif
                         </td>
                         <td>
                             <strong>{{ $party->creator?->name ?? 'System' }}</strong>

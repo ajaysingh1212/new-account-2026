@@ -7,23 +7,31 @@ use App\Models\AuditLog;
 use App\Models\Party;
 use App\Models\PartyLedger;
 use App\Services\EntryVisibilityService;
+use App\Services\PartyOutstandingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 
 class PartyController extends Controller
 {
-    public function index(EntryVisibilityService $visibility)
+    public function index(EntryVisibilityService $visibility, PartyOutstandingService $outstanding)
     {
         $parties = $visibility->scopeForUser(
             Party::with('creator')->latest(),
             Party::class
         )->get();
+        $balances = $outstanding->balancesByParty($visibility);
+        $parties->each(function (Party $party) use ($balances) {
+            $balance = $balances->get($party->id, ['receivable' => 0.0, 'payable' => 0.0, 'net' => 0.0]);
+            $party->setAttribute('ageing_receivable', $balance['receivable']);
+            $party->setAttribute('ageing_payable', $balance['payable']);
+            $party->setAttribute('ageing_balance', $balance['net']);
+        });
 
         $summary = [
             'total' => $parties->count(),
-            'payable' => $parties->where('current_balance', '>', 0)->sum('current_balance'),
-            'receivable' => abs($parties->where('current_balance', '<', 0)->sum('current_balance')),
+            'payable' => (float) $parties->sum('ageing_payable'),
+            'receivable' => (float) $parties->sum('ageing_receivable'),
             'active' => $parties->where('status', 'active')->count(),
         ];
 
@@ -101,12 +109,13 @@ class PartyController extends Controller
         return redirect()->route('admin.parties.index')->with('success', 'Party created successfully.');
     }
 
-    public function show(Party $party, EntryVisibilityService $visibility)
+    public function show(Party $party, EntryVisibilityService $visibility, PartyOutstandingService $outstanding)
     {
         $visibility->authorizeView($party);
-        $party->load(['ledgers' => fn($q) => $q->latest('entry_date')->latest()]);
+        $ageingBalance = $outstanding->balanceForParty($visibility, $party->id);
+        $statementRows = $outstanding->statementRows($visibility, $party->id);
 
-        return view('admin.parties.show', compact('party'));
+        return view('admin.parties.show', compact('party', 'ageingBalance', 'statementRows'));
     }
 
     public function edit(Party $party, EntryVisibilityService $visibility)

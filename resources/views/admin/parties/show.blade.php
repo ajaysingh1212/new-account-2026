@@ -77,21 +77,33 @@
 
                 <hr>
 
+                @php
+                    $receivable = (float) ($ageingBalance['receivable'] ?? 0);
+                    $payable = (float) ($ageingBalance['payable'] ?? 0);
+                    $netBalance = (float) ($ageingBalance['net'] ?? 0);
+                    $balanceLabel = $netBalance < 0 ? 'Receivable' : ($netBalance > 0 ? 'Payable' : 'Settled');
+                @endphp
+
                 <div style="font-size:12px;color:#9090B0;">
                     Current Balance
                 </div>
 
                 <div style="font-size:30px;font-weight:800;color:#1A0A3D;">
 
-                    ₹ {{ number_format(abs((float) $party->current_balance), 2) }}
+                    ₹ {{ number_format(abs($netBalance), 2) }}
 
                 </div>
 
-                <span class="{{ (float) $party->current_balance < 0 ? 'badge-active' : ((float) $party->current_balance > 0 ? 'badge-inactive' : 'badge-user') }}">
+                <span class="{{ $netBalance < 0 ? 'badge-active' : ($netBalance > 0 ? 'badge-inactive' : 'badge-user') }}">
 
-                    {{ $party->balance_label }}
+                    {{ $balanceLabel }}
 
                 </span>
+
+                <div class="mt-3" style="font-size:13px;color:#64748b;">
+                    <div>Receivable: <strong class="text-success">₹ {{ number_format($receivable, 2) }}</strong></div>
+                    <div>Payable: <strong class="text-danger">₹ {{ number_format($payable, 2) }}</strong></div>
+                </div>
 
             </div>
 
@@ -233,9 +245,9 @@
 
                 <tbody>
 
-                    @if($party->ledgers && $party->ledgers->count())
+                    @if($statementRows && $statementRows->count())
 
-                        @foreach($party->ledgers as $ledger)
+                        @foreach($statementRows as $ledger)
 
                             <tr>
 

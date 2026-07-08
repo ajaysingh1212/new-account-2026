@@ -9,7 +9,6 @@ use App\Models\Company;
 use App\Models\Expense;
 use App\Models\Item;
 use App\Models\Party;
-use App\Models\PartyLedger;
 use App\Models\PartyPaymentAllocation;
 use App\Models\PurchaseBill;
 use App\Models\ProductionBatch;
@@ -17,6 +16,7 @@ use App\Models\SalesInvoice;
 use App\Models\StockMovement;
 use App\Services\EntryVisibilityService;
 use App\Services\AgeingSlabService;
+use App\Services\PartyOutstandingService;
 use App\Services\SerialUnitService;
 use App\Services\SalesProfitService;
 use Carbon\Carbon;
@@ -71,20 +71,14 @@ class ReportController extends Controller
         ]);
     }
 
-    public function partyStatement(Request $request, EntryVisibilityService $visibility)
+    public function partyStatement(Request $request, EntryVisibilityService $visibility, PartyOutstandingService $outstanding)
     {
         $companyScoped = fn(Builder $q, string $model) => $visibility->scopeForUser($q, $model);
         $parties = $companyScoped(Party::orderBy('display_name'), Party::class)->get();
         $partyId = $request->integer('party_id') ?: null;
         $from = $request->date('from_date')?->toDateString() ?? now()->startOfMonth()->toDateString();
         $to = $request->date('to_date')?->toDateString() ?? now()->toDateString();
-        $ledgers = PartyLedger::with('party')
-            ->whereBetween('entry_date', [$from, $to])
-            ->when($partyId, fn($q) => $q->where('party_id', $partyId))
-            ->whereIn('party_id', $parties->pluck('id'))
-            ->latest('entry_date')
-            ->latest()
-            ->get();
+        $ledgers = $outstanding->statementRows($visibility, $partyId, $to);
 
         return view('admin.reports.party-statement', compact('parties','partyId','from','to','ledgers'));
     }
@@ -200,29 +194,14 @@ class ReportController extends Controller
         return view('admin.reports.bill-wise-profit', compact('filters','parties','bills'));
     }
 
-    public function ageing(Request $request, EntryVisibilityService $visibility, AgeingSlabService $ageingSlabs)
+    public function ageing(Request $request, EntryVisibilityService $visibility, AgeingSlabService $ageingSlabs, PartyOutstandingService $outstanding)
     {
         $companyParties = $visibility->scopeForUser(Party::orderBy('display_name'), Party::class)->get();
         $partyId = $request->integer('party_id') ?: null;
         $kind = $request->input('kind', 'both');
         abort_unless(in_array($kind, ['receivable', 'payable', 'both'], true), 422, 'Invalid ageing type.');
         $to = $request->date('to_date')?->toDateString() ?? now()->toDateString();
-        $asOf = Carbon::parse($to)->endOfDay();
-
-        $sales = $visibility->scopeForUser(SalesInvoice::with('party')->where('sale_type', 'credit'), SalesInvoice::class)
-            ->whereDate('billing_date', '<=', $to)
-            ->when($partyId, fn($q) => $q->where('party_id', $partyId))
-            ->get()
-            ->map(fn($bill) => $this->ageingRow($bill, SalesInvoice::class, 'receivable', $asOf));
-        $purchases = $visibility->scopeForUser(PurchaseBill::with('party')->where('purchase_type', 'credit'), PurchaseBill::class)
-            ->whereDate('billing_date', '<=', $to)
-            ->when($partyId, fn($q) => $q->where('party_id', $partyId))
-            ->get()
-            ->map(fn($bill) => $this->ageingRow($bill, PurchaseBill::class, 'payable', $asOf));
-        $billRows = $sales->merge($purchases)
-            ->when($kind !== 'both', fn($rows) => $rows->where('kind', $kind))
-            ->filter(fn($row) => $row['due'] > 0)
-            ->sortByDesc('date')->values();
+        $billRows = $outstanding->billRows($visibility, $partyId, $to, $kind);
         $rows = $ageingSlabs->matrix($billRows);
         $slabs = AgeingSlabService::SLABS;
 
@@ -536,23 +515,6 @@ class ReportController extends Controller
             'all' => ['1970-01-01', $today->toDateString()],
             default => [$today->copy()->startOfMonth()->toDateString(), $today->copy()->endOfMonth()->toDateString()],
         };
-    }
-
-    private function ageingRow($bill, string $model, string $kind, ?Carbon $asOf = null): array
-    {
-        $paid = (float) PartyPaymentAllocation::where('bill_model', $model)->where('bill_id', $bill->id)->sum('amount');
-        return [
-            'kind' => $kind,
-            'party_id' => $bill->party_id,
-            'party' => $bill->party?->display_name ?: 'Cash / Walk-in',
-            'invoice' => $bill->invoice_no,
-            'date' => $bill->billing_date,
-            'age' => $bill->billing_date ? (int) floor($bill->billing_date->startOfDay()->diffInDays(($asOf ?? now())->endOfDay())) : 0,
-            'total' => (float) $bill->grand_total,
-            'paid' => $paid,
-            'due' => max(0, (float) $bill->grand_total - $paid),
-            'bill_id' => $bill->id,
-        ];
     }
 
     private function ageingPartyPayload(string $party, Request $request, EntryVisibilityService $visibility, AgeingSlabService $ageingSlabs, SalesProfitService $profits): array
