@@ -278,6 +278,8 @@
 
     <div class="totals">
         <div><span>Grand Total</span><span>&#8377; {{ number_format($totals['grand_total'], 2) }}</span></div>
+        <div><span>Return Adjusted</span><span>&#8377; {{ number_format($totals['returned'] ?? 0, 2) }}</span></div>
+        <div><span>Effective Total</span><span>&#8377; {{ number_format($totals['effective_total'] ?? $totals['grand_total'], 2) }}</span></div>
         <div><span>Paid</span><span>&#8377; {{ number_format($totals['paid'], 2) }}</span></div>
         <div class="balance-row"><span>Balance Due</span><span>&#8377; {{ number_format($totals['balance'], 2) }}</span></div>
     </div>

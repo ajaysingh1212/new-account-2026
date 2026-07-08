@@ -36,7 +36,7 @@
             </td>
             <td>Rs {{ number_format($row['receivable'],2) }}</td><td>Rs {{ number_format($row['payable'],2) }}</td>
             @foreach($slabs as $key => $label) @php $cell = $row['slabs'][$key]; @endphp
-                <td title="{{ $cell['invoices'] }}">@if($cell['bills'])<strong>Rs {{ number_format($cell['due'],2) }}</strong><br><small>{{ $cell['bills'] }} bill(s)</small>@if(!empty($cell['bills']))<div class="mt-2">@foreach($cell['invoices'] ? explode(',', $cell['invoices']) : [] as $invoiceId) @php $invoiceId = trim($invoiceId); @endphp @if($invoiceId)<a href="{{ route('admin.reports.ageing.print', ['kind' => $row['receivable'] > 0 ? 'receivable' : 'payable', 'bill' => $invoiceId]) }}" class="btn btn-outline-info btn-xs mr-1" target="_blank">PDF</a><a href="{{ route('admin.reports.ageing.diagnosis', ['kind' => $row['receivable'] > 0 ? 'receivable' : 'payable', 'bill' => $invoiceId]) }}" class="btn btn-outline-secondary btn-xs">Diagnosis</a>@endif @endforeach</div>@endif@else<span class="text-muted">—</span>@endif</td>
+                <td title="{{ $cell['invoices'] }}">@if($cell['bills'])<strong>Rs {{ number_format($cell['due'],2) }}</strong><br><small>{{ $cell['bills'] }} bill(s)</small>@if(!empty($cell['bills']))<div class="mt-2">@foreach(($cell['invoice_refs'] ?? collect()) as $invoiceRef) @if(!empty($invoiceRef['id']))<a href="{{ route('admin.reports.ageing.print', ['kind' => $invoiceRef['kind'], 'bill' => $invoiceRef['id']]) }}" class="btn btn-outline-info btn-xs mr-1" target="_blank">PDF</a><a href="{{ route('admin.reports.ageing.diagnosis', ['kind' => $invoiceRef['kind'], 'bill' => $invoiceRef['id']]) }}" class="btn btn-outline-secondary btn-xs">Diagnosis</a>@endif @endforeach</div>@endif@else<span class="text-muted">—</span>@endif</td>
             @endforeach
             <td><strong>Rs {{ number_format($row['total_due'],2) }}</strong></td>
         </tr>@endforeach
@@ -61,8 +61,12 @@
                     <td>Rs {{ number_format($bill['paid'],2) }}</td>
                     <td><strong>Rs {{ number_format($bill['due'],2) }}</strong></td>
                     <td>
+                        @if($bill['bill_id'])
                         <a href="{{ route('admin.reports.ageing.print', ['kind' => $bill['kind'], 'bill' => $bill['bill_id']]) }}" class="btn btn-outline-info btn-sm" target="_blank"><i class="fas fa-file-pdf mr-1"></i>PDF</a>
                         <a href="{{ route('admin.reports.ageing.diagnosis', ['kind' => $bill['kind'], 'bill' => $bill['bill_id']]) }}" class="btn btn-outline-secondary btn-sm"><i class="fas fa-stethoscope mr-1"></i>Diagnosis</a>
+                        @else
+                        <span class="text-muted">—</span>
+                        @endif
                     </td>
                 </tr>
             @endforeach

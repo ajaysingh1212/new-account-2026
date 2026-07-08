@@ -12,6 +12,7 @@ use App\Models\PurchaseBill;
 use App\Models\SalesInvoice;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
+use App\Services\PartyOutstandingService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -44,7 +45,7 @@ class PartyPaymentController extends Controller
         ]);
     }
 
-    public function openBills(Request $request)
+    public function openBills(Request $request, PartyOutstandingService $outstanding)
     {
         $companyId = auth()->user()->current_company_id;
         $data = $request->validate([
@@ -52,46 +53,8 @@ class PartyPaymentController extends Controller
             'payment_type' => ['required', Rule::in(['payment_in','payment_out'])],
         ]);
 
-        $model = $data['payment_type'] === 'payment_in' ? SalesInvoice::class : PurchaseBill::class;
-        $typeColumn = $data['payment_type'] === 'payment_in' ? 'sale_type' : 'purchase_type';
-        $billType = $data['payment_type'] === 'payment_in' ? 'sales' : 'purchase';
-
         $party = Party::where('company_id', $companyId)->findOrFail($data['party_id']);
-        $bills = $model::where('company_id', $companyId)
-            ->where('party_id', $data['party_id'])
-            ->where($typeColumn, 'credit')
-            ->latest('billing_date')
-            ->get()
-            ->map(function ($bill) use ($model, $billType) {
-                $paid = (float) PartyPaymentAllocation::where('bill_model', $model)
-                    ->where('bill_id', $bill->id)
-                    ->sum('amount');
-                $due = max(0, (float) $bill->grand_total - $paid);
-
-                return [
-                    'id' => $bill->id,
-                    'type' => $billType,
-                    'invoice_no' => $bill->invoice_no,
-                    'billing_date' => $bill->billing_date?->format('Y-m-d'),
-                    'grand_total' => round((float) $bill->grand_total, 2),
-                    'paid' => round($paid, 2),
-                    'due' => round($due, 2),
-                    'history' => PartyPaymentAllocation::with('payment')
-                        ->where('bill_model', $model)
-                        ->where('bill_id', $bill->id)
-                        ->latest()
-                        ->get()
-                        ->map(fn($allocation) => [
-                            'date' => $allocation->payment?->payment_date?->format('d M Y'),
-                            'reference_no' => $allocation->payment?->reference_no ?: '-',
-                            'amount' => round((float) $allocation->amount, 2),
-                            'mode' => $allocation->payment?->payment_mode ?: '-',
-                        ])
-                        ->values(),
-                ];
-            })
-            ->filter(fn($bill) => $bill['due'] > 0)
-            ->values();
+        $bills = $outstanding->openBillsForPayment($party->id, $data['payment_type']);
 
         $openingBalanceAvailable = ($data['payment_type'] === 'payment_in' && $party->opening_balance_type === 'receivable')
             || ($data['payment_type'] === 'payment_out' && $party->opening_balance_type === 'payable');
@@ -125,7 +88,7 @@ class PartyPaymentController extends Controller
         ]);
     }
 
-    public function store(Request $request, AccountingService $accounting)
+    public function store(Request $request, AccountingService $accounting, EntryVisibilityService $visibility, PartyOutstandingService $outstanding)
     {
         $companyId = auth()->user()->current_company_id;
         $data = $request->validate([
@@ -207,10 +170,8 @@ class PartyPaymentController extends Controller
                         ->where($typeColumn, 'credit')
                         ->lockForUpdate()
                         ->findOrFail($row['bill_id']);
-                    $alreadyPaid = (float) PartyPaymentAllocation::where('bill_model', $billModel)
-                        ->where('bill_id', $bill->id)
-                        ->sum('amount');
-                    $due = max(0, (float) $bill->grand_total - $alreadyPaid);
+                    $outstandingRow = $outstanding->billPayload($visibility, $billModel, $bill->id);
+                    $due = (float) ($outstandingRow['due'] ?? 0);
                     $amount = round((float) $row['amount'], 2);
                     abort_if($amount > $due, 422, "Payment cannot be more than due amount for bill {$bill->invoice_no}.");
                     $allocatedTotal += $amount;

@@ -328,7 +328,7 @@ body.dark-mode .cell.c-amber{background:rgba(217,119,6,.12)}
             <div class="cell c-neutral"><div class="label">Open Bills</div><div class="value">{{ $bills->count() }}</div></div>
             <div class="cell c-green"><div class="label">Receivable</div><div class="value">Rs {{ number_format($totals['receivable'],2) }}</div></div>
             <div class="cell c-red"><div class="label">Payable</div><div class="value">Rs {{ number_format($totals['payable'],2) }}</div></div>
-            <div class="cell c-blue"><div class="label">Paid</div><div class="value">Rs {{ number_format($totals['paid'],2) }}</div></div>
+            <div class="cell c-blue"><div class="label">Returned</div><div class="value">Rs {{ number_format($totals['returned'] ?? 0,2) }}</div></div>
             <div class="cell c-amber"><div class="label">Total Due</div><div class="value">Rs {{ number_format($totals['due'],2) }}</div></div>
         </div>
 
@@ -407,6 +407,7 @@ body.dark-mode .cell.c-amber{background:rgba(217,119,6,.12)}
                             Age {{ $bill['age'] }} days |
                             Total Rs {{ number_format($bill['total'],2) }} |
                             Paid Rs {{ number_format($bill['paid'],2) }} |
+                            Returned Rs {{ number_format($bill['returned'] ?? 0,2) }} |
                             Due Rs {{ number_format($bill['due'],2) }}
                         </td>
                     </tr>

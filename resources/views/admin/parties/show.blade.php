@@ -205,6 +205,34 @@
 
 </div>
 
+@php
+    $ledgerFinal = (float) ($statementSummary['final_balance'] ?? 0);
+    $ledgerFinalLabel = $ledgerFinal < 0 ? 'Receivable' : ($ledgerFinal > 0 ? 'Payable' : 'Settled');
+@endphp
+<div class="row">
+    <div class="col-md-3 mb-3">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Total Sale</div><strong>Rs {{ number_format((float) ($statementSummary['sale'] ?? 0), 2) }}</strong></div></div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Sales Return</div><strong>Rs {{ number_format((float) ($statementSummary['sales_return'] ?? 0), 2) }}</strong></div></div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Payment In</div><strong>Rs {{ number_format((float) ($statementSummary['payment_in'] ?? 0), 2) }}</strong></div></div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Final {{ $ledgerFinalLabel }}</div><strong>Rs {{ number_format(abs($ledgerFinal), 2) }}</strong></div></div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Total Purchase</div><strong>Rs {{ number_format((float) ($statementSummary['purchase'] ?? 0), 2) }}</strong></div></div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Purchase Return</div><strong>Rs {{ number_format((float) ($statementSummary['purchase_return'] ?? 0), 2) }}</strong></div></div>
+    </div>
+    <div class="col-md-3 mb-3">
+        <div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Payment Out</div><strong>Rs {{ number_format((float) ($statementSummary['payment_out'] ?? 0), 2) }}</strong></div></div>
+    </div>
+</div>
+
 {{-- Ledger Statement --}}
 <div class="card border-0 shadow-sm">
 

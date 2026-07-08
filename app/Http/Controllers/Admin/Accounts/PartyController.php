@@ -114,8 +114,9 @@ class PartyController extends Controller
         $visibility->authorizeView($party);
         $ageingBalance = $outstanding->balanceForParty($visibility, $party->id);
         $statementRows = $outstanding->statementRows($visibility, $party->id);
+        $statementSummary = $outstanding->statementSummary($visibility, $party->id);
 
-        return view('admin.parties.show', compact('party', 'ageingBalance', 'statementRows'));
+        return view('admin.parties.show', compact('party', 'ageingBalance', 'statementRows', 'statementSummary'));
     }
 
     public function edit(Party $party, EntryVisibilityService $visibility)

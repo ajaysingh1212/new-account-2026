@@ -27,6 +27,10 @@ class AgeingSlabService
                         'receivable' => (float) $rows->where('kind', 'receivable')->sum('due'),
                         'payable' => (float) $rows->where('kind', 'payable')->sum('due'),
                         'invoices' => $rows->pluck('bill_id')->filter()->implode(','),
+                        'invoice_refs' => $rows
+                            ->filter(fn(array $row) => !empty($row['bill_id']))
+                            ->map(fn(array $row) => ['id' => $row['bill_id'], 'kind' => $row['kind']])
+                            ->values(),
                     ]];
                 })->all();
 

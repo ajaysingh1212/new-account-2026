@@ -66,6 +66,19 @@ document.getElementById('exportPdf').addEventListener('click', function () {
 });
 </script>
 </div>
+@php
+    $finalBalance = (float) ($summary['final_balance'] ?? 0);
+    $finalLabel = $finalBalance < 0 ? 'Receivable' : ($finalBalance > 0 ? 'Payable' : 'Settled');
+@endphp
+<div class="metric-strip">
+    <div class="metric"><span>Total Sale</span><strong>Rs {{ number_format((float) ($summary['sale'] ?? 0), 2) }}</strong></div>
+    <div class="metric"><span>Sales Return</span><strong>Rs {{ number_format((float) ($summary['sales_return'] ?? 0), 2) }}</strong></div>
+    <div class="metric"><span>Payment In</span><strong>Rs {{ number_format((float) ($summary['payment_in'] ?? 0), 2) }}</strong></div>
+    <div class="metric"><span>Total Purchase</span><strong>Rs {{ number_format((float) ($summary['purchase'] ?? 0), 2) }}</strong></div>
+    <div class="metric"><span>Purchase Return</span><strong>Rs {{ number_format((float) ($summary['purchase_return'] ?? 0), 2) }}</strong></div>
+    <div class="metric"><span>Payment Out</span><strong>Rs {{ number_format((float) ($summary['payment_out'] ?? 0), 2) }}</strong></div>
+    <div class="metric"><span>Final {{ $finalLabel }}</span><strong>Rs {{ number_format(abs($finalBalance), 2) }}</strong></div>
+</div>
 <div class="report-card">
    <h3>Ledger Entries</h3>
    <table id="ledgerTable" class="table report-table">

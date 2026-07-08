@@ -20,12 +20,13 @@
         </div>
         <div class="row mb-3">
             <div class="col-md-3"><div class="alert alert-info mb-0"><strong>Total</strong><br>Rs {{ number_format($summary['total'], 2) }}</div></div>
-            <div class="col-md-3"><div class="alert alert-success mb-0"><strong>Paid</strong><br>Rs {{ number_format($summary['paid'], 2) }}</div></div>
-            <div class="col-md-3"><div class="alert alert-warning mb-0"><strong>Pending</strong><br>Rs {{ number_format($summary['pending'], 2) }}</div></div>
-            <div class="col-md-3"><div class="alert alert-secondary mb-0"><strong>Age</strong><br>{{ $days }} days</div></div>
+            <div class="col-md-2"><div class="alert alert-success mb-0"><strong>Returned</strong><br>Rs {{ number_format($summary['returned'] ?? 0, 2) }}</div></div>
+            <div class="col-md-2"><div class="alert alert-success mb-0"><strong>Paid</strong><br>Rs {{ number_format($summary['paid'], 2) }}</div></div>
+            <div class="col-md-2"><div class="alert alert-warning mb-0"><strong>Pending</strong><br>Rs {{ number_format($summary['pending'], 2) }}</div></div>
+            <div class="col-md-2"><div class="alert alert-secondary mb-0"><strong>Age</strong><br>{{ $days }} days</div></div>
         </div>
         <div class="alert alert-light border">
-            Ageing calculation: bill date {{ $bill->billing_date?->format('d M Y') }} se today tak {{ $days }} days. Grand total Rs {{ number_format($summary['total'], 2) }} minus allocated payments Rs {{ number_format($summary['paid'], 2) }} = pending Rs {{ number_format($summary['pending'], 2) }}.
+            Ageing calculation: bill date {{ $bill->billing_date?->format('d M Y') }} se today tak {{ $days }} days. Grand total Rs {{ number_format($summary['total'], 2) }} minus returns Rs {{ number_format($summary['returned'] ?? 0, 2) }} minus allocated payments Rs {{ number_format($summary['paid'], 2) }} = pending Rs {{ number_format($summary['pending'], 2) }}.
         </div>
         <h5>Bill Items, Taxing And Amount</h5>
         <div class="table-responsive mb-4">

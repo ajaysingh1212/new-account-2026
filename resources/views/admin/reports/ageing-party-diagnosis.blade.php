@@ -22,7 +22,7 @@
 <div class="diag-grid">
     <div class="diag-card"><small>Open Bills</small><b>{{ $bills->count() }}</b></div>
     <div class="diag-card"><small>Total Sale</small><b>Rs {{ number_format($totals['sale'],2) }}</b></div>
-    <div class="diag-card"><small>Paid</small><b>Rs {{ number_format($totals['paid'],2) }}</b></div>
+    <div class="diag-card"><small>Returned</small><b>Rs {{ number_format($totals['returned'] ?? 0,2) }}</b></div>
     <div class="diag-card"><small>Outstanding</small><b>Rs {{ number_format($totals['due'],2) }}</b></div>
     <div class="diag-card"><small>Profit / Loss</small><b class="{{ $totals['profit'] >= 0 ? 'profit' : 'loss' }}">Rs {{ number_format($totals['profit'],2) }}</b></div>
 </div>
@@ -72,7 +72,7 @@
             <div class="row">
                 <div class="col-md-3"><strong>Invoice #{{ $record->invoice_no }}</strong><br><span class="mini">{{ $record->billing_date?->format('d M Y') }} | {{ ucfirst($bill['kind']) }}</span></div>
                 <div class="col-md-3">Age: <strong>{{ $bill['age'] }} days</strong><br>Due: <strong>Rs {{ number_format($bill['due'],2) }}</strong></div>
-                <div class="col-md-3">Total: Rs {{ number_format($bill['total'],2) }}<br>Paid: Rs {{ number_format($bill['paid'],2) }}</div>
+                <div class="col-md-3">Total: Rs {{ number_format($bill['total'],2) }}<br>Returned: Rs {{ number_format($bill['returned'] ?? 0,2) }}<br>Paid: Rs {{ number_format($bill['paid'],2) }}</div>
                 <div class="col-md-3">Cost: Rs {{ number_format($bill['cost'],2) }}<br>Profit: <strong class="{{ $bill['profit'] >= 0 ? 'profit' : 'loss' }}">Rs {{ number_format($bill['profit'],2) }} ({{ number_format($bill['profit_percent'],2) }}%)</strong></div>
             </div>
         </div>
