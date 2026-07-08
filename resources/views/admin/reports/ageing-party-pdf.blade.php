@@ -83,11 +83,12 @@ body.dark-mode .letter{background:linear-gradient(180deg,#151b2e 0%,#111827 100%
 /* AGEING SLAB TABLE — kept exactly as-is, no structural or visual change */
 /* ===================================================================== */
 .ageing-table{width:100%;border-collapse:collapse;font-size:13.5px}
-.ageing-table th{background:#111827;color:#fff;text-align:left;padding:10px 9px;border:1px solid #111827;font-size:11px;text-transform:uppercase}
+.ageing-table th{background:linear-gradient(120deg,var(--purple-dark),var(--accent-dark));color:#fff;text-align:left;padding:11px 9px;border:1px solid var(--accent-dark);font-size:12.5px;font-weight:900;letter-spacing:.03em;text-transform:uppercase}
 .ageing-table td{border:1px solid var(--border);padding:9px;vertical-align:top}
 .num{text-align:right;white-space:nowrap}
 .bill-line{border-top:1px dashed #cbd5e1;margin-top:5px;padding-top:5px}
 .bill-line:first-of-type{border-top:0}
+.age-pill{display:inline-block;background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-border);font-size:10px;font-weight:800;padding:1px 6px;border-radius:999px;margin-left:6px;white-space:nowrap}
 .muted{color:var(--muted)}
 .old-detail{display:none}
 
@@ -153,7 +154,7 @@ body.dark-mode .cell.c-amber{background:rgba(217,119,6,.12)}
     .header{padding:18px 20px}
     .content{padding:14px 16px}
     .letter{padding:13px 15px;line-height:1.55}
-    .letter .body-text{font-size:14px}
+    .letter .body-text{font-size:11.5px}
     .letter .body-text p{margin:0 0 7px 0}
     .payment-half .qr-side{width:100px;padding:10px}
     .payment-half .qr-side img{width:80px;height:80px}
@@ -161,8 +162,9 @@ body.dark-mode .cell.c-amber{background:rgba(217,119,6,.12)}
     .payment-half .info-row{font-size:10px;padding:3px 0}
     .ageing-table{font-size:9px;table-layout:auto}
     .ageing-table th,.ageing-table td{padding:3px 4px;word-break:break-word}
-    .ageing-table th{font-size:8px}
+    .ageing-table th{font-size:8.5px;font-weight:900}
     .bill-line{font-size:8.5px}
+    .age-pill{font-size:7.5px;padding:0 4px;margin-left:3px}
     .strip{grid-template-columns:repeat(5,1fr);gap:6px;margin-top:10px}
     .cell{padding:7px 8px}
     .cell .label{font-size:7.8px}
@@ -297,6 +299,7 @@ body.dark-mode .cell.c-amber{background:rgba(217,119,6,.12)}
                                     @php $record = $bill['record']; @endphp
                                     <div class="bill-line">
                                         <strong>{{ $record->invoice_no }}</strong>
+                                        <span class="age-pill">{{ $bill['age'] }} {{ $bill['age'] == 1 ? 'day' : 'days' }}</span>
                                         <span class="muted">{{ $record->billing_date?->format('d M Y') }} | {{ ucfirst($bill['kind']) }} | Rs {{ number_format($bill['due'],2) }}</span>
                                     </div>
                                 @endforeach
