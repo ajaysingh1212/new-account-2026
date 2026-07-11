@@ -68,7 +68,11 @@ $(document).on('click', '.sale-detail-btn', function() {
     $('#saleDetailMetrics').html(metrics.map(([label, value, suffix]) => `<div class="col-md-3 mb-3"><div class="p-3 bg-white rounded border"><small class="text-muted text-uppercase font-weight-bold">${label}</small><div class="h5 mb-0 ${Number(value) < 0 ? 'text-danger' : ''}">${suffix === '%' ? Number(value || 0).toFixed(2) + '%' : money(value)}</div></div></div>`).join(''));
     $('#saleDetailParty').html(`<b>${detail.party?.name || 'Cash / Walk-in'}</b><br>Legal: ${detail.party?.legal_name || '-'}<br>Phone: ${detail.party?.phone || detail.phone || '-'}<br>Email: ${detail.party?.email || '-'}<br>GSTIN: ${detail.party?.gstin || '-'}<br>City: ${detail.party?.city || '-'}<hr class="my-2">Billing: ${detail.billing_address || '-'}<br>Shipping: ${detail.shipping_address || '-'}`);
     $('#saleDetailItems').html((detail.items || []).map(item => {
-        const bom = (item.bom || []).map(row => `${row.name}: ${Number(row.qty_per_unit || 0)} ${row.unit || ''} @ ${money(row.purchase_price)}`).join('<br>') || '-';
+        const bom = (item.bom || []).map(row => {
+            const amount = Number(row.amount || 0);
+            const type = row.line_type === 'service' ? 'Service' : 'Raw';
+            return `${type} - ${row.name}: ${Number(row.qty_per_unit || 0)} ${row.unit || ''} @ ${money(row.unit_price || row.purchase_price)} = ${money(amount)}`;
+        }).join('<br>') || '-';
         const units = (item.units || []).map(unit => `${unit.serial_no || '-'} / ${unit.vts_sim || '-'} / ${unit.batch_no || '-'} / ${unit.buyer_code || '-'}`).join('<br>') || '-';
         return `<tr><td><b>${item.name}</b><br><small>${item.description || '-'}</small><br><small><b>BOM:</b><br>${bom}</small><br><small><b>CRM Units:</b><br>${units}</small></td><td>${Number(item.qty || 0).toFixed(2)} ${item.unit || ''}</td><td>${money(item.amount)}</td><td>${money(item.cost)}</td><td class="${Number(item.profit) < 0 ? 'text-danger' : 'text-success'}"><b>${money(item.profit)}</b></td><td class="${Number(item.profit_percent) < 0 ? 'text-danger' : 'text-success'}"><b>${Number(item.profit_percent || 0).toFixed(2)}%</b></td></tr>`;
     }).join('') || '<tr><td colspan="6" class="text-center text-muted">No item details.</td></tr>');

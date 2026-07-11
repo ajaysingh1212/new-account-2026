@@ -38,6 +38,7 @@
 @php
     $user = auth()->user();
     $roleLabel = $user->isSuperAdmin() ? 'Super Admin Control Center' : ($user->isAdmin() ? 'Company Admin Dashboard' : 'My Role Dashboard');
+    $serviceNameOptions = collect($serviceRows ?? [])->pluck('service')->filter()->unique()->sort()->values();
     $cards = [];
     if ($user->isSuperAdmin()) {
         $cards[] = ['label'=>'Companies','value'=>$stats['companies'] ?? 0,'icon'=>'fa-building','accent'=>'#2563eb'];
@@ -49,7 +50,7 @@
     if ($user->can('sales.view')) $cards[] = ['label'=>'Sales Due','value'=>'Rs '.number_format($stats['sales_due'] ?? 0,2),'icon'=>'fa-hand-holding-dollar','accent'=>'#dc2626','modal'=>'salesDueModal'];
     if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase','value'=>'Rs '.number_format($stats['purchases'] ?? 0,2),'icon'=>'fa-shopping-cart','accent'=>'#ec4899','modal'=>'purchaseSegmentModal'];
     if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase Due','value'=>'Rs '.number_format($stats['purchase_due'] ?? 0,2),'icon'=>'fa-file-circle-exclamation','accent'=>'#f59e0b','target'=>'purchaseDueBox'];
-    if ($user->can('parties.view')) $cards[] = ['label'=>'Parties','value'=>$stats['parties'] ?? 0,'icon'=>'fa-users','accent'=>'#8b5cf6'];
+    if ($user->can('reports.transaction')) $cards[] = ['label'=>'Service Amount','value'=>'Rs '.number_format($stats['service_amount'] ?? 0,2),'icon'=>'fa-concierge-bell','accent'=>'#0ea5e9','modal'=>'serviceModal'];
     if ($user->can('items.view')) $cards[] = ['label'=>'Items','value'=>$stats['items'] ?? 0,'icon'=>'fa-box','accent'=>'#f59e0b'];
     if ($user->can('stocks.view')) $cards[] = ['label'=>'Low Stock','value'=>$stats['low_stock'] ?? 0,'icon'=>'fa-exclamation-triangle','accent'=>'#ef4444'];
     if ($user->can('banking.view')) $cards[] = ['label'=>'Bank Balance','value'=>'Rs '.number_format($stats['bank_balance'] ?? 0,2),'icon'=>'fa-university','accent'=>'#06b6d4'];
@@ -290,6 +291,77 @@
     </div>
 </div>
 
+<div class="modal fade pro-modal" id="serviceModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div><h5 class="modal-title mb-0">Service Cost Intelligence</h5><small>Finished-goods BOM services sold from {{ $from }} to {{ $to }}</small></div>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-3"><div class="modal-metric"><span>Total Service Cost</span><b>Rs {{ number_format($serviceTotals['amount'] ?? 0,2) }}</b></div></div>
+                    <div class="col-md-3"><div class="modal-metric"><span>Service Lines</span><b>{{ number_format($serviceTotals['count'] ?? 0,0) }}</b></div></div>
+                    <div class="col-md-3"><div class="modal-metric"><span>Invoices Touched</span><b>{{ number_format($serviceTotals['invoices'] ?? 0,0) }}</b></div></div>
+                    <div class="col-md-3"><div class="modal-metric"><span>Service Names</span><b>{{ $serviceNameOptions->count() }}</b></div></div>
+                </div>
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="font-weight-bold">Filter by Service</label>
+                        <select id="serviceFilter" class="form-control">
+                            <option value="">All Services</option>
+                            @foreach($serviceNameOptions as $serviceName)
+                                <option value="{{ $serviceName }}">{{ $serviceName }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+                <div class="row" id="serviceChartRows">
+                    @foreach($serviceRows->groupBy('service')->sortByDesc(fn($rows) => $rows->sum('amount')) as $service => $rows)
+                        @php
+                            $serviceAmount = (float) $rows->sum('amount');
+                            $serviceQty = (float) $rows->sum('qty');
+                            $servicePct = ($serviceTotals['amount'] ?? 0) > 0 ? round($serviceAmount / $serviceTotals['amount'] * 100, 2) : 0;
+                        @endphp
+                        <div class="col-md-6 mb-3 service-chart-row" data-service="{{ $service }}">
+                            <div class="p-3 bg-white rounded border h-100">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div><b>{{ $service }}</b><br><small class="text-muted">{{ number_format($serviceQty,2) }} qty | {{ number_format($servicePct,2) }}%</small></div>
+                                    <strong>Rs {{ number_format($serviceAmount,2) }}</strong>
+                                </div>
+                                <div style="height:10px;background:#e2e8f0;border-radius:999px;overflow:hidden">
+                                    <div style="height:100%;width:{{ min(100, max(3, $servicePct)) }}%;background:linear-gradient(90deg,#0ea5e9,#14b8a6)"></div>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+                <div class="table-responsive mt-2">
+                    <table class="table table-sm mb-0" id="serviceDetailTable">
+                        <thead><tr><th>Date</th><th>Invoice</th><th>Party</th><th>Item</th><th>Service</th><th>Qty</th><th>Unit Cost</th><th>Amount</th></tr></thead>
+                        <tbody>
+                        @forelse($serviceRows as $row)
+                            <tr class="service-detail-row" data-service="{{ $row['service'] }}">
+                                <td>{{ $row['invoice_date']?->format('d M Y') }}</td>
+                                <td>{{ $row['invoice'] }}</td>
+                                <td>{{ $row['party'] }}</td>
+                                <td>{{ $row['item'] }}</td>
+                                <td><b>{{ $row['service'] }}</b></td>
+                                <td>{{ number_format((float) $row['qty'],2) }}</td>
+                                <td>Rs {{ number_format((float) $row['unit_price'],2) }}</td>
+                                <td><strong>Rs {{ number_format((float) $row['amount'],2) }}</strong></td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="8" class="text-center text-muted py-4">No service cost found for this range.</td></tr>
+                        @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @include('admin.partials.dashboard-segment-modal', [
     'modalId' => 'salesSegmentModal',
     'title' => 'Product Category Wise Sales',
@@ -392,6 +464,12 @@ $('.period-tab').on('click', function(){
     $('.custom-date-box').toggle(isCustom).find('input').prop('required', isCustom);
     if (!isCustom) $('#dashboardFilterForm').trigger('submit');
 });
+$('#dashboardFilterForm input[type="date"]').on('change', function(){
+    $('#dashboardPeriod').val('custom');
+    $('.period-tab').removeClass('active');
+    $('.period-tab[data-period="custom"]').addClass('active');
+    $('.custom-date-box').show().find('input').prop('required', true);
+});
 function dashMoney(value){return 'Rs '+(Number(value)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});}
 $('#openQuickDrawer').on('click',function(){
     $('#quickDrawer,#quickDrawerBackdrop').addClass('open');
@@ -424,6 +502,13 @@ $(document).on('click','.view-detail-btn',function(){
     $('#detailPaymentAction').attr('href', `{{ route('admin.party-payments.create') }}?type=${type}&party_id=${row.party_id || ''}&bill_id=${row.bill_id || ''}`);
     $('#detailPaymentAction').html(row.kind === 'receivable' ? '<i class="fas fa-money-bill-wave mr-1"></i>Payment In' : '<i class="fas fa-hand-holding-usd mr-1"></i>Payment Out');
     $('#invoiceDetailModal').modal('show');
+});
+$('#serviceFilter').on('change', function(){
+    const value = $(this).val();
+    $('.service-chart-row,.service-detail-row').each(function(){
+        const service = $(this).data('service');
+        $(this).toggle(!value || service === value);
+    });
 });
 function segmentModalItems($modal) {
     return $modal.find('.segment-card-filterable').map(function(){

@@ -8,6 +8,11 @@
 .smart-body{padding:20px 22px}.metric{border:1px solid #e5e7eb;border-radius:8px;padding:12px;background:#f8fafc}.metric span{display:block;font-size:11px;text-transform:uppercase;color:#64748b;font-weight:800}.metric b{font-size:20px;color:#111827}
 .step-tabs{display:flex;gap:8px;margin-bottom:18px}.step-tabs button{border:1px solid #cbd5e1;background:#fff;border-radius:8px;padding:8px 14px;font-weight:700}.step-tabs button.active{background:#172033;color:#fff;border-color:#172033}
 .sp-table th{font-size:12px;text-transform:uppercase;color:#475569;background:#f8fafc}.amount-preview{font-weight:800;color:#0f766e}
+.service-shell{margin-top:18px;border:1px solid #dbeafe;border-radius:14px;overflow:hidden;background:linear-gradient(180deg,#eff6ff,#fff)}
+.service-shell-head{padding:16px 18px;background:linear-gradient(135deg,#0f172a,#0f766e);color:#fff}
+.service-shell-head h5{margin:0;font-weight:900}
+.service-card-row{border:1px solid #e2e8f0;border-radius:12px;padding:14px;background:#fff;height:100%}
+.service-pill{display:inline-flex;align-items:center;border-radius:999px;padding:5px 10px;font-weight:800;background:#ecfeff;color:#0f766e}
 </style>
 
 <div class="smart-shell">
@@ -39,6 +44,77 @@
             <div class="col-md-4"><div class="metric"><span>Actual Consumed Valuation</span><b>Rs {{ number_format($analysis['raw_total'],2) }}</b></div></div>
             <div class="col-md-4"><div class="metric"><span>Raw Materials Used</span><b>{{ $analysis['materials']->count() }}</b></div></div>
             <div class="col-md-4"><div class="metric"><span>Period</span><b style="font-size:15px">{{ $period['from']->format('d M') }} – {{ $period['to']->format('d M Y') }}</b></div></div>
+        </div>
+
+        @php
+            $serviceNameOptions = collect($serviceAnalysis ?? [])->pluck('service')->filter()->unique()->sort()->values();
+        @endphp
+
+        <div class="service-shell">
+            <div class="service-shell-head d-flex justify-content-between align-items-center flex-wrap" style="gap:10px">
+                <div>
+                    <h5><i class="fas fa-concierge-bell mr-2"></i>Service Cost Intelligence</h5>
+                    <small>Finished goods ke BOM se nikle service cost ko service name wise track karein.</small>
+                </div>
+                <div class="service-pill">Rs {{ number_format((float) $serviceAnalysis->sum('amount'),2) }}</div>
+            </div>
+            <div class="p-3 p-md-4">
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <label class="font-weight-bold">Filter by Service</label>
+                        <select id="smartServiceFilter" class="form-control">
+                            <option value="">All Services</option>
+                            @foreach($serviceNameOptions as $serviceName)
+                                <option value="{{ $serviceName }}">{{ $serviceName }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+                <div class="row">
+                    @foreach($serviceAnalysis->groupBy('service')->sortByDesc(fn($rows) => $rows->sum('amount')) as $service => $rows)
+                        @php
+                            $amount = (float) $rows->sum('amount');
+                            $qty = (float) $rows->sum('qty');
+                            $pct = $serviceAnalysis->sum('amount') > 0 ? round($amount / $serviceAnalysis->sum('amount') * 100, 2) : 0;
+                        @endphp
+                        <div class="col-md-6 mb-3 smart-service-row" data-service="{{ $service }}">
+                            <div class="service-card-row">
+                                <div class="d-flex justify-content-between align-items-center mb-2">
+                                    <div><b>{{ $service }}</b><br><small class="text-muted">{{ number_format($qty,2) }} qty | {{ number_format($pct,2) }}%</small></div>
+                                    <strong>Rs {{ number_format($amount,2) }}</strong>
+                                </div>
+                                <div style="height:10px;background:#e2e8f0;border-radius:999px;overflow:hidden">
+                                    <div style="height:100%;width:{{ min(100, max(3, $pct)) }}%;background:linear-gradient(90deg,#0f766e,#0ea5e9)"></div>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                    @if($serviceAnalysis->isEmpty())
+                        <div class="col-12"><div class="alert alert-info mb-0">Selected period me koi service cost nahi mila.</div></div>
+                    @endif
+                </div>
+                <div class="table-responsive mt-2">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead><tr><th>Date</th><th>Invoice</th><th>Party</th><th>Item</th><th>Service</th><th>Qty</th><th>Unit Cost</th><th>Amount</th></tr></thead>
+                        <tbody>
+                        @forelse($serviceAnalysis as $row)
+                            <tr class="smart-service-detail-row" data-service="{{ $row['service'] }}">
+                                <td>{{ $row['invoice_date']?->format('d M Y') }}</td>
+                                <td>{{ $row['invoice'] }}</td>
+                                <td>{{ $row['party'] }}</td>
+                                <td>{{ $row['item'] }}</td>
+                                <td><b>{{ $row['service'] }}</b></td>
+                                <td>{{ number_format((float) $row['qty'],2) }}</td>
+                                <td>Rs {{ number_format((float) $row['unit_price'],2) }}</td>
+                                <td><strong>Rs {{ number_format((float) $row['amount'],2) }}</strong></td>
+                            </tr>
+                        @empty
+                            <tr><td colspan="8" class="text-center text-muted">No service details available for this range.</td></tr>
+                        @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
 
         <div class="step-tabs">
@@ -142,6 +218,13 @@ $('.consumption-detail').on('click',function(){$($(this).data('target')).modal('
 let partyTarget=null;$(document).on('click','.add-party',function(){partyTarget=$(this).closest('td').find('.supplier-select');$('#partyModal').modal('show')});
 $('#quickPartyForm').on('submit',function(e){e.preventDefault();$('#partyError').text('');$.ajax({url:'{{ route('admin.smart-purchases.parties.store') }}',method:'POST',data:$(this).serialize()+'&_token={{ csrf_token() }}',headers:{Accept:'application/json'},success:function(p){$('.supplier-select').each(function(){if(!$(this).find(`option[value="${p.id}"]`).length)$(this).append(new Option(p.display_name,p.id))});partyTarget.val(p.id);$('#partyModal').modal('hide');$('#quickPartyForm')[0].reset()},error:function(xhr){$('#partyError').text(Object.values(xhr.responseJSON?.errors||{}).flat().join(' ')||'Supplier could not be saved.')}})});
 $(document).on('input','.plan-qty,.plan-price,.plan-tax',calc);
+$('#smartServiceFilter').on('change', function(){
+    const value = $(this).val();
+    $('.smart-service-row,.smart-service-detail-row').each(function(){
+        const service = $(this).data('service');
+        $(this).toggle(!value || service === value);
+    });
+});
 calc();
 })();
 </script>

@@ -536,7 +536,7 @@ class ReportController extends Controller
 
         $bills = $outstanding->billRows($visibility, $partyId, $to, $kind)
             ->map(function (array $row) use ($visibility, $profits, $asOf) {
-                if ($row['model'] === Party::class) {
+                if (($row['model'] ?? null) === Party::class) {
                     return [
                         'model' => Party::class,
                         'kind' => $row['kind'],
@@ -570,7 +570,10 @@ class ReportController extends Controller
                     ];
                 }
 
-                $modelClass = $row['model'];
+                $modelClass = $row['model'] ?? null;
+                if (!$modelClass) {
+                    return null;
+                }
                 $record = $visibility->scopeForUser(
                     $modelClass::query()->with($modelClass === SalesInvoice::class
                         ? ['party','items.item.bomMaterials.rawItem','company']
@@ -591,14 +594,15 @@ class ReportController extends Controller
         abort_if($bills->isEmpty(), 404, 'No ageing bills found for this party.');
 
         $partyModel = $partyId ? Party::find($partyId) : null;
-        $company = collect($bills)->first(fn($row) => isset($row['record']->company))['record']->company ?? Company::find(auth()->user()->current_company_id);
+        $firstWithCompany = collect($bills)->first(fn($row) => isset($row['record']->company));
+        $company = $firstWithCompany ? ($firstWithCompany['record']->company ?? Company::find(auth()->user()->current_company_id)) : Company::find(auth()->user()->current_company_id);
         $slabRows = $ageingSlabs->matrix($bills->map(fn($row) => [
             'kind' => $row['kind'],
             'party_id' => $partyId,
             'party' => $partyModel?->display_name ?: 'Cash / Walk-in',
             'age' => $row['age'],
             'due' => $row['due'],
-            'bill_id' => $row['model'] === Party::class ? null : $row['record']->id,
+            'bill_id' => (($row['model'] ?? null) === Party::class || empty($row['record'])) ? null : $row['record']->id,
         ]));
 
         return [
@@ -676,6 +680,23 @@ class ReportController extends Controller
             'items' => $bill->items->map(function ($line) use ($modelClass, $profits) {
                 $lineCost = $modelClass === SalesInvoice::class ? $profits->lineCost($line) : (float) $line->line_total;
                 $lineProfit = $modelClass === SalesInvoice::class ? ((float) $line->line_total - $lineCost) : 0.0;
+                $bomRows = $modelClass === SalesInvoice::class
+                    ? ($line->item?->bomMaterials?->map(function ($bom) use ($line) {
+                        $unitPrice = (float) ($bom->unit_price ?? $bom->rawItem?->purchase_price ?? 0);
+                        $lineQty = (float) $line->quantity * (float) $bom->qty_per_unit;
+
+                        return [
+                            'name' => $bom->rawItem?->name ?: (($bom->line_type ?? 'raw_material') === 'service' ? 'Service' : 'Raw material'),
+                            'line_type' => $bom->line_type ?? 'raw_material',
+                            'qty_per_unit' => (float) $bom->qty_per_unit,
+                            'unit' => $bom->rawItem?->unit,
+                            'purchase_price' => (float) ($bom->rawItem?->purchase_price ?? 0),
+                            'unit_price' => $unitPrice,
+                            'qty' => $lineQty,
+                            'amount' => round($lineQty * $unitPrice, 2),
+                        ];
+                    })->values() ?? collect())
+                    : collect();
 
                 return [
                     'name' => $line->item?->name ?: 'Item',
@@ -691,6 +712,7 @@ class ReportController extends Controller
                     'cost' => $lineCost,
                     'profit' => $lineProfit,
                     'profit_percent' => $modelClass === SalesInvoice::class ? $profits->profitPercentage($lineProfit, $lineCost) : 0.0,
+                    'bom' => $bomRows,
                     'units' => collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit))->values(),
                 ];
             })->values(),

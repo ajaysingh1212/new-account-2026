@@ -40,7 +40,7 @@
                     <td class="{{ $item['profit_percent'] >= 0 ? 'profit' : 'loss' }}"><b>{{ number_format($item['profit_percent'],2) }}%</b></td>
                     <td class="small">
                         <b>BOM</b><br>
-                        @forelse($item['bom'] as $bom){{ $bom['name'] }}: {{ $bom['qty_per_unit'] }} {{ $bom['unit'] }} @ Rs {{ number_format($bom['purchase_price'],2) }}<br>@empty -<br>@endforelse
+                        @forelse($item['bom'] as $bom){{ ucfirst($bom['line_type'] ?? 'raw_material') }} - {{ $bom['name'] }}: {{ $bom['qty_per_unit'] }} {{ $bom['unit'] }} @ Rs {{ number_format($bom['unit_price'] ?? $bom['purchase_price'],2) }} = Rs {{ number_format($bom['amount'] ?? 0,2) }}<br>@empty -<br>@endforelse
                         <b>CRM Units</b><br>
                         @forelse($item['units'] as $unit){{ $unit['serial_no'] }} / {{ $unit['vts_sim'] }} / {{ $unit['batch_no'] }} / {{ $unit['buyer_code'] }}<br>@empty - @endforelse
                     </td>

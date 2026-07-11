@@ -18,6 +18,7 @@
     $initialServiceBomJson = (($item->bomMaterials ?? collect())->where('line_type', 'service')->map(fn($bom) => [
         'id' => $bom->raw_item_id,
         'qty' => (float) $bom->qty_per_unit,
+        'unit_price' => (float) ($bom->unit_price ?? $bom->rawItem?->purchase_price ?? 0),
     ])->values())->toJson();
 @endphp
 
@@ -626,7 +627,7 @@
                 <input type="checkbox" class="service-check" value="{{ $service->id }}">
                 <span class="service-meta">
                     <b>{{ $service->name }}</b>
-                    <span>{{ $service->item_code }} | {{ $service->unit }} | Purchase cost</span>
+                    <span>{{ $service->item_code }} | {{ $service->unit }} | editable amount</span>
                 </span>
                 <span class="service-price">Rs {{ number_format((float) $service->purchase_price, 2) }}</span>
             </label>
@@ -849,7 +850,7 @@ function updateBomStockDisplay($select){
 
 function serviceCostTotal(){
     return Object.values(selectedServices).reduce((sum, row) => {
-        return sum + ((parseFloat(row.purchase_price) || 0) * (parseFloat(row.qty) || 1));
+        return sum + ((parseFloat(row.unit_price) || 0) * (parseFloat(row.qty) || 1));
     }, 0);
 }
 
@@ -877,15 +878,22 @@ function updateBomCostSummary(){
 function renderSelectedServices(){
     const rows = Object.values(selectedServices);
     $('#selectedServices').html(rows.length ? rows.map(row => `
-        <span class="service-pill" data-service-id="${row.id}">
-            <i class="fas fa-tools"></i> ${row.name} - ${money(row.purchase_price)}
-            <button type="button" class="remove-service" data-service-id="${row.id}">&times;</button>
-        </span>
+        <div class="service-pill" data-service-id="${row.id}" style="width:100%;justify-content:space-between;border-radius:12px;padding:10px 12px">
+            <div style="min-width:0">
+                <div style="font-size:12px;font-weight:900;color:#0f172a">${row.name}</div>
+                <div style="font-size:11px;font-weight:700;color:#64748b">${row.item_code || '-'} | Qty ${Number(row.qty || 1).toFixed(2)}</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+                <input type="number" step="0.01" min="0" class="form-control form-control-sm service-rate-input" data-service-id="${row.id}" value="${Number(row.unit_price || 0).toFixed(2)}" style="width:110px">
+                <button type="button" class="remove-service" data-service-id="${row.id}">&times;</button>
+            </div>
+        </div>
     `).join('') : '<div class="service-empty">No service selected.</div>');
 
     $('#serviceHiddenInputs').html(rows.map(row => `
         <input type="hidden" name="bom_service_item_id[]" value="${row.id}">
         <input type="hidden" name="bom_service_qty_per_unit[]" value="${row.qty || 1}">
+        <input type="hidden" name="bom_service_unit_price[]" value="${row.unit_price || 0}">
     `).join(''));
 
     $('.service-card').each(function(){
@@ -932,10 +940,17 @@ $(document).on('change','.service-check', function(){
     const service = SERVICE_ITEMS[id];
     if(!service) return;
     if($(this).is(':checked')){
-        selectedServices[id] = Object.assign({}, service, {qty: 1});
+        const initial = (INITIAL_SERVICE_BOM || []).find(row => String(row.id) === id) || {};
+        selectedServices[id] = Object.assign({}, service, {qty: initial.qty || 1, unit_price: initial.unit_price || service.purchase_price || 0});
     } else {
         delete selectedServices[id];
     }
+    renderSelectedServices();
+});
+$(document).on('change','.service-rate-input', function(){
+    const id = String($(this).data('service-id'));
+    if(!selectedServices[id]) return;
+    selectedServices[id].unit_price = parseFloat($(this).val()) || 0;
     renderSelectedServices();
 });
 $(document).on('click','.remove-service', function(){
@@ -963,7 +978,7 @@ toggleProductOnly();
 INITIAL_SERVICE_BOM.forEach(row => {
     const id = String(row.id);
     if(SERVICE_ITEMS[id]){
-        selectedServices[id] = Object.assign({}, SERVICE_ITEMS[id], {qty: row.qty || 1});
+        selectedServices[id] = Object.assign({}, SERVICE_ITEMS[id], {qty: row.qty || 1, unit_price: row.unit_price || SERVICE_ITEMS[id].purchase_price || 0});
     }
 });
 renderSelectedServices();

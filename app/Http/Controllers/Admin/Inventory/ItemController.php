@@ -191,6 +191,7 @@ class ItemController extends Controller
         }
         foreach ($request->input('bom_service_item_id', []) as $index => $serviceId) {
             $qty = (float) ($request->input('bom_service_qty_per_unit')[$index] ?? 1);
+            $unitPrice = (float) ($request->input('bom_service_unit_price')[$index] ?? 0);
             if ($serviceId && $qty > 0) {
                 ItemBom::create([
                     'company_id'       => $item->company_id,
@@ -198,6 +199,7 @@ class ItemController extends Controller
                     'raw_item_id'      => $serviceId,
                     'line_type'        => 'service',
                     'qty_per_unit'     => $qty,
+                    'unit_price'       => $unitPrice > 0 ? $unitPrice : null,
                 ]);
             }
         }

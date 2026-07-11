@@ -97,6 +97,22 @@ class SalesProfitService
                 $units = collect($line->selected_units ?? [])->values();
                 $cost = $this->lineCost($line);
                 $profit = (float) $line->line_total - $cost;
+                $bomRows = $line->item?->bomMaterials?->map(function ($bom) use ($line) {
+                    $unitPrice = (float) ($bom->unit_price ?? $bom->rawItem?->purchase_price ?? 0);
+                    $lineQty = (float) $line->quantity * (float) $bom->qty_per_unit;
+                    $lineTotal = round($lineQty * $unitPrice, 2);
+
+                    return [
+                        'name' => $bom->rawItem?->name ?: (($bom->line_type ?? 'raw_material') === 'service' ? 'Service' : 'Raw material'),
+                        'line_type' => $bom->line_type ?? 'raw_material',
+                        'qty_per_unit' => (float) $bom->qty_per_unit,
+                        'unit' => $bom->rawItem?->unit,
+                        'purchase_price' => (float) ($bom->rawItem?->purchase_price ?? 0),
+                        'unit_price' => $unitPrice,
+                        'qty' => $lineQty,
+                        'amount' => $lineTotal,
+                    ];
+                })->values() ?? collect();
 
                 return [
                     'name' => $line->item?->name ?: 'Item',
@@ -111,12 +127,7 @@ class SalesProfitService
                     'cost' => $cost,
                     'profit' => $profit,
                     'profit_percent' => $this->profitPercentage($profit, $cost),
-                    'bom' => $line->item?->bomMaterials?->map(fn($bom) => [
-                        'name' => $bom->rawItem?->name ?: 'Raw material',
-                        'qty_per_unit' => (float) $bom->qty_per_unit,
-                        'unit' => $bom->rawItem?->unit,
-                        'purchase_price' => (float) ($bom->rawItem?->purchase_price ?? 0),
-                    ])->values() ?? collect(),
+                    'bom' => $bomRows,
                     'units' => $units->map(fn($unit) => [
                         'key' => $unit['key'] ?? '-',
                         'serial_no' => $unit['serial_no'] ?? '-',

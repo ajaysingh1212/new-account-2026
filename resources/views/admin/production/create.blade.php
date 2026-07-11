@@ -405,7 +405,8 @@ function renderBomTable(){
 
     let html='', totalCpu=0;
     bom.forEach(m=>{
-        const lineCost = m.qty_per_unit * m.purchase_price;
+        const unitPrice = m.line_type === 'service' ? (m.unit_price ?? m.purchase_price) : m.purchase_price;
+        const lineCost = m.qty_per_unit * unitPrice;
         totalCpu += lineCost;
         const isService = m.line_type === 'service';
         const stock = m.current_stock;
@@ -421,7 +422,7 @@ function renderBomTable(){
             <td>${m.name}</td>
             <td><span class="unit-badge">${isService ? 'SERVICE' : m.unit}</span></td>
             <td>${m.qty_per_unit}</td>
-            <td>${money(m.purchase_price)}</td>
+            <td>${money(unitPrice)}</td>
             <td>${stockHtml}</td>
             <td style="color:#94a3b8">${m.purchase_gst||0}%</td>
             <td class="num">${money(lineCost)}</td>
@@ -445,7 +446,8 @@ function renderQtyBom(){
     bom.forEach(m=>{
         const isService = m.line_type === 'service';
         const need = m.qty_per_unit * q;
-        const lineCost = need * m.purchase_price;
+        const unitPrice = isService ? (m.unit_price ?? m.purchase_price) : m.purchase_price;
+        const lineCost = need * unitPrice;
         const lineGst = lineCost * (m.purchase_gst||0)/100;
         totalCost += lineCost;
         totalGst  += lineGst;
@@ -606,7 +608,10 @@ function recalcBreakdown(){
     }
 
     // Input ITC (from raw materials)
-    selectedItem.bom.forEach(m=>{ totalItc += m.qty_per_unit*q*m.purchase_price*(m.purchase_gst||0)/100; });
+    selectedItem.bom.forEach(m=>{
+        const unitPrice = m.line_type === 'service' ? (m.unit_price ?? m.purchase_price) : m.purchase_price;
+        totalItc += m.qty_per_unit*q*unitPrice*(m.purchase_gst||0)/100;
+    });
 
     const netProfit = totalRev - rawCostTotal;
     const margin    = rawCostTotal>0 ? ((netProfit/rawCostTotal)*100).toFixed(1) : '0.0';
@@ -630,7 +635,10 @@ function recalcBreakdown(){
 function calcTotalRawCost(){
     if(!selectedItem) return 0;
     const q = qty();
-    return selectedItem.bom.reduce((sum,m)=>sum + m.qty_per_unit*q*m.purchase_price, 0);
+    return selectedItem.bom.reduce((sum,m)=> {
+        const unitPrice = m.line_type === 'service' ? (m.unit_price ?? m.purchase_price) : m.purchase_price;
+        return sum + (m.qty_per_unit*q*unitPrice);
+    }, 0);
 }
 
 // ── Confirm pane ───────────────────────────────────────────────

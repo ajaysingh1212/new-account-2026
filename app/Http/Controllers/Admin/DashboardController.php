@@ -109,6 +109,13 @@ class DashboardController extends Controller
             (float) $stats['total_profit'],
             (float) $profitRows->sum('cost')
         );
+        $serviceRows = $this->serviceRows($companyId, $visibility, $user, $from, $to);
+        $stats['service_amount'] = (float) $serviceRows->sum('amount');
+        $serviceTotals = [
+            'amount' => (float) $serviceRows->sum('amount'),
+            'count' => (int) $serviceRows->count(),
+            'invoices' => (int) $serviceRows->pluck('invoice_id')->unique()->count(),
+        ];
         $salesSegments = $this->normalizeSegmentTotal(
             $this->tradeSegments(SalesInvoiceItem::class, 'salesInvoice', SalesInvoice::class, 'billing_date', $companyId, $visibility, $user, $from, $to, 'sale'),
             (float) ($stats['sales'] ?? 0)
@@ -132,7 +139,7 @@ class DashboardController extends Controller
         ];
         $quickActions = $this->quickActions($user);
 
-        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','purchaseSegments','profitSegments'));
+        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals'));
     }
 
     private function dateRange(Request $request): array
@@ -335,6 +342,38 @@ class DashboardController extends Controller
                 'profit' => $profit,
                 'profit_percent' => $profits->profitPercentage($profit, $cost),
             ];
+        })->values();
+    }
+
+    private function serviceRows(?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to)
+    {
+        $query = SalesInvoice::with(['party','items.item.bomMaterials.rawItem'])
+            ->whereBetween('billing_date', [$from, $to]);
+        $query = $user->isSuperAdmin() ? $this->scope($query, $companyId) : $visibility->scopeForUser($query, SalesInvoice::class);
+
+        return $query->get()->flatMap(function (SalesInvoice $invoice) {
+            return $invoice->items->flatMap(function (SalesInvoiceItem $line) use ($invoice) {
+                return collect($line->item?->bomMaterials ?? [])
+                    ->filter(fn($bom) => ($bom->line_type ?? 'raw_material') === 'service')
+                    ->map(function ($bom) use ($invoice, $line) {
+                        $unitPrice = (float) ($bom->unit_price ?? $bom->rawItem?->purchase_price ?? 0);
+                        $qty = (float) $line->quantity * (float) $bom->qty_per_unit;
+                        $amount = round($qty * $unitPrice, 2);
+
+                        return [
+                            'invoice_id' => $invoice->id,
+                            'invoice' => $invoice->invoice_no,
+                            'invoice_date' => $invoice->billing_date,
+                            'party' => $invoice->party?->display_name ?: 'Cash / Walk-in',
+                            'item' => $line->item?->name ?: 'Item',
+                            'service_id' => $bom->raw_item_id,
+                            'service' => $bom->rawItem?->name ?: 'Service',
+                            'qty' => $qty,
+                            'unit_price' => $unitPrice,
+                            'amount' => $amount,
+                        ];
+                    });
+            });
         })->values();
     }
 

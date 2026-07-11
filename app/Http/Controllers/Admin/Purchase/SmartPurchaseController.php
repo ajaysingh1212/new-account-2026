@@ -11,6 +11,8 @@ use App\Models\PurchaseBillItem;
 use App\Models\PurchaseEstimate;
 use App\Models\PurchaseEstimateItem;
 use App\Models\ProductionBatch;
+use App\Models\SalesInvoice;
+use App\Models\SalesInvoiceItem;
 use App\Models\StockMovement;
 use App\Models\SubCostCenter;
 use App\Services\EntryVisibilityService;
@@ -24,10 +26,12 @@ class SmartPurchaseController extends Controller
     {
         $period = $this->period($request);
         $analysis = $this->analysisRows($period['from'], $period['to'], $visibility);
+        $serviceAnalysis = $this->serviceRows($period['from'], $period['to'], $visibility);
         $companyId = auth()->user()->current_company_id;
 
         return view('admin.smart-purchases.index', [
             'analysis' => $analysis,
+            'serviceAnalysis' => $serviceAnalysis,
             'period' => $period,
             'parties' => Party::where('company_id', $companyId)->where('status', 'active')->orderBy('display_name')->get(),
             'costCenters' => CostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
@@ -183,5 +187,37 @@ class SmartPurchaseController extends Controller
     {
         $next = PurchaseEstimate::where('company_id', auth()->user()->current_company_id)->withTrashed()->count() + 1;
         return 'SP-'.now()->format('Y').str_pad((string)$next,6,'0',STR_PAD_LEFT);
+    }
+
+    private function serviceRows(Carbon $from, Carbon $to, EntryVisibilityService $visibility)
+    {
+        $companyId = auth()->user()->current_company_id;
+        $invoices = $visibility->scopeForUser(
+            SalesInvoice::with(['party','items.item.bomMaterials.rawItem'])->whereBetween('billing_date', [$from->toDateString(), $to->toDateString()]),
+            SalesInvoice::class
+        )->get();
+
+        return $invoices->flatMap(function (SalesInvoice $invoice) {
+            return $invoice->items->flatMap(function (SalesInvoiceItem $line) use ($invoice) {
+                return collect($line->item?->bomMaterials ?? [])
+                    ->filter(fn($bom) => ($bom->line_type ?? 'raw_material') === 'service')
+                    ->map(function ($bom) use ($invoice, $line) {
+                        $unitPrice = (float) ($bom->unit_price ?? $bom->rawItem?->purchase_price ?? 0);
+                        $qty = (float) $line->quantity * (float) $bom->qty_per_unit;
+                        $amount = round($qty * $unitPrice, 2);
+
+                        return [
+                            'invoice' => $invoice->invoice_no,
+                            'invoice_date' => $invoice->billing_date,
+                            'party' => $invoice->party?->display_name ?: 'Cash / Walk-in',
+                            'item' => $line->item?->name ?: 'Item',
+                            'service' => $bom->rawItem?->name ?: 'Service',
+                            'qty' => $qty,
+                            'unit_price' => $unitPrice,
+                            'amount' => $amount,
+                        ];
+                    });
+            });
+        })->values();
     }
 }

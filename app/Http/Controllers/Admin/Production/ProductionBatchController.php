@@ -142,7 +142,8 @@ class ProductionBatchController extends Controller
             foreach ($finished->bomMaterials as $bom) {
                 $raw  = Item::lockForUpdate()->findOrFail($bom->raw_item_id);
                 $need = (float) $bom->qty_per_unit * $qty;
-                $value = $need * (float) $raw->purchase_price;
+                $unitCost = $this->bomUnitCost($bom, $raw);
+                $value = $need * $unitCost;
                 $rawCost += $value;
 
                 if (($bom->line_type ?? 'raw_material') === 'service' || $raw->item_type === 'service') {
@@ -160,7 +161,7 @@ class ProductionBatchController extends Controller
                     'movement_type'  => 'production_consumption',
                     'direction'      => 'out',
                     'quantity'       => $need,
-                    'unit_price'     => $raw->purchase_price,
+                    'unit_price'     => $unitCost,
                     'total_value'    => $value,
                     'reference_no'   => $data['batch_no'] ?: $this->nextNo(),
                     'description'    => "Consumed for production of {$finished->name}",
@@ -273,7 +274,8 @@ class ProductionBatchController extends Controller
             foreach ($finished->bomMaterials as $bom) {
                 $raw = Item::lockForUpdate()->findOrFail($bom->raw_item_id);
                 $need = (float) $bom->qty_per_unit * $qty;
-                $value = $need * (float) $raw->purchase_price;
+                $unitCost = $this->bomUnitCost($bom, $raw);
+                $value = $need * $unitCost;
                 $rawCost += $value;
 
                 if (($bom->line_type ?? 'raw_material') === 'service' || $raw->item_type === 'service') {
@@ -286,7 +288,7 @@ class ProductionBatchController extends Controller
                     'movement_type' => 'production_consumption',
                     'direction' => 'out',
                     'quantity' => $need,
-                    'unit_price' => $raw->purchase_price,
+                    'unit_price' => $unitCost,
                     'total_value' => $value,
                     'reference_type' => ProductionBatch::class,
                     'reference_id' => $productionBatch->id,
@@ -501,13 +503,14 @@ class ProductionBatchController extends Controller
                 }
                 $raw = Item::lockForUpdate()->findOrFail($bom->raw_item_id);
                 $qty = (float) $bom->qty_per_unit;
+                $unitCost = $this->bomUnitCost($bom, $raw);
                 $accounting->moveStock($raw, [
                     'movement_date' => now()->toDateString(),
                     'movement_type' => 'production_serial_revert_raw',
                     'direction' => 'in',
                     'quantity' => $qty,
-                    'unit_price' => $raw->purchase_price,
-                    'total_value' => $qty * (float) $raw->purchase_price,
+                    'unit_price' => $unitCost,
+                    'total_value' => $qty * $unitCost,
                     'reference_type' => ProductionBatch::class,
                     'reference_id' => $batch->id,
                     'reference_no' => $batch->batch_no,
@@ -554,13 +557,14 @@ class ProductionBatchController extends Controller
                 continue;
             }
             $qty = (float) $bom->qty_per_unit * (float) $batch->quantity;
+            $unitCost = $this->bomUnitCost($bom, $raw);
             $accounting->moveStock($raw, [
                 'movement_date' => now()->toDateString(),
                 'movement_type' => 'production_consumption_reversal',
                 'direction' => 'in',
                 'quantity' => $qty,
-                'unit_price' => $raw->purchase_price,
-                'total_value' => $qty * (float) $raw->purchase_price,
+                'unit_price' => $unitCost,
+                'total_value' => $qty * $unitCost,
                 'reference_type' => ProductionBatch::class,
                 'reference_id' => $batch->id,
                 'reference_no' => $batch->batch_no,
@@ -759,7 +763,17 @@ class ProductionBatchController extends Controller
             'qty' => (float) $bom->qty_per_unit * $qty,
             'unit' => $bom->rawItem?->unit,
             'line_type' => $bom->line_type ?? 'raw_material',
+            'unit_price' => $this->bomUnitCost($bom, $bom->rawItem),
         ])->values()->all();
+    }
+
+    private function bomUnitCost($bom, ?Item $raw = null): float
+    {
+        if (($bom->line_type ?? 'raw_material') === 'service') {
+            return (float) ($bom->unit_price ?? $raw?->purchase_price ?? 0);
+        }
+
+        return (float) ($raw?->purchase_price ?? 0);
     }
 
     private function logUpdate(ProductionBatch $batch, array $oldValues, array $newValues): void

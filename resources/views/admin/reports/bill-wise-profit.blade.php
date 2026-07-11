@@ -87,7 +87,10 @@ $(document).on('click','.profit-detail-btn',function(){
     $('#detailShipping').text(detail.shipping_address || '-');
     $('#detailPartyName').text(detail.party.name || 'Cash / Walk-in');
     $('#detailPartyMeta').html(`${detail.party.legal_name || '-'}<br>${detail.party.phone || '-'} | ${detail.party.email || '-'}<br>GSTIN: ${detail.party.gstin || '-'}<br>${detail.party.city || '-'}`);
-    $('#detailItemRows').html((detail.items || []).map(item => `<tr><td><b>${item.name}</b><br><small>${item.description || '-'}</small></td><td>${item.hsn || '-'}</td><td>${Number(item.qty||0).toFixed(2)} ${item.unit || ''}</td><td>${money(item.rate)}</td><td>${money(item.tax)}</td><td>${money(item.cost)}</td><td>${money(item.amount)}</td><td class="${Number(item.profit) < 0 ? 'text-danger' : 'text-success'}"><b>${money(item.profit)}</b></td><td class="${Number(item.profit_percent) < 0 ? 'text-danger' : 'text-success'}"><b>${Number(item.profit_percent || 0).toFixed(2)}%</b></td></tr>`).join('') || '<tr><td colspan="9" class="text-center text-muted">No items.</td></tr>');
+    $('#detailItemRows').html((detail.items || []).map(item => {
+        const bom = (item.bom || []).map(row => `${row.line_type === 'service' ? 'Service' : 'Raw'}: ${row.name} (${Number(row.qty_per_unit || 0)} ${row.unit || ''} @ ${money(row.unit_price || row.purchase_price)} = ${money(row.amount || 0)})`).join('<br>') || '-';
+        return `<tr><td><b>${item.name}</b><br><small>${item.description || '-'}</small><br><small><b>BOM:</b><br>${bom}</small></td><td>${item.hsn || '-'}</td><td>${Number(item.qty||0).toFixed(2)} ${item.unit || ''}</td><td>${money(item.rate)}</td><td>${money(item.tax)}</td><td>${money(item.cost)}</td><td>${money(item.amount)}</td><td class="${Number(item.profit) < 0 ? 'text-danger' : 'text-success'}"><b>${money(item.profit)}</b></td><td class="${Number(item.profit_percent) < 0 ? 'text-danger' : 'text-success'}"><b>${Number(item.profit_percent || 0).toFixed(2)}%</b></td></tr>`;
+    }).join('') || '<tr><td colspan="9" class="text-center text-muted">No items.</td></tr>');
     $('#detailPrintUrl').attr('href', $(this).data('print-url'));
     $('#billProfitDetailModal').modal('show');
 });
