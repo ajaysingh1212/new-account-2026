@@ -14,17 +14,35 @@
             <div class="col-md-2"><b>Total</b><br>Rs {{ number_format((float)$invoice->grand_total,2) }}</div>
             <div class="col-md-3">@if($invoice->attachment)<b>Attachment</b><br><a href="{{ asset('storage/'.$invoice->attachment) }}" target="_blank">Open attachment</a>@endif</div>
         </div>
+        @if($invoiceReturnDetails['has_return'] ?? false)
+            <div class="alert alert-warning">
+                <b>This invoice has sales return activity.</b> Returned quantity: {{ number_format((float) ($invoiceReturnDetails['returned_qty'] ?? 0), 3) }}
+            </div>
+        @endif
         <table class="table table-hover">
-            <thead><tr><th>Item</th><th>Qty</th><th>Selected Finished Goods</th><th>Price</th><th>Tax</th><th>Total</th></tr></thead>
+            <thead><tr><th>Item</th><th>Sold Qty</th><th>Returned Qty</th><th>Remaining</th><th>Selected Finished Goods</th><th>Price</th><th>Tax</th><th>Total</th><th>Returns</th></tr></thead>
             <tbody>
             @foreach($invoice->items as $line)
+                @php($lineSummary = collect($invoiceReturnDetails['items'] ?? [])->firstWhere('item_id', $line->item_id))
                 <tr>
                     <td>{{ $line->item?->name }}</td>
-                    <td>{{ $line->quantity }}</td>
+                    <td>{{ $lineSummary['sold_qty'] ?? $line->quantity }}</td>
+                    <td class="{{ ($lineSummary['returned_qty'] ?? 0) > 0 ? 'text-warning' : '' }}">{{ number_format((float) ($lineSummary['returned_qty'] ?? 0), 3) }}</td>
+                    <td>{{ number_format((float) ($lineSummary['remaining_qty'] ?? $line->quantity), 3) }}</td>
                     <td>@foreach(($line->selected_units ?? []) as $unit)<span class="badge badge-info mr-1">{{ $unit['serial_no'] ?? 'No serial' }} / {{ $unit['batch_no'] ?? '-' }}@if(!empty($unit['vts_sim'])) / {{ $unit['vts_sim'] }}@endif</span>@endforeach</td>
                     <td>Rs {{ number_format((float)$line->unit_price,2) }}</td>
                     <td>Rs {{ number_format((float)$line->tax_amount,2) }}</td>
                     <td>Rs {{ number_format((float)$line->line_total,2) }}</td>
+                    <td>
+                        @forelse(($lineSummary['returns'] ?? []) as $returnRow)
+                            <div class="mb-1">
+                                <b>{{ $returnRow['return_no'] }}</b><br>
+                                <small class="text-muted">{{ $returnRow['return_date'] }} | Qty {{ number_format((float) $returnRow['return_qty'], 3) }} | {{ $returnRow['returned_by'] }}</small>
+                            </div>
+                        @empty
+                            <span class="text-muted">-</span>
+                        @endforelse
+                    </td>
                 </tr>
             @endforeach
             </tbody>

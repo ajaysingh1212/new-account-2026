@@ -54,6 +54,15 @@ class SalesProfitService
         return round(($profit / $cost) * 100, 2);
     }
 
+    public function profitPercentageOnSale(float $profit, float $sale): float
+    {
+        if (abs($sale) < 0.00001) {
+            return 0.0;
+        }
+
+        return round(($profit / $sale) * 100, 2);
+    }
+
     public function invoiceProfitPercentage(SalesInvoice $invoice): float
     {
         $cost = $this->invoiceCost($invoice);
@@ -92,11 +101,13 @@ class SalesProfitService
                 'cost' => $cost,
                 'profit' => $profit,
                 'profit_percent' => $this->profitPercentage($profit, $cost),
+                'profit_percent_on_sale' => $this->profitPercentageOnSale($profit, $sale),
             ],
             'items' => $invoice->items->map(function (SalesInvoiceItem $line) {
                 $units = collect($line->selected_units ?? [])->values();
                 $cost = $this->lineCost($line);
                 $profit = (float) $line->line_total - $cost;
+                $sale = (float) $line->line_total;
                 $bomRows = $line->item?->bomMaterials?->map(function ($bom) use ($line) {
                     $unitPrice = (float) ($bom->unit_price ?? $bom->rawItem?->purchase_price ?? 0);
                     $lineQty = (float) $line->quantity * (float) $bom->qty_per_unit;
@@ -127,6 +138,7 @@ class SalesProfitService
                     'cost' => $cost,
                     'profit' => $profit,
                     'profit_percent' => $this->profitPercentage($profit, $cost),
+                    'profit_percent_on_sale' => $this->profitPercentageOnSale($profit, $sale),
                     'bom' => $bomRows,
                     'units' => $units->map(fn($unit) => [
                         'key' => $unit['key'] ?? '-',

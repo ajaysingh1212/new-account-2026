@@ -37,6 +37,10 @@
                         <div class="serial-meta"><span>Buyer Code</span><b>{{ $result['unit']['buyer_code'] ?? '-' }}</b></div>
                         <div class="serial-meta"><span>VTS/SIM</span><b>{{ $result['unit']['vts_sim'] ?? '-' }}</b></div>
                         <div class="serial-meta"><span>Status</span><b>{{ empty($result['unit']['reverted_at']) ? 'Available to revert' : 'Already reverted' }}</b></div>
+                        @if(!empty($result['unit']['reverted_at']))
+                            <div class="serial-meta"><span>Reverted At</span><b>{{ \Carbon\Carbon::parse($result['unit']['reverted_at'])->format('d M Y h:i A') }}</b></div>
+                            <div class="serial-meta"><span>Reverted By</span><b>{{ $result['reverted_by_name'] ?? 'System' }}</b></div>
+                        @endif
                     </div>
                 @endif
 
@@ -54,6 +58,9 @@
                     <input type="hidden" name="mode" value="{{ $mode }}">
                     <input type="hidden" name="q" value="{{ $term }}">
                     <button class="btn btn-danger" @disabled($batch->status !== 'posted' || ($mode === 'serial' && !empty($result['unit']['reverted_at'])))><i class="fas fa-undo mr-1"></i>{{ $mode === 'serial' ? 'Revert This Serial' : 'Revert Full Batch' }}</button>
+                    @if($mode === 'serial' && !empty($result['unit']['reverted_at']))
+                        <div class="mt-2 text-danger small">This serial was already reverted on {{ \Carbon\Carbon::parse($result['unit']['reverted_at'])->format('d M Y h:i A') }} by {{ $result['reverted_by_name'] ?? 'System' }}.</div>
+                    @endif
                 </form>
             </div>
         @endif

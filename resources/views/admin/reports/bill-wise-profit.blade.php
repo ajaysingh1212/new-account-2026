@@ -23,11 +23,12 @@
     <div class="metric"><span>Total Sale</span><strong>Rs {{ number_format($bills->sum('sale'),2) }}</strong></div>
     <div class="metric"><span>Total Cost</span><strong>Rs {{ number_format($bills->sum('cost'),2) }}</strong></div>
     <div class="metric"><span>Profit / Loss</span><strong>Rs {{ number_format($bills->sum('profit'),2) }}</strong></div>
+    <div class="metric"><span>Profit % on Sale</span><strong>{{ number_format((float) collect($bills)->sum('profit') / max(0.01, collect($bills)->sum('sale')) * 100, 2) }}%</strong></div>
 </div>
 <div class="report-card">
     <table id="profitTable" class="table report-table">
-        <thead><tr><th>Date</th><th>Invoice</th><th>Party</th><th>Cost</th><th>Sale</th><th>Profit / Loss</th><th>Profit %</th><th>Details</th></tr></thead>
-        <tbody>@foreach($bills as $row)<tr><td>{{ $row['bill']->billing_date?->format('d-m-Y') }}</td><td>{{ $row['bill']->invoice_no }}</td><td>{{ $row['bill']->party?->display_name ?: 'Cash / Walk-in' }}</td><td>Rs {{ number_format($row['cost'],2) }}</td><td>Rs {{ number_format($row['sale'],2) }}</td><td><strong class="{{ $row['profit'] >= 0 ? 'text-success' : 'text-danger' }}">Rs {{ number_format($row['profit'],2) }}</strong></td><td><strong class="{{ $row['profit_percent'] >= 0 ? 'text-success' : 'text-danger' }}">{{ number_format($row['profit_percent'],2) }}%</strong></td><td><button type="button" class="btn btn-sm btn-outline-primary profit-detail-btn" data-detail='@json($row["detail"])' data-print-url="{{ route('admin.sales.detail-pdf', $row['bill']) }}"><i class="fas fa-eye mr-1"></i>View Details</button></td></tr>@endforeach</tbody>
+        <thead><tr><th>Date</th><th>Invoice</th><th>Party</th><th>Cost</th><th>Sale</th><th>Profit / Loss</th><th>Profit % on Cost</th><th>Profit % on Sale</th><th>Details</th></tr></thead>
+        <tbody>@foreach($bills as $row)<tr><td>{{ $row['bill']->billing_date?->format('d-m-Y') }}</td><td>{{ $row['bill']->invoice_no }}</td><td>{{ $row['bill']->party?->display_name ?: 'Cash / Walk-in' }}</td><td>Rs {{ number_format($row['cost'],2) }}</td><td>Rs {{ number_format($row['sale'],2) }}</td><td><strong class="{{ $row['profit'] >= 0 ? 'text-success' : 'text-danger' }}">Rs {{ number_format($row['profit'],2) }}</strong></td><td><strong class="{{ $row['profit_percent'] >= 0 ? 'text-success' : 'text-danger' }}">{{ number_format($row['profit_percent'],2) }}%</strong></td><td><strong class="{{ ($row['profit_percent_on_sale'] ?? 0) >= 0 ? 'text-success' : 'text-danger' }}">{{ number_format((float) ($row['profit_percent_on_sale'] ?? 0),2) }}%</strong></td><td><button type="button" class="btn btn-sm btn-outline-primary profit-detail-btn" data-detail='@json($row["detail"])' data-print-url="{{ route('admin.sales.detail-pdf', $row['bill']) }}"><i class="fas fa-eye mr-1"></i>View Details</button></td></tr>@endforeach</tbody>
     </table>
 </div>
 
@@ -44,6 +45,7 @@
                     <div class="col-md-3 mb-3"><div class="detail-box"><span>Cost</span><b id="detailCost">Rs 0.00</b></div></div>
                     <div class="col-md-3 mb-3"><div class="detail-box"><span>Profit / Loss</span><b id="detailProfit" class="profit-pill">Rs 0.00</b></div></div>
                     <div class="col-md-3 mb-3"><div class="detail-box"><span>Profit % on Cost</span><b id="detailProfitPercent" class="profit-pill">0.00%</b></div></div>
+                    <div class="col-md-3 mb-3"><div class="detail-box"><span>Profit % on Sale</span><b id="detailProfitPercentSale" class="profit-pill">0.00%</b></div></div>
                 </div>
                 <div class="row mb-3">
                     <div class="col-lg-6 mb-3"><div class="detail-box"><span>Billing Details</span><b id="detailBilling"></b><hr><span>Shipping Details</span><b id="detailShipping"></b></div></div>
@@ -83,6 +85,7 @@ $(document).on('click','.profit-detail-btn',function(){
     $('#detailCost').text(money(detail.amounts.cost));
     $('#detailProfit').text(money(detail.amounts.profit)).toggleClass('text-danger', Number(detail.amounts.profit) < 0);
     $('#detailProfitPercent').text(`${Number(detail.amounts.profit_percent || 0).toFixed(2)}%`).toggleClass('text-danger', Number(detail.amounts.profit_percent) < 0);
+    $('#detailProfitPercentSale').text(`${Number(detail.amounts.profit_percent_on_sale || 0).toFixed(2)}%`).toggleClass('text-danger', Number(detail.amounts.profit_percent_on_sale) < 0);
     $('#detailBilling').text(`${detail.phone || '-'} | ${detail.billing_address || '-'}`);
     $('#detailShipping').text(detail.shipping_address || '-');
     $('#detailPartyName').text(detail.party.name || 'Cash / Walk-in');

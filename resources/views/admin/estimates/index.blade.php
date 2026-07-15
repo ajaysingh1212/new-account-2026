@@ -19,9 +19,17 @@
                     <td>{{ $estimate->party?->display_name ?: 'Walk-in' }}</td>
                     <td>{{ $estimate->creator?->name ?? 'System' }}<br><small class="text-muted">{{ $estimate->creator?->rolesForCompany($estimate->company_id)->pluck('name')->join(', ') }}</small></td>
                     <td>Rs {{ number_format((float) $estimate->grand_total, 2) }}</td>
-                    <td><span class="badge-active">{{ ucfirst($estimate->status) }}</span></td>
+                    <td>
+                        <span class="badge-active">{{ ucfirst($estimate->status) }}</span>
+                        @if($estimate->convertedInvoice)
+                            <div><span class="badge badge-success mt-1">Converted</span></div>
+                        @endif
+                    </td>
                     <td>
                         <a href="{{ route('admin.estimates.show', $estimate) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a>
+                        @if($canManage && $estimate->status !== 'converted' && $estimate->status !== 'cancelled' && auth()->user()->can('estimates.convert'))
+                            <a href="{{ route('admin.estimates.convert-form', $estimate) }}" class="btn btn-success btn-sm"><i class="fas fa-sync mr-1"></i>Convert</a>
+                        @endif
                         @if($canManage && $estimate->status !== 'converted' && auth()->user()->can('estimates.edit'))<a href="{{ route('admin.estimates.edit', $estimate) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>@endif
                         @can('estimates.print')<a href="{{ route('admin.estimates.print', $estimate) }}" class="btn btn-secondary btn-sm" target="_blank"><i class="fas fa-print"></i></a>@endcan
                     </td>

@@ -12,6 +12,8 @@ class ReplacementAndAgeingRoutesTest extends TestCase
         $this->assertTrue(Route::has('admin.replacements.index'));
         $this->assertTrue(Route::has('admin.replacements.create'));
         $this->assertTrue(Route::has('admin.replacements.lookup'));
+        $this->assertTrue(Route::has('admin.estimates.convert-form'));
+        $this->assertTrue(Route::has('admin.delivery-challans.convert'));
         $this->assertTrue(Route::has('admin.reports.ageing.party-print'));
         $this->assertTrue(Route::has('admin.reports.ageing.party-diagnosis'));
         $this->assertTrue(Route::has('admin.reports.ageing.print'));

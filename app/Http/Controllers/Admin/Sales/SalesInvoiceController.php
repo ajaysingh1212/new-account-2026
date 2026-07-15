@@ -18,6 +18,8 @@ use App\Models\PurchaseBillItem;
 use App\Models\Role;
 use App\Models\SalesInvoice;
 use App\Models\SalesInvoiceItem;
+use App\Models\SalesReturn;
+use App\Models\SalesReturnItem;
 use App\Models\SubCostCenter;
 use App\Models\TermsTemplate;
 use App\Models\User;
@@ -33,13 +35,16 @@ class SalesInvoiceController extends Controller
     public function index(EntryVisibilityService $visibility, SalesProfitService $profits)
     {
         $invoices = $visibility->scopeForUser(
-            SalesInvoice::with(['party','creator','items.item.bomMaterials.rawItem'])->latest(),
+            SalesInvoice::with(['party','creator','items.item.bomMaterials.rawItem','returns.items.item','returns.creator'])->latest(),
             SalesInvoice::class
         )->get();
         $invoiceDetails = $invoices->mapWithKeys(fn(SalesInvoice $invoice) => [
             $invoice->id => $profits->invoiceDetail($invoice),
         ]);
-        return view('admin.sales.index', compact('invoices', 'invoiceDetails'));
+        $invoiceReturnDetails = $invoices->mapWithKeys(fn(SalesInvoice $invoice) => [
+            $invoice->id => $this->invoiceReturnSummary($invoice),
+        ]);
+        return view('admin.sales.index', compact('invoices', 'invoiceDetails', 'invoiceReturnDetails'));
     }
 
     public function create()
@@ -195,13 +200,17 @@ class SalesInvoiceController extends Controller
     public function show(SalesInvoice $sale, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($sale);
-        $sale->load(['party','items.item']);
+        $sale->load(['party','items.item','returns.items.item','returns.creator']);
         $auditLogs = AuditLog::with(['user','company'])
             ->where('model', SalesInvoice::class)
             ->where('model_id', $sale->id)
             ->latest('created_at')
             ->get();
-        return view('admin.sales.show', ['invoice' => $sale, 'auditLogs' => $auditLogs]);
+        return view('admin.sales.show', [
+            'invoice' => $sale,
+            'auditLogs' => $auditLogs,
+            'invoiceReturnDetails' => $this->invoiceReturnSummary($sale),
+        ]);
     }
 
     public function print(SalesInvoice $sale, EntryVisibilityService $visibility)
@@ -952,5 +961,44 @@ class SalesInvoiceController extends Controller
     private function nextNo(): string
     {
         return str_pad((string) (SalesInvoice::where('company_id', auth()->user()->current_company_id)->withTrashed()->count() + 1), 8, '0', STR_PAD_LEFT);
+    }
+
+    private function invoiceReturnSummary(SalesInvoice $invoice): array
+    {
+        $invoice->loadMissing(['returns.items.item', 'returns.creator']);
+
+        $lineSummaries = $invoice->items->map(function (SalesInvoiceItem $line) use ($invoice) {
+            $returnLines = $invoice->returns->flatMap(function (SalesReturn $return) use ($line) {
+                return $return->items
+                    ->where('sales_invoice_item_id', $line->id)
+                    ->map(fn(SalesReturnItem $returnLine) => [
+                        'return_id' => $return->id,
+                        'return_no' => $return->return_no,
+                        'return_date' => $return->return_date?->format('d M Y'),
+                        'return_qty' => (float) $returnLine->quantity,
+                        'returned_by' => $return->creator?->name ?? 'System',
+                        'returned_at' => $return->created_at?->format('d M Y h:i A'),
+                    ]);
+            })->values();
+
+            $returnedQty = (float) $returnLines->sum('return_qty');
+
+            return [
+                'item_id' => $line->item_id,
+                'item_name' => $line->item?->name ?: 'Item',
+                'sold_qty' => (float) $line->quantity,
+                'returned_qty' => round($returnedQty, 3),
+                'remaining_qty' => max(0, round((float) $line->quantity - $returnedQty, 3)),
+                'returns' => $returnLines,
+            ];
+        })->values();
+
+        $totalReturned = (float) $lineSummaries->sum('returned_qty');
+
+        return [
+            'has_return' => $totalReturned > 0,
+            'returned_qty' => round($totalReturned, 3),
+            'items' => $lineSummaries,
+        ];
     }
 }

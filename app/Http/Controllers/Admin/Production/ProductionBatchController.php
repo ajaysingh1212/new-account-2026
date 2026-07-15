@@ -421,7 +421,20 @@ class ProductionBatchController extends Controller
             }
 
             $oldValues = $productionBatch->toArray();
-            $productionBatch->update(['status' => 'reverted']);
+            $revertedByName = auth()->user()?->name ?? 'System';
+            $revertedUnits = collect($productionBatch->units_data ?? [])->map(function ($unit) use ($revertedByName) {
+                if (!is_array($unit)) {
+                    return $unit;
+                }
+
+                return array_merge($unit, [
+                    'reverted_at' => now()->toDateTimeString(),
+                    'reverted_by' => auth()->id(),
+                    'reverted_by_name' => $revertedByName,
+                ]);
+            })->values()->all();
+
+            $productionBatch->update(['status' => 'reverted', 'units_data' => $revertedUnits]);
             $this->logUpdate($productionBatch, $oldValues, $productionBatch->fresh()->toArray());
         });
 
@@ -475,7 +488,11 @@ class ProductionBatchController extends Controller
             $batch = $match['batch']->fresh('finishedItem.bomMaterials.rawItem');
             $unitIndex = (int) $match['index'];
             $units = $batch->units_data ?? [];
-            abort_if(!empty($units[$unitIndex]['reverted_at']), 422, 'This serial is already reverted.');
+            if (!empty($units[$unitIndex]['reverted_at'])) {
+                $revertedBy = $units[$unitIndex]['reverted_by'] ? (User::find($units[$unitIndex]['reverted_by'])?->name ?? 'System') : 'System';
+                $revertedAt = $units[$unitIndex]['reverted_at'] ? \Carbon\Carbon::parse($units[$unitIndex]['reverted_at'])->format('d M Y h:i A') : 'unknown time';
+                abort(422, "This serial is already reverted on {$revertedAt} by {$revertedBy}.");
+            }
             abort_if(in_array($batch->id . '-' . $unitIndex, $this->soldUnitKeys($batch->company_id), true), 422, 'This serial is already sold. Reverse sale first.');
 
             $finished = Item::lockForUpdate()->findOrFail($batch->finished_item_id);
@@ -521,6 +538,7 @@ class ProductionBatchController extends Controller
             $oldValues = $batch->toArray();
             $units[$unitIndex]['reverted_at'] = now()->toDateTimeString();
             $units[$unitIndex]['reverted_by'] = auth()->id();
+            $units[$unitIndex]['reverted_by_name'] = auth()->user()?->name ?? 'System';
             $batch->update(['units_data' => $units]);
             $this->logUpdate($batch, $oldValues, $batch->fresh()->toArray());
         });
@@ -653,21 +671,24 @@ class ProductionBatchController extends Controller
 
         foreach ($batches as $batch) {
             foreach (($batch->units_data ?? []) as $index => $unit) {
-                if (!empty($unit['reverted_at'])) {
-                    continue;
-                }
                 if (in_array($term, array_filter([
                     $unit['serial_no'] ?? null,
                     $unit['buyer_code'] ?? null,
                     $unit['batch_no'] ?? null,
                     $unit['vts_sim'] ?? null,
                 ]), true)) {
+                    $revertedAt = $unit['reverted_at'] ?? null;
+                    $revertedBy = $unit['reverted_by'] ?? null;
                     return [
                         'batch' => $batch,
                         'index' => $index,
                         'unit' => $unit,
                         'key' => $batch->id . '-' . $index,
                         'raw' => $this->rawMaterialRows($batch, 1),
+                        'is_reverted' => !empty($revertedAt),
+                        'reverted_at' => $revertedAt,
+                        'reverted_by' => $revertedBy,
+                        'reverted_by_name' => $revertedBy ? (User::find($revertedBy)?->name ?? 'System') : null,
                     ];
                 }
             }

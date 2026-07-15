@@ -57,7 +57,7 @@
     if ($user->can('estimates.view')) $cards[] = ['label'=>'Estimates','value'=>$stats['estimates'] ?? 0,'icon'=>'fa-file-contract','accent'=>'#4338ca'];
     if ($user->can('delivery_challans.view')) $cards[] = ['label'=>'Challans','value'=>$stats['challans'] ?? 0,'icon'=>'fa-truck','accent'=>'#0f766e'];
     if ($user->can('expenses.view')) $cards[] = ['label'=>'Pending Expenses','value'=>$stats['pending_expenses'] ?? 0,'icon'=>'fa-clipboard-check','accent'=>'#10b981'];
-    if ($user->can('reports.transaction')) $cards[] = ['label'=>'Total Profit (on Cost)','value'=>'Rs '.number_format($stats['total_profit'] ?? 0,2).' ('.number_format($stats['total_profit_percent'] ?? 0,2).'%)','icon'=>'fa-chart-line','accent'=>'#0f766e','modal'=>'profitSegmentModal'];
+    if ($user->can('reports.transaction')) $cards[] = ['label'=>'Total Profit (on Cost)','html'=>'Rs '.number_format($stats['total_profit'] ?? 0,2).'<br><small style="color:#64748b;font-weight:800">On Sale '.number_format($stats['total_profit_percent_on_sale'] ?? 0,2).'% | On Cost '.number_format($stats['total_profit_percent'] ?? 0,2).'%</small>','icon'=>'fa-chart-line','accent'=>'#0f766e','modal'=>'profitSegmentModal'];
     $sales = max(0, (float)($mix['Sales'] ?? 0)); $purchase = max(0, (float)($mix['Purchase'] ?? 0)); $bank = max(0, (float)($mix['Bank'] ?? 0)); $cash = max(0, (float)($mix['Cash'] ?? 0));
     $totalMix = max(1, $sales + $purchase + $bank + $cash);
     $salesEnd = round($sales / $totalMix * 100, 2);
@@ -104,7 +104,7 @@
         <div class="col-6 col-xl-3 mb-4">
             <div class="metric-card" style="--accent:{{ $card['accent'] }};cursor:{{ isset($card['modal']) ? 'pointer' : 'default' }}" @if(isset($card['modal'])) data-toggle="modal" data-target="#{{ $card['modal'] }}" @endif>
                 <div class="metric-icon"><i class="fas {{ $card['icon'] }}"></i></div>
-                <div class="metric-value">{{ $card['value'] }}</div>
+                <div class="metric-value">@if(isset($card['html'])) {!! $card['html'] !!} @else {{ $card['value'] }} @endif</div>
                 <div class="metric-label">{{ $card['label'] }}</div>
             </div>
         </div>

@@ -20,7 +20,12 @@
                     <td>{{ $invoice->creator?->name ?? 'System' }}<br><small class="text-muted">{{ $invoice->creator?->rolesForCompany($invoice->company_id)->pluck('name')->join(', ') }}</small></td>
                     <td>{{ ucfirst($invoice->sale_type) }}</td>
                     <td>Rs {{ number_format((float)$invoice->grand_total,2) }}</td>
-                    <td><span class="badge-active">{{ ucfirst($invoice->status) }}</span></td>
+                    <td>
+                        <span class="badge-active">{{ ucfirst($invoice->status) }}</span>
+                        @if(($invoiceReturnDetails[$invoice->id]['has_return'] ?? false))
+                            <div><span class="badge badge-warning mt-1">Sales Return</span></div>
+                        @endif
+                    </td>
                     <td>
                         <button type="button" class="btn btn-primary btn-sm sale-detail-btn" title="Profit and item details" data-detail='@json($invoiceDetails[$invoice->id] ?? [])' data-pdf="{{ route('admin.sales.detail-pdf',$invoice) }}"><i class="fas fa-chart-line"></i></button>
                         <a href="{{ route('admin.sales.show',$invoice) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a>

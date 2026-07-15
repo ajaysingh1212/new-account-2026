@@ -31,9 +31,10 @@
         </div>
         <div class="table-responsive">
             <table class="table table-hover">
-                <thead><tr><th>#</th><th>Buyer Code</th><th>Serial No.</th><th>Batch No. (Purchase)</th><th>VTS/SIM No.</th><th>Sale Price</th><th>GST</th><th>Warehouse</th><th>Notes</th></tr></thead>
+                <thead><tr><th>#</th><th>Buyer Code</th><th>Serial No.</th><th>Batch No. (Purchase)</th><th>VTS/SIM No.</th><th>Sale Price</th><th>GST</th><th>Warehouse</th><th>Status</th><th>Notes</th></tr></thead>
                 <tbody>
-                @foreach(($batch->status === 'reverted' ? collect() : collect($batch->units_data ?? [])->filter(fn($unit) => empty($unit['reverted_at']))) as $i => $unit)
+                @foreach(collect($batch->units_data ?? []) as $i => $unit)
+                    @php($revertedAt = !empty($unit['reverted_at']) ? \Carbon\Carbon::parse($unit['reverted_at'])->format('d M Y h:i A') : null)
                     <tr>
                         <td>{{ $i + 1 }}</td>
                         <td>{{ $unit['buyer_code'] ?? '-' }}</td>
@@ -43,6 +44,14 @@
                         <td>Rs {{ number_format((float)($unit['sale_price'] ?? 0),2) }}</td>
                         <td>{{ $unit['gst'] ?? 0 }}%</td>
                         <td>{{ $unit['warehouse'] ?? '-' }}</td>
+                        <td>
+                            @if($revertedAt)
+                                <span class="badge badge-secondary">Reverted</span><br>
+                                <small class="text-muted">{{ $revertedAt }}<br>{{ $unit['reverted_by_name'] ?? 'System' }}</small>
+                            @else
+                                <span class="badge badge-success">Active</span>
+                            @endif
+                        </td>
                         <td>{{ $unit['notes'] ?? '-' }}</td>
                     </tr>
                 @endforeach

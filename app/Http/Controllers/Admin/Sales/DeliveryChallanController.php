@@ -8,6 +8,8 @@ use App\Models\DeliveryChallan;
 use App\Models\DeliveryChallanItem;
 use App\Models\Item;
 use App\Models\Party;
+use App\Models\SalesInvoice;
+use App\Models\SalesInvoiceItem;
 use App\Models\SubCostCenter;
 use App\Services\EntryVisibilityService;
 use App\Services\AccountingService;
@@ -20,7 +22,7 @@ class DeliveryChallanController extends Controller
     public function index(EntryVisibilityService $visibility)
     {
         $challans = $visibility->scopeForUser(
-            DeliveryChallan::with(['party','creator'])->latest(),
+            DeliveryChallan::with(['party','creator','convertedInvoice'])->latest(),
             DeliveryChallan::class
         )->get();
 
@@ -59,7 +61,7 @@ class DeliveryChallanController extends Controller
     public function show(DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($deliveryChallan);
-        $deliveryChallan->load(['party','items.item']);
+        $deliveryChallan->load(['party','items.item','convertedInvoice']);
 
         return view('admin.delivery-challans.show', compact('deliveryChallan'));
     }
@@ -68,6 +70,7 @@ class DeliveryChallanController extends Controller
     {
         $visibility->authorizeManage($deliveryChallan);
         abort_if($deliveryChallan->status === 'cancelled', 422, 'Cancelled challan cannot be edited.');
+        abort_if($deliveryChallan->converted_sales_invoice_id, 422, 'Converted challan cannot be edited.');
         $deliveryChallan->load('items');
 
         return view('admin.delivery-challans.edit', array_merge($this->formData($deliveryChallan), compact('deliveryChallan')));
@@ -77,6 +80,7 @@ class DeliveryChallanController extends Controller
     {
         $visibility->authorizeManage($deliveryChallan);
         abort_if($deliveryChallan->status === 'cancelled', 422, 'Cancelled challan cannot be edited.');
+        abort_if($deliveryChallan->converted_sales_invoice_id, 422, 'Converted challan cannot be edited.');
         $data = $this->validated($request);
 
         DB::transaction(function () use ($request, $deliveryChallan, $data, $visibility, $accounting) {
@@ -103,10 +107,105 @@ class DeliveryChallanController extends Controller
         return view('admin.delivery-challans.print', compact('deliveryChallan'));
     }
 
+    public function convert(DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility, AccountingService $accounting)
+    {
+        $visibility->authorizeManage($deliveryChallan);
+        abort_if($deliveryChallan->status === 'cancelled', 422, 'Cancelled challan cannot be converted.');
+        abort_if($deliveryChallan->converted_sales_invoice_id, 422, 'Delivery challan already converted to sale.');
+
+        DB::transaction(function () use ($deliveryChallan, $accounting) {
+            $deliveryChallan->load(['items.item', 'party']);
+
+            $invoice = SalesInvoice::create([
+                'company_id' => $deliveryChallan->company_id,
+                'party_id' => $deliveryChallan->party_id,
+                'cost_center_id' => $deliveryChallan->cost_center_id,
+                'sub_cost_center_id' => $deliveryChallan->sub_cost_center_id,
+                'sale_type' => $deliveryChallan->party_id ? 'credit' : 'cash',
+                'invoice_no' => $this->nextSaleNo(),
+                'billing_date' => $deliveryChallan->challan_date?->toDateString() ?? now()->toDateString(),
+                'reference_no' => $deliveryChallan->challan_no,
+                'phone' => $deliveryChallan->phone,
+                'billing_address' => $deliveryChallan->billing_address,
+                'shipping_address' => $deliveryChallan->shipping_address,
+                'subtotal' => 0,
+                'discount_amount' => 0,
+                'tax_amount' => 0,
+                'grand_total' => 0,
+                'notes' => trim((string) $deliveryChallan->notes . "\nConverted from delivery challan {$deliveryChallan->challan_no}."),
+                'terms' => $deliveryChallan->terms,
+                'status' => 'posted',
+                'created_by' => auth()->id(),
+            ]);
+
+            $subtotal = $tax = $lineDiscountTotal = 0;
+            foreach ($deliveryChallan->items as $line) {
+                $item = $line->item;
+                if (!$item) {
+                    continue;
+                }
+
+                $lineDiscount = (float) ($line->discount_amount ?? 0);
+                $lineTax = (float) ($line->tax_amount ?? 0);
+                $gross = (float) $line->line_total;
+                $net = max(0, $gross - $lineTax);
+
+                SalesInvoiceItem::create([
+                    'sales_invoice_id' => $invoice->id,
+                    'item_id' => $line->item_id,
+                    'description' => $line->description,
+                    'quantity' => $line->quantity,
+                    'unit' => $line->unit,
+                    'unit_price' => $line->unit_price,
+                    'discount_type' => $line->discount_type,
+                    'discount_value' => $line->discount_value,
+                    'discount_amount' => $lineDiscount,
+                    'tax_percent' => $line->tax_percent,
+                    'tax_amount' => $lineTax,
+                    'line_total' => $gross,
+                    'selected_units' => $line->selected_units ?? [],
+                ]);
+
+                $subtotal += $net;
+                $tax += $lineTax;
+                $lineDiscountTotal += $lineDiscount;
+            }
+
+            $invoice->update([
+                'subtotal' => $subtotal,
+                'discount_amount' => $lineDiscountTotal + (float) $deliveryChallan->discount_amount,
+                'tax_amount' => $tax,
+                'grand_total' => max(0, $subtotal + $tax - (float) $deliveryChallan->discount_amount),
+            ]);
+
+            if ($invoice->party_id) {
+                $accounting->postPartyLedger($invoice->party, [
+                    'entry_date' => $invoice->billing_date,
+                    'entry_type' => 'sale',
+                    'reference_type' => SalesInvoice::class,
+                    'reference_id' => $invoice->id,
+                    'reference_no' => $invoice->invoice_no,
+                    'debit' => $invoice->grand_total,
+                    'credit' => 0,
+                    'description' => "Sales invoice converted from delivery challan {$deliveryChallan->challan_no}.",
+                ]);
+            }
+
+            $deliveryChallan->update([
+                'status' => 'converted',
+                'converted_sales_invoice_id' => $invoice->id,
+                'converted_at' => now(),
+            ]);
+        });
+
+        return redirect()->route('admin.delivery-challans.show', $deliveryChallan)->with('success', 'Delivery challan converted to sale.');
+    }
+
     public function cancel(DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility, AccountingService $accounting)
     {
         $visibility->authorizeManage($deliveryChallan);
         abort_if($deliveryChallan->status === 'cancelled', 422, 'Already cancelled.');
+        abort_if($deliveryChallan->converted_sales_invoice_id, 422, 'Converted challan cannot be cancelled.');
         DB::transaction(function () use ($deliveryChallan, $accounting) {
             $deliveryChallan->load('items.item');
             $this->reverseStock($deliveryChallan, $accounting, 'delivery_challan_cancel_reversal');
@@ -120,6 +219,7 @@ class DeliveryChallanController extends Controller
     {
         $visibility->authorizeManage($deliveryChallan);
         abort_if($deliveryChallan->status !== 'cancelled', 422, 'Cancel the challan before deleting it so stock is restored.');
+        abort_if($deliveryChallan->converted_sales_invoice_id, 422, 'Converted challan cannot be deleted.');
         $deliveryChallan->delete();
 
         return redirect()->route('admin.delivery-challans.index')->with('success', 'Delivery challan deleted.');
@@ -260,6 +360,11 @@ class DeliveryChallanController extends Controller
     {
         $next = DeliveryChallan::where('company_id', auth()->user()->current_company_id)->withTrashed()->count() + 1;
         return 'DC-' . now()->format('Y') . str_pad((string) $next, 6, '0', STR_PAD_LEFT);
+    }
+
+    private function nextSaleNo(): string
+    {
+        return str_pad((string) (SalesInvoice::where('company_id', auth()->user()->current_company_id)->withTrashed()->count() + 1), 8, '0', STR_PAD_LEFT);
     }
 
     private function authorizeCompany(DeliveryChallan $deliveryChallan): void

@@ -7,7 +7,7 @@
         <h3 class="card-title m-0">Estimate {{ $estimate->estimate_no }}</h3>
         <div>
             @if($canManage && $estimate->status !== 'converted' && $estimate->status !== 'cancelled')
-                @can('estimates.convert')<form method="POST" action="{{ route('admin.estimates.convert', $estimate) }}" class="d-inline">@csrf <button class="btn btn-success btn-sm"><i class="fas fa-sync mr-1"></i> Convert</button></form>@endcan
+                @can('estimates.convert')<a href="{{ route('admin.estimates.convert-form', $estimate) }}" class="btn btn-success btn-sm"><i class="fas fa-sync mr-1"></i> Convert to Sale</a>@endcan
                 @can('estimates.edit')<form method="POST" action="{{ route('admin.estimates.cancel', $estimate) }}" class="d-inline">@csrf @method('PATCH')<button class="btn btn-danger btn-sm"><i class="fas fa-times mr-1"></i> Cancel</button></form>@endcan
                 @can('estimates.edit')<a href="{{ route('admin.estimates.edit', $estimate) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit mr-1"></i> Edit</a>@endcan
                 @can('estimates.delete')<form method="POST" action="{{ route('admin.estimates.destroy', $estimate) }}" class="d-inline">@csrf @method('DELETE')<button class="btn btn-outline-danger btn-sm"><i class="fas fa-trash mr-1"></i> Delete</button></form>@endcan

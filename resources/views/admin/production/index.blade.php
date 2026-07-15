@@ -29,22 +29,31 @@
             </thead>
             <tbody>
             @foreach($batches as $batch)
-                @php $activeUnits = $batch->status === 'reverted' ? collect() : collect($batch->units_data ?? [])->filter(fn($unit) => empty($unit['reverted_at'])); @endphp
+                @php
+                    $activeUnits = collect($batch->units_data ?? [])->filter(fn($unit) => empty($unit['reverted_at']));
+                    $revertedUnits = collect($batch->units_data ?? [])->filter(fn($unit) => !empty($unit['reverted_at']));
+                @endphp
                 <tr>
                     <td>{{ $batch->batch_no }}</td>
                     <td>{{ $batch->production_date?->format('d M Y') }}</td>
                     <td>{{ $batch->finishedItem?->name }}</td>
                     <td>{{ $batch->status === 'reverted' ? '-' : ($batch->finishedItem?->sku ?: '-') }}</td>
-                    <td>{{ $batch->status === 'reverted' ? 0 : $activeUnits->count() }}</td>
-                    <td>{{ $activeUnits->pluck('serial_no')->filter()->join(', ') ?: '-' }}</td>
+                    <td>{{ $activeUnits->count() }}</td>
+                    <td>
+                        {{ $activeUnits->pluck('serial_no')->filter()->join(', ') ?: '-' }}
+                        @if($revertedUnits->isNotEmpty())
+                            <br><small class="text-danger">Reverted: {{ $revertedUnits->pluck('serial_no')->filter()->join(', ') }}</small>
+                        @endif
+                    </td>
                     <td>{{ $activeUnits->pluck('batch_no')->filter()->join(', ') ?: '-' }}</td>
                     <td>{{ $activeUnits->pluck('vts_sim')->filter()->join(', ') ?: '-' }}</td>
                     <td>Rs {{ number_format((float) $batch->raw_material_cost, 2) }}</td>
                     <td>Rs {{ number_format((float) $batch->cost_per_unit, 2) }}</td>
                     <td>
-                        <span class="badge badge-{{ $batch->status === 'reverted' ? 'secondary' : 'success' }}">
-                            {{ ucfirst($batch->status ?? 'posted') }}
-                        </span>
+                        <span class="badge badge-{{ $batch->status === 'reverted' ? 'secondary' : 'success' }}">{{ ucfirst($batch->status ?? 'posted') }}</span>
+                        @if($revertedUnits->isNotEmpty())
+                            <div><span class="badge badge-warning mt-1">Has reverted serials</span></div>
+                        @endif
                     </td>
                     <td>
                         <strong>{{ $batch->creator?->name ?? 'System' }}</strong><br>

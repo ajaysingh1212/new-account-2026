@@ -109,6 +109,10 @@ class DashboardController extends Controller
             (float) $stats['total_profit'],
             (float) $profitRows->sum('cost')
         );
+        $stats['total_profit_percent_on_sale'] = $profits->profitPercentageOnSale(
+            (float) $stats['total_profit'],
+            (float) $profitRows->sum('sale')
+        );
         $serviceRows = $this->serviceRows($companyId, $visibility, $user, $from, $to);
         $stats['service_amount'] = (float) $serviceRows->sum('amount');
         $serviceTotals = [

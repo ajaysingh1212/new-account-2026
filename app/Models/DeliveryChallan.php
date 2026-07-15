@@ -14,12 +14,13 @@ class DeliveryChallan extends Model
         'challan_date','reference_no','dispatch_through','vehicle_no','driver_name',
         'driver_phone','lr_no','lr_date','phone','billing_address','shipping_address',
         'subtotal','discount_amount','tax_amount','grand_total','notes','terms',
-        'attachment','status','created_by',
+        'attachment','status','converted_sales_invoice_id','converted_at','created_by',
     ];
 
     protected $casts = [
         'challan_date' => 'date',
         'lr_date' => 'date',
+        'converted_at' => 'datetime',
     ];
 
     public function party() { return $this->belongsTo(Party::class); }
@@ -27,4 +28,5 @@ class DeliveryChallan extends Model
     public function subCostCenter() { return $this->belongsTo(SubCostCenter::class); }
     public function items() { return $this->hasMany(DeliveryChallanItem::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
+    public function convertedInvoice() { return $this->belongsTo(SalesInvoice::class, 'converted_sales_invoice_id'); }
 }

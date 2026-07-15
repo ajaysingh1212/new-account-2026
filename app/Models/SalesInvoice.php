@@ -25,5 +25,6 @@ class SalesInvoice extends Model
     public function party() { return $this->belongsTo(Party::class); }
     public function company() { return $this->belongsTo(Company::class); }
     public function items() { return $this->hasMany(SalesInvoiceItem::class); }
+    public function returns() { return $this->hasMany(SalesReturn::class, 'sales_invoice_id'); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
 }

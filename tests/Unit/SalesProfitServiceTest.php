@@ -18,6 +18,7 @@ class SalesProfitServiceTest extends TestCase
         $this->assertSame(25.0, $service->profitPercentage(50, 200));
         $this->assertSame(-25.0, $service->profitPercentage(-50, 200));
         $this->assertSame(0.0, $service->profitPercentage(50, 0));
+        $this->assertSame(10.0, $service->profitPercentageOnSale(50, 500));
     }
 
     public function test_invoice_and_item_details_include_cost_based_profit_percentage(): void
@@ -44,6 +45,8 @@ class SalesProfitServiceTest extends TestCase
         $this->assertSame(400.0, $detail['amounts']['cost']);
         $this->assertSame(100.0, $detail['amounts']['profit']);
         $this->assertSame(25.0, $detail['amounts']['profit_percent']);
+        $this->assertSame(20.0, $detail['amounts']['profit_percent_on_sale']);
         $this->assertSame(25.0, $detail['items'][0]['profit_percent']);
+        $this->assertSame(20.0, $detail['items'][0]['profit_percent_on_sale']);
     }
 }
