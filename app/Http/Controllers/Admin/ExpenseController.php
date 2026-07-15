@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
+use App\Models\EntryVisibility;
 use App\Models\Expense;
 use App\Models\ExpenseLedger;
 use App\Services\EntryVisibilityService;
@@ -95,7 +96,7 @@ class ExpenseController extends Controller
             $bank->update(['current_balance' => $newBalance]);
             $expense->ledger->update(['current_balance' => (float) $expense->ledger->current_balance + (float) $expense->total_amount]);
 
-            BankTransaction::create([
+            $transaction = BankTransaction::create([
                 'company_id' => $expense->company_id,
                 'bank_account_id' => $bank->id,
                 'transaction_date' => $expense->expense_date,
@@ -111,6 +112,19 @@ class ExpenseController extends Controller
                 'attachment' => $expense->attachment,
                 'created_by' => auth()->id(),
             ]);
+
+            EntryVisibility::updateOrCreate(
+                [
+                    'entry_type' => BankTransaction::class,
+                    'entry_id' => $transaction->id,
+                ],
+                [
+                    'company_id' => $expense->company_id,
+                    'visible_to_all_company' => true,
+                    'visible_to_roles' => [],
+                    'visible_to_users' => [],
+                ]
+            );
 
             $expense->update([
                 'status' => 'approved',

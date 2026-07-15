@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
+use App\Models\EntryVisibility;
 use App\Services\EntryVisibilityService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -65,7 +66,7 @@ class BankAccountController extends Controller
             ]));
 
             if ((float) $account->opening_balance > 0) {
-                BankTransaction::create([
+                $transaction = BankTransaction::create([
                     'company_id' => $companyId,
                     'bank_account_id' => $account->id,
                     'transaction_date' => $account->opening_balance_date ?? now()->toDateString(),
@@ -79,6 +80,19 @@ class BankAccountController extends Controller
                     'description' => 'Opening balance entered during bank account creation.',
                     'created_by' => auth()->id(),
                 ]);
+
+                EntryVisibility::updateOrCreate(
+                    [
+                        'entry_type' => BankTransaction::class,
+                        'entry_id' => $transaction->id,
+                    ],
+                    [
+                        'company_id' => $companyId,
+                        'visible_to_all_company' => true,
+                        'visible_to_roles' => [],
+                        'visible_to_users' => [],
+                    ]
+                );
             }
 
             return $account;
@@ -138,7 +152,7 @@ class BankAccountController extends Controller
 
             $bankAccount->transactions()->where('transaction_type', 'opening_balance')->delete();
             if ((float) $bankAccount->opening_balance > 0) {
-                BankTransaction::create([
+                $transaction = BankTransaction::create([
                     'company_id' => $bankAccount->company_id,
                     'bank_account_id' => $bankAccount->id,
                     'transaction_date' => $bankAccount->opening_balance_date ?? now()->toDateString(),
@@ -152,6 +166,19 @@ class BankAccountController extends Controller
                     'description' => 'Opening balance updated from bank master.',
                     'created_by' => auth()->id(),
                 ]);
+
+                EntryVisibility::updateOrCreate(
+                    [
+                        'entry_type' => BankTransaction::class,
+                        'entry_id' => $transaction->id,
+                    ],
+                    [
+                        'company_id' => $bankAccount->company_id,
+                        'visible_to_all_company' => true,
+                        'visible_to_roles' => [],
+                        'visible_to_users' => [],
+                    ]
+                );
             }
         });
         $visibility->syncFromRequest($request, $bankAccount);

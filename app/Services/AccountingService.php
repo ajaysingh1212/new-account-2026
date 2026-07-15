@@ -11,7 +11,7 @@ class AccountingService
 {
     public function moveStock(Item $item, array $data): ?StockMovement
     {
-        if (!$item->track_stock) return null;
+        if (!$item->track_stock && empty($data['force'])) return null;
 
         $qty = (float) $data['quantity'];
         $value = (float) ($data['total_value'] ?? ($qty * (float) ($data['unit_price'] ?? 0)));

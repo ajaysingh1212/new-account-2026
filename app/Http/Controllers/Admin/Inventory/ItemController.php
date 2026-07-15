@@ -42,6 +42,9 @@ class ItemController extends Controller
         $data = $this->validated($request, $companyId);
 
         DB::transaction(function () use ($request, $data, $companyId, $visibility) {
+            $type = !empty($data['product_type_id'])
+                ? ProductType::where('company_id', $companyId)->find($data['product_type_id'])
+                : null;
             $item = Item::create(array_merge($data, [
                 'company_id'             => $companyId,
                 'barcode'                => $data['barcode'] ?: $data['item_code'],
@@ -49,7 +52,7 @@ class ItemController extends Controller
                 // Stock starts at 0 always — added only via Purchase or Production
                 'current_stock'          => 0,
                 'stock_value'            => 0,
-                'track_stock'            => $data['item_type'] !== 'service' && $request->boolean('track_stock'),
+                'track_stock'            => $data['item_type'] !== 'service' && ($request->boolean('track_stock') || $type?->nature === 'finished_goods'),
                 'purchase_tax_inclusive' => $request->boolean('purchase_tax_inclusive'),
                 'sale_tax_inclusive'     => $request->boolean('sale_tax_inclusive'),
                 'is_bom_enabled'         => $request->boolean('is_bom_enabled'),
@@ -79,8 +82,11 @@ class ItemController extends Controller
     {
         $visibility->authorizeManage($item);
         $data = $this->validated($request, $item->company_id, $item->id);
+        $type = !empty($data['product_type_id'])
+            ? ProductType::where('company_id', $item->company_id)->find($data['product_type_id'])
+            : $item->productType;
         $item->update(array_merge($data, [
-            'track_stock'            => $data['item_type'] !== 'service' && $request->boolean('track_stock'),
+            'track_stock'            => $data['item_type'] !== 'service' && ($request->boolean('track_stock') || $type?->nature === 'finished_goods'),
             'purchase_tax_inclusive' => $request->boolean('purchase_tax_inclusive'),
             'sale_tax_inclusive'     => $request->boolean('sale_tax_inclusive'),
             'is_bom_enabled'         => $request->boolean('is_bom_enabled'),

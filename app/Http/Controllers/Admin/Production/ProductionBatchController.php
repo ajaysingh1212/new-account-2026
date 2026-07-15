@@ -134,6 +134,7 @@ class ProductionBatchController extends Controller
 
         DB::transaction(function () use ($request, $data, $accounting, $visibility) {
             $finished = Item::with('bomMaterials.rawItem')->lockForUpdate()->findOrFail($data['finished_item_id']);
+            $this->ensureTrackStock($finished);
             $qty      = (float) $data['quantity'];
             $rawCost  = 0;
             $requiresGps = $this->isGpsItem($finished);
@@ -219,6 +220,7 @@ class ProductionBatchController extends Controller
                 'reference_id'   => $batch->id,
                 'reference_no'   => $batch->batch_no,
                 'movement_units'  => $this->productionMovementUnits($batch, $unitsData),
+                'force'          => true,
                 'description'    => "Finished goods produced — {$batch->batch_no}",
             ]);
         });
@@ -267,6 +269,7 @@ class ProductionBatchController extends Controller
             $this->reverseProductionPosting($productionBatch, $accounting);
 
             $finished = Item::with('bomMaterials.rawItem')->lockForUpdate()->findOrFail($productionBatch->finished_item_id);
+            $this->ensureTrackStock($finished);
             $qty = (float) $data['quantity'];
             $rawCost = 0;
             $requiresGps = $this->isGpsItem($finished);
@@ -326,6 +329,7 @@ class ProductionBatchController extends Controller
                 'reference_id' => $productionBatch->id,
                 'reference_no' => $productionBatch->batch_no,
                 'movement_units' => $this->productionMovementUnits($productionBatch, $unitsData),
+                'force' => true,
                 'description' => "Finished goods updated - {$productionBatch->batch_no}",
             ]);
 
@@ -385,6 +389,7 @@ class ProductionBatchController extends Controller
             $finishedNet = $netMovements->first(fn($row) => (int) $row['item_id'] === (int) $productionBatch->finished_item_id);
             if ($finishedNet && $finishedNet['quantity'] > 0) {
                 $finished = Item::lockForUpdate()->findOrFail($finishedNet['item_id']);
+                $this->ensureTrackStock($finished);
                 $accounting->moveStock($finished, [
                     'movement_date' => now()->toDateString(),
                     'movement_type' => 'production_batch_revert_output',
@@ -396,6 +401,7 @@ class ProductionBatchController extends Controller
                     'reference_id' => $productionBatch->id,
                     'reference_no' => $productionBatch->batch_no,
                     'movement_units' => $this->productionMovementUnits($productionBatch, $productionBatch->units_data ?? []),
+                    'force' => true,
                     'description' => 'Production batch reverted - finished goods removed.',
                 ]);
             }
@@ -496,6 +502,7 @@ class ProductionBatchController extends Controller
             abort_if(in_array($batch->id . '-' . $unitIndex, $this->soldUnitKeys($batch->company_id), true), 422, 'This serial is already sold. Reverse sale first.');
 
             $finished = Item::lockForUpdate()->findOrFail($batch->finished_item_id);
+            $this->ensureTrackStock($finished);
 
             $accounting->moveStock($finished, [
                 'movement_date' => now()->toDateString(),
@@ -508,6 +515,7 @@ class ProductionBatchController extends Controller
                 'reference_id' => $batch->id,
                 'reference_no' => $batch->batch_no,
                 'movement_units' => $this->productionMovementUnits($batch, [$unitIndex => $units[$unitIndex]]),
+                'force' => true,
                 'description' => 'Production serial reverted - finished goods removed: ' . ($units[$unitIndex]['serial_no'] ?? $unitIndex),
             ]);
 
@@ -551,6 +559,7 @@ class ProductionBatchController extends Controller
     {
         $finished = $batch->finishedItem;
         if ($finished) {
+            $this->ensureTrackStock($finished);
             $accounting->moveStock($finished, [
                 'movement_date' => now()->toDateString(),
                 'movement_type' => 'production_output_reversal',
@@ -562,6 +571,7 @@ class ProductionBatchController extends Controller
                 'reference_id' => $batch->id,
                 'reference_no' => $batch->batch_no,
                 'movement_units' => $this->productionMovementUnits($batch, $batch->units_data ?? []),
+                'force' => true,
                 'description' => 'Production output reversal before update.',
             ]);
         }
@@ -819,6 +829,15 @@ class ProductionBatchController extends Controller
     {
         $count = ProductionBatch::where('company_id', auth()->user()->current_company_id)->count() + 1;
         return 'PB-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
+    }
+
+    private function ensureTrackStock(Item $item): void
+    {
+        if ($item->track_stock) {
+            return;
+        }
+
+        $item->forceFill(['track_stock' => true])->save();
     }
 
     private function isGpsItem(Item $item): bool

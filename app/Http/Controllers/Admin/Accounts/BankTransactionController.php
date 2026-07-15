@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Accounts;
 
 use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
+use App\Models\EntryVisibility;
 use App\Models\BankTransaction;
 use App\Models\Party;
 use App\Services\EntryVisibilityService;
@@ -118,7 +119,7 @@ class BankTransactionController extends Controller
 
     private function createLedger(BankAccount $account, ?BankAccount $related, array $data, string $direction, float $balanceAfter, ?string $attachment, ?string $group = null): void
     {
-        BankTransaction::create([
+        $transaction = BankTransaction::create([
             'company_id' => $account->company_id,
             'bank_account_id' => $account->id,
             'related_bank_account_id' => $related?->id,
@@ -135,6 +136,19 @@ class BankTransactionController extends Controller
             'transfer_group' => $group,
             'created_by' => auth()->id(),
         ]);
+
+        EntryVisibility::updateOrCreate(
+            [
+                'entry_type' => BankTransaction::class,
+                'entry_id' => $transaction->id,
+            ],
+            [
+                'company_id' => $account->company_id,
+                'visible_to_all_company' => true,
+                'visible_to_roles' => [],
+                'visible_to_users' => [],
+            ]
+        );
     }
 
     private function accounts()

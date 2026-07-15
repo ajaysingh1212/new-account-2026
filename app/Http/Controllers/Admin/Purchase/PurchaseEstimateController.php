@@ -236,10 +236,19 @@ class PurchaseEstimateController extends Controller
                     $accounting->postPartyLedger($bill->party,['entry_date'=>now()->toDateString(),'entry_type'=>'payment_out','reference_type'=>PartyPayment::class,
                         'reference_id'=>$payment->id,'reference_no'=>$payment->reference_no,'debit'=>$grand,'credit'=>0,'description'=>'Paid purchase amount.']);
                     $balance=(float)$account->current_balance-$grand;$account->update(['current_balance'=>$balance]);
-                    BankTransaction::create(['company_id'=>$bill->company_id,'bank_account_id'=>$account->id,'party_id'=>$bill->party_id,
+                    $transaction = BankTransaction::create(['company_id'=>$bill->company_id,'bank_account_id'=>$account->id,'party_id'=>$bill->party_id,
                         'transaction_date'=>now()->toDateString(),'transaction_type'=>'payment_out','direction'=>'out','amount'=>$grand,
                         'balance_after'=>$balance,'reference_no'=>$payment->reference_no,'payment_mode'=>$payment->payment_mode,
                         'reference_type'=>PartyPayment::class,'reference_id'=>$payment->id,'description'=>$payment->description,'created_by'=>auth()->id()]);
+                    EntryVisibility::updateOrCreate([
+                        'entry_type' => BankTransaction::class,
+                        'entry_id' => $transaction->id,
+                    ], [
+                        'company_id' => $bill->company_id,
+                        'visible_to_all_company' => true,
+                        'visible_to_roles' => [],
+                        'visible_to_users' => [],
+                    ]);
                 }
             }
 

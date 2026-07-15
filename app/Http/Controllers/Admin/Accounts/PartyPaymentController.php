@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin\Accounts;
 use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
+use App\Models\EntryVisibility;
 use App\Models\Party;
 use App\Models\PartyPayment;
 use App\Models\PartyPaymentAllocation;
@@ -215,7 +216,7 @@ class PartyPaymentController extends Controller
             ]);
 
             $account->update(['current_balance' => $bankBalance]);
-            BankTransaction::create([
+            $transaction = BankTransaction::create([
                 'company_id' => $companyId,
                 'bank_account_id' => $account->id,
                 'party_id' => $party->id,
@@ -232,6 +233,19 @@ class PartyPaymentController extends Controller
                 'attachment' => $payment->attachment,
                 'created_by' => auth()->id(),
             ]);
+
+            EntryVisibility::updateOrCreate(
+                [
+                    'entry_type' => BankTransaction::class,
+                    'entry_id' => $transaction->id,
+                ],
+                [
+                    'company_id' => $companyId,
+                    'visible_to_all_company' => true,
+                    'visible_to_roles' => [],
+                    'visible_to_users' => [],
+                ]
+            );
         });
 
         return redirect()->route('admin.party-payments.index', ['type' => $data['payment_type']])
