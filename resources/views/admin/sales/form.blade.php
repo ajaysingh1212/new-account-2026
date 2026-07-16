@@ -294,7 +294,7 @@
 <template id="lineTpl">
 <tr>
     <td class="item-cell" data-label="Item">
-        <select name="item_id[]" class="form-control item-select wide-select" required>
+        <select name="item_id[]" class="form-control item-select select2-item wide-select" required>
             <option value="">Select finished goods</option>
             @foreach($items as $it)
                 <option value="{{ $it->id }}"
@@ -305,8 +305,12 @@
                     data-max-disc="{{ (float) ($it->max_discount_percent ?? 0) }}"
                     data-gps="{{ str_contains(strtolower(implode(' ', array_filter([$it->name, $it->item_code, $it->sku, $it->brand, $it->model, $it->description]))), 'gps') ? 1 : 0 }}">
                     {{ $it->name }} | {{ $it->item_code }} | Stock {{ $it->current_stock }}
-                    @if($it->per_quantity_weight) | {{ $it->per_quantity_weight }} kg/qty @endif
-                    @if($it->max_discount_percent) | Max disc {{ $it->max_discount_percent }}% @endif
+                    @if($it->per_quantity_weight)
+                        | {{ $it->per_quantity_weight }} kg/qty
+                    @endif
+                    @if($it->max_discount_percent)
+                        | Max disc {{ $it->max_discount_percent }}%
+                    @endif
                 </option>
             @endforeach
         </select>
@@ -568,24 +572,45 @@ function autoSelectUnits($row){
 }
 
 // ── Add line row ──────────────────────────────────────────────────────────────
-function addLine(data = {}){
+function addLine(data = {}) {
+
     const $row = $($('#lineTpl').html());
+
     $('#lineTable tbody').append($row);
+
+    // Destroy if already initialized
+    if ($row.find('.select2-item').hasClass("select2-hidden-accessible")) {
+        $row.find('.select2-item').select2('destroy');
+    }
+
+    // Initialize Select2
+    $row.find('.select2-item').select2({
+        width: '100%',
+        placeholder: 'Select finished goods',
+        allowClear: true,
+        dropdownAutoWidth: true
+    });
 
     ['description','quantity','unit','unit_price','discount_type','discount_value','tax_mode','tax_percent'].forEach(k => {
         $row.find(`[name="${k}[]"]`).val(data[k] ?? $row.find(`[name="${k}[]"]`).val());
     });
+
     if(data.item_id){
-        $row.find('[name="item_id[]"]').val(data.item_id);
+        $row.find('[name="item_id[]"]').val(data.item_id).trigger('change');
     }
+
     syncTaxMode($row);
+
     setRowSelected($row, data.selected_units || []);
+
     if(data.item_id){
         autoSelectUnits($row);
-        // If no saved discount in data (new row), auto-fill max%; else just show badge
+
         const hasDisc = data.discount_value !== undefined && parseFloat(data.discount_value) !== 0;
+
         enforceMaxDisc($row, !hasDisc);
     }
+
     calc();
 }
 
