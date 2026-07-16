@@ -159,7 +159,7 @@ class StockTransferController extends Controller
                 if (!$fromItem) continue;
 
                 // Deduct from sender
-                $newFromStock  = max(0, $fromItem->current_stock - $line->quantity);
+                $newFromStock  = max(0, max(0, (float) $fromItem->current_stock) - $line->quantity);
                 $newFromValue  = $newFromStock * ($line->unit_price ?: $fromItem->sale_price ?: 0);
                 $fromItem->update(['current_stock' => $newFromStock, 'stock_value' => $newFromValue]);
 
@@ -197,7 +197,7 @@ class StockTransferController extends Controller
                     $toItem->save();
                 }
 
-                $newToStock = $toItem->current_stock + $line->quantity;
+                $newToStock = max(0, (float) $toItem->current_stock) + $line->quantity;
                 $newToValue = $newToStock * ($line->unit_price ?: $toItem->sale_price ?: 0);
                 $toItem->update(['current_stock' => $newToStock, 'stock_value' => $newToValue]);
 
