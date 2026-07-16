@@ -208,6 +208,8 @@
 @php
     $ledgerFinal = (float) ($statementSummary['final_balance'] ?? 0);
     $ledgerFinalLabel = $ledgerFinal < 0 ? 'Receivable' : ($ledgerFinal > 0 ? 'Payable' : 'Settled');
+    $customerAdvanceTotal = (float) ($availableCustomerAdvances->sum('remaining_amount') ?? 0);
+    $supplierAdvanceTotal = (float) ($availableSupplierAdvances->sum('remaining_amount') ?? 0);
 @endphp
 <div class="row">
     <div class="col-md-3 mb-3">
@@ -230,6 +232,97 @@
     </div>
     <div class="col-md-3 mb-3">
         <div class="card border-0 shadow-sm h-100"><div class="card-body"><div class="text-muted small">Payment Out</div><strong>Rs {{ number_format((float) ($statementSummary['payment_out'] ?? 0), 2) }}</strong></div></div>
+    </div>
+</div>
+
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h3 class="card-title m-0"><i class="fas fa-hand-holding-usd mr-2 text-purple"></i> Advance Payments</h3>
+        <small class="text-muted">Advance entries are created from Payment In / Payment Out and later adjusted against sales or purchase bills.</small>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-4 mb-3">
+                <div class="card border-0 shadow-sm h-100" style="background:linear-gradient(135deg,#eff6ff,#ffffff);">
+                    <div class="card-body">
+                        <div class="text-muted small">Customer Advance</div>
+                        <strong>Rs {{ number_format($customerAdvanceTotal, 2) }}</strong>
+                        <div class="text-muted small mt-1">{{ $availableCustomerAdvances->count() }} active advance(s)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card border-0 shadow-sm h-100" style="background:linear-gradient(135deg,#f0fdf4,#ffffff);">
+                    <div class="card-body">
+                        <div class="text-muted small">Supplier Advance</div>
+                        <strong>Rs {{ number_format($supplierAdvanceTotal, 2) }}</strong>
+                        <div class="text-muted small mt-1">{{ $availableSupplierAdvances->count() }} active advance(s)</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-3">
+                <div class="card border-0 shadow-sm h-100" style="background:linear-gradient(135deg,#f8fafc,#ffffff);">
+                    <div class="card-body">
+                        <div class="text-muted small">Advance Records</div>
+                        <strong>{{ $advanceHistory->count() }}</strong>
+                        <div class="text-muted small mt-1">Latest advance payments stay linked to this party.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered mb-0">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Direction</th>
+                        <th>Reference</th>
+                        <th>Payment Mode</th>
+                        <th>Original</th>
+                        <th>Used</th>
+                        <th>Remaining</th>
+                        <th>Description</th>
+                        <th>Settlements</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($advanceHistory as $advance)
+                        @php
+                            $usedAmount = (float) $advance->original_amount - (float) $advance->remaining_amount;
+                        @endphp
+                        <tr>
+                            <td>{{ $advance->advance_date?->format('d M Y') ?: '—' }}</td>
+                            <td>
+                                <span class="badge {{ $advance->direction === 'in' ? 'badge-success' : 'badge-warning' }}">
+                                    {{ $advance->direction === 'in' ? 'Customer Advance' : 'Supplier Advance' }}
+                                </span>
+                            </td>
+                            <td>{{ $advance->reference_no ?: '-' }}</td>
+                            <td>{{ $advance->payment_mode ?: '-' }}</td>
+                            <td>Rs {{ number_format((float) $advance->original_amount, 2) }}</td>
+                            <td>Rs {{ number_format($usedAmount, 2) }}</td>
+                            <td><strong>Rs {{ number_format((float) $advance->remaining_amount, 2) }}</strong></td>
+                            <td>{{ $advance->description ?: '-' }}</td>
+                            <td>
+                                @forelse($advance->allocations as $allocation)
+                                    <div class="small">
+                                        <strong>{{ $allocation->document_no ?: '-' }}</strong> |
+                                        Rs {{ number_format((float) $allocation->amount, 2) }}
+                                    </div>
+                                @empty
+                                    <span class="text-muted">No settlement yet.</span>
+                                @endforelse
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="9" class="text-center text-muted py-4">No advance payments found for this party yet.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
     </div>
 </div>
 

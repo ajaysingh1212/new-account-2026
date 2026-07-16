@@ -296,7 +296,7 @@
                         <button type="button" class="close" data-dismiss="alert"><span>&times;</span></button>
                     </div>
                 @endif
-                @if($errors->any())
+                @if(isset($errors) && $errors->any())
                     <div class="alert alert-danger alert-dismissible fade show" role="alert" style="background:#fff5f5;color:#991b1b;border-left:5px solid #dc2626!important;">
                         <strong>Please fix these details:</strong>
                         <ul class="mb-0 mt-2">

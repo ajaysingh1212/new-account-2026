@@ -55,6 +55,9 @@
 .unit-card.selected{border-color:#0f766e;background:#f0fdfa}
 .unit-meta{font-size:12px;color:#667085}
 .selected-pill{display:inline-flex;align-items:center;gap:6px;border:1px solid #99f6e4;background:#f0fdfa;color:#0f766e;border-radius:999px;padding:3px 9px;font-size:12px;margin:2px}
+.advance-panel{border:1px solid #bfdbfe;background:linear-gradient(135deg,#eff6ff,#f8fafc);border-radius:10px;padding:16px;margin-top:12px}
+.advance-row{border:1px solid #dbeafe;background:#fff;border-radius:10px;padding:12px;margin-top:10px}
+.advance-row.active{border-color:#2563eb;box-shadow:0 8px 18px rgba(37,99,235,.08)}
 .icon-btn{width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;border-radius:8px}
 .filter-pills .btn{border-radius:999px}
 .form-control,.custom-select{border-radius:6px}
@@ -118,6 +121,16 @@
                 <label>Reference</label>
                 <input name="reference_no" class="form-control" value="{{ old('reference_no',$invoice->reference_no ?? '') }}">
             </div>
+        </div>
+        <div id="advancePanel" class="advance-panel" style="display:none">
+            <div class="d-flex justify-content-between align-items-center flex-wrap" style="gap:12px">
+                <div>
+                    <div class="trade-title mb-1" style="margin-bottom:4px">Available Advance</div>
+                    <div class="text-muted small" id="advanceSummary">No advance loaded.</div>
+                </div>
+                <button type="button" class="btn btn-sm btn-primary" id="toggleAdvancePanel">Apply advance</button>
+            </div>
+            <div id="advanceList"></div>
         </div>
         <div class="row">
             <div class="col-md-3 form-group">
@@ -356,6 +369,55 @@ let activeFilter = 'available';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function money(n){
     return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+}
+let availableAdvances = [];
+let existingAdvanceApplications = @json($advanceApplications ?? []);
+function renderAdvanceSection(){
+    const selectedIds = new Set(existingAdvanceApplications.map(row => String(row.party_advance_id || row.advance?.id || row.id)));
+    const existingRows = existingAdvanceApplications.map(row => ({...row, existing: true}));
+    const availableRows = availableAdvances.filter(row => !selectedIds.has(String(row.id))).map(row => ({...row, existing: false}));
+    const rows = [...existingRows, ...availableRows];
+    const total = rows.reduce((sum, row) => {
+        const advance = row.advance || row;
+        const remaining = Number(advance.remaining_amount) || 0;
+        const applied = Number(row.amount) || 0;
+        return sum + (row.existing ? remaining + applied : remaining);
+    }, 0);
+    if(total <= 0){
+        $('#advancePanel').hide();
+        $('#advanceList').empty();
+        return;
+    }
+    $('#advancePanel').show();
+    $('#advanceSummary').text(`${money(total)} advance available for this party.`);
+    $('#advanceList').html(rows.map((row, idx) => {
+        const advance = row.advance || row;
+        const remaining = Number(advance.remaining_amount) || 0;
+        const applied = Number(row.amount) || 0;
+        const maxAmount = row.existing ? (remaining + applied) : remaining;
+        const checked = row.existing ? 'checked' : '';
+        const amountValue = row.existing ? applied.toFixed(2) : '';
+        return `
+        <div class="advance-row ${row.existing ? 'active' : ''}" data-remaining="${maxAmount}">
+            <div class="d-flex justify-content-between align-items-start flex-wrap" style="gap:12px">
+                <label class="m-0"><input type="checkbox" class="advance-check mr-2" ${checked}> <b>${advance.advance_date_label || advance.advance_date || '-'}</b> <span class="text-muted">${advance.reference_no || '-'}</span></label>
+                <div class="text-right"><div><b>${money(maxAmount)}</b> remaining</div><small class="text-muted">${advance.payment_mode || '-'}</small></div>
+            </div>
+            <div class="mt-2" style="${row.existing ? '' : 'display:none'}">
+                <input type="hidden" name="advance_applications[${idx}][party_advance_id]" value="${advance.id}" ${row.existing ? '' : 'disabled'}>
+                <input type="number" step="0.01" min="0.01" max="${maxAmount}" name="advance_applications[${idx}][amount]" class="form-control advance-amount" placeholder="Advance amount to apply" value="${amountValue}" ${row.existing ? '' : 'disabled'}>
+                <small class="text-muted d-block mt-1">${advance.description || ''}</small>
+            </div>
+        </div>
+    `}).join(''));
+}
+async function fetchAdvances(){
+    const partyId = $('[name="party_id"]').val();
+    if(!partyId){ availableAdvances = []; renderAdvanceSection(); return; }
+    const res = await fetch(`{{ route('admin.party-advances.available') }}?party_id=${partyId}&flow=sales`, { headers:{Accept:'application/json'} });
+    const payload = res.ok ? await res.json() : { advances: [] };
+    availableAdvances = payload.advances || [];
+    renderAdvanceSection();
 }
 function rowSelected($row){
     try{ return JSON.parse($row.find('.selected-units-json').val()||'[]'); }catch(e){ return []; }
@@ -624,6 +686,25 @@ $(document).on('click', '.choose-units', function(){ openDrawer($(this).closest(
 // Qty changed → re-auto-select serials
 $(document).on('change', '.line-qty', function(){ autoSelectUnits($(this).closest('tr')); });
 
+$(document).on('change', '[name="party_id"]', fetchAdvances);
+$(document).on('change', '.advance-check', function(){
+    const row = $(this).closest('.advance-row');
+    row.toggleClass('active', this.checked);
+    row.children('.mt-2').toggle(this.checked);
+    row.find('input[name]').prop('disabled', !this.checked);
+    if(this.checked && !row.find('.advance-amount').val()){
+        row.find('.advance-amount').val((parseFloat(row.data('remaining'))||0).toFixed(2));
+    }
+});
+$(document).on('input', '.advance-amount', function(){
+    const row = $(this).closest('.advance-row');
+    const remaining = parseFloat(row.data('remaining')||0);
+    if(parseFloat(this.value||0) > remaining){
+        alert('Advance amount cannot exceed remaining balance.');
+        this.value = remaining.toFixed(2);
+    }
+});
+
 // Unit checkbox in drawer
 $(document).on('change', '.unit-check', function(){
     let selected = rowSelected(activeRow);
@@ -665,5 +746,6 @@ $('#termsTemplate').on('change', function(){ if(this.value){ $('#termsBox').val(
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 if(PREFILL_LINES.length){ PREFILL_LINES.forEach(addLine); } else { addLine(); }
+if($('[name="party_id"]').val()){ fetchAdvances(); }
 </script>
 @endpush

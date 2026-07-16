@@ -11,6 +11,7 @@ use App\Models\CompanyMerge;
 use App\Models\EntryVisibility;
 use App\Models\Item;
 use App\Models\Party;
+use App\Models\PartyAdvanceAllocation;
 use App\Models\ProductionBatch;
 use App\Models\ProductType;
 use App\Models\PurchaseBill;
@@ -25,6 +26,7 @@ use App\Models\TermsTemplate;
 use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
+use App\Services\PartyAdvanceService;
 use App\Services\SerialUnitService;
 use App\Services\SalesProfitService;
 use Illuminate\Http\Request;
@@ -56,13 +58,34 @@ class SalesInvoiceController extends Controller
     {
         $visibility->authorizeView($sale);
         $sale->load(['items.item', 'party']);
+        $advanceApplications = PartyAdvanceAllocation::with('advance')
+            ->where('company_id', $sale->company_id)
+            ->where('document_type', SalesInvoice::class)
+            ->where('document_id', $sale->id)
+            ->orderBy('id')
+            ->get()
+            ->map(fn(PartyAdvanceAllocation $allocation) => [
+                'id' => $allocation->id,
+                'party_advance_id' => $allocation->party_advance_id,
+                'amount' => (float) $allocation->amount,
+                'advance' => [
+                    'id' => $allocation->advance?->id,
+                    'advance_date_label' => $allocation->advance?->advance_date?->format('d M Y'),
+                    'reference_no' => $allocation->advance?->reference_no ?: '-',
+                    'remaining_amount' => (float) ($allocation->advance?->remaining_amount ?? 0),
+                    'payment_mode' => $allocation->advance?->payment_mode ?: '-',
+                    'description' => $allocation->advance?->description ?: '-',
+                ],
+            ])
+            ->values();
 
         return view('admin.sales.edit', array_merge($this->formData($sale), [
             'invoice' => $sale,
+            'advanceApplications' => $advanceApplications,
         ]));
     }
 
-    public function store(Request $request, AccountingService $accounting, EntryVisibilityService $visibility)
+    public function store(Request $request, AccountingService $accounting, EntryVisibilityService $visibility, PartyAdvanceService $advances)
     {
         $data = $request->validate([
             'party_id' => ['nullable','exists:parties,id'],
@@ -91,6 +114,9 @@ class SalesInvoiceController extends Controller
             'target_company_ids.*' => ['integer'],
             'purchase_visible_to_roles' => ['nullable','array'],
             'purchase_visible_to_users' => ['nullable','array'],
+            'advance_applications' => ['nullable','array'],
+            'advance_applications.*.party_advance_id' => ['required_with:advance_applications','integer'],
+            'advance_applications.*.amount' => ['required_with:advance_applications','numeric','min:0.01'],
         ]);
 
         DB::transaction(function () use ($request, $data, $accounting, $visibility) {
@@ -121,6 +147,17 @@ class SalesInvoiceController extends Controller
                 ]);
             }
 
+            if ($invoice->party_id) {
+                $advances->applyForDocument(
+                    (int) $invoice->party_id,
+                    'in',
+                    SalesInvoice::class,
+                    $invoice->id,
+                    $invoice->invoice_no,
+                    $request->input('advance_applications', [])
+                );
+            }
+
             $visibility->syncFromRequest($request, $invoice);
 
             if ($invoice->inter_company_transfer) {
@@ -131,7 +168,7 @@ class SalesInvoiceController extends Controller
         return redirect()->route('admin.sales.index')->with('success', 'Sales invoice posted with stock and party ledger.');
     }
 
-    public function update(Request $request, SalesInvoice $sale, AccountingService $accounting, EntryVisibilityService $visibility)
+    public function update(Request $request, SalesInvoice $sale, AccountingService $accounting, EntryVisibilityService $visibility, PartyAdvanceService $advances)
     {
         $visibility->authorizeView($sale);
         $data = $this->validated($request);
@@ -151,6 +188,7 @@ class SalesInvoiceController extends Controller
                 ->map(fn($lines) => $lines->flatMap(fn($line) => $line->selected_units ?? [])->values()->all())
                 ->all();
 
+            $advances->releaseForDocument(SalesInvoice::class, $sale->id);
             $this->reverseSalePosting($sale, $accounting);
 
             $attachment = $sale->attachment;
@@ -185,6 +223,19 @@ class SalesInvoiceController extends Controller
                 ]);
             }
 
+            if ($sale->party_id) {
+                $advanceTotal = round((float) collect($request->input('advance_applications', []))->sum(fn($row) => (float) ($row['amount'] ?? 0)), 2);
+                abort_if($advanceTotal > (float) $sale->grand_total + 0.01, 422, 'Advance settlement cannot exceed invoice total.');
+                $advances->applyForDocument(
+                    (int) $sale->party_id,
+                    'in',
+                    SalesInvoice::class,
+                    $sale->id,
+                    $sale->invoice_no,
+                    $request->input('advance_applications', [])
+                );
+            }
+
             $visibility->syncFromRequest($request, $sale);
             if ($sale->inter_company_transfer) {
                 $this->createInterCompanyPurchases($sale->fresh(['items.item', 'party']), $accounting, $request);
@@ -194,7 +245,7 @@ class SalesInvoiceController extends Controller
             $this->logUpdate($sale, $oldValues, $sale->fresh('items')->toArray());
         });
 
-        return redirect()->route('admin.sales.show', $sale)->with('success', 'Sales invoice updated with stock and party ledger reposted.');
+        return redirect()->route('admin.sales.show', $sale)->with('success', 'Sales invoice updated with stock, party ledger and advance settlement reposted.');
     }
 
     public function show(SalesInvoice $sale, EntryVisibilityService $visibility)
@@ -299,6 +350,9 @@ class SalesInvoiceController extends Controller
             'target_company_ids.*' => ['integer'],
             'purchase_visible_to_roles' => ['nullable','array'],
             'purchase_visible_to_users' => ['nullable','array'],
+            'advance_applications' => ['nullable','array'],
+            'advance_applications.*.party_advance_id' => ['required_with:advance_applications','integer'],
+            'advance_applications.*.amount' => ['required_with:advance_applications','numeric','min:0.01'],
         ]);
     }
 

@@ -18,7 +18,12 @@
                 @foreach($payments as $payment)
                     <tr>
                         <td>{{ $payment->payment_date?->format('d M Y') }}</td>
-                        <td><span class="{{ $payment->payment_type === 'payment_in' ? 'badge-active' : 'badge-inactive' }}">{{ str_replace('_', ' ', ucfirst($payment->payment_type)) }}</span></td>
+                        <td>
+                            <span class="{{ $payment->payment_type === 'payment_in' ? 'badge-active' : 'badge-inactive' }}">{{ str_replace('_', ' ', ucfirst($payment->payment_type)) }}</span>
+                            @if($payment->advance)
+                                <div class="mt-1"><span class="badge badge-info">Advance</span></div>
+                            @endif
+                        </td>
                         <td>{{ $payment->party?->display_name }}</td>
                         <td>{{ $payment->bankAccount?->account_name }}</td>
                         <td>

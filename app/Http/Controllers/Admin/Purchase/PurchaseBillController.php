@@ -8,12 +8,14 @@ use App\Models\BankAccount;
 use App\Models\CostCenter;
 use App\Models\Item;
 use App\Models\Party;
+use App\Models\PartyAdvanceAllocation;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseBillItem;
 use App\Models\SubCostCenter;
 use App\Models\TermsTemplate;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
+use App\Services\PartyAdvanceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -47,18 +49,39 @@ class PurchaseBillController extends Controller
                 ]);
         }
         $purchase->load(['items.item', 'party']);
+        $advanceApplications = PartyAdvanceAllocation::with('advance')
+            ->where('company_id', $purchase->company_id)
+            ->where('document_type', PurchaseBill::class)
+            ->where('document_id', $purchase->id)
+            ->orderBy('id')
+            ->get()
+            ->map(fn(PartyAdvanceAllocation $allocation) => [
+                'id' => $allocation->id,
+                'party_advance_id' => $allocation->party_advance_id,
+                'amount' => (float) $allocation->amount,
+                'advance' => [
+                    'id' => $allocation->advance?->id,
+                    'advance_date_label' => $allocation->advance?->advance_date?->format('d M Y'),
+                    'reference_no' => $allocation->advance?->reference_no ?: '-',
+                    'remaining_amount' => (float) ($allocation->advance?->remaining_amount ?? 0),
+                    'payment_mode' => $allocation->advance?->payment_mode ?: '-',
+                    'description' => $allocation->advance?->description ?: '-',
+                ],
+            ])
+            ->values();
 
         return view('admin.purchases.edit', array_merge($this->formData($purchase), [
             'bill' => $purchase,
+            'advanceApplications' => $advanceApplications,
         ]));
     }
 
-    public function store(Request $request, AccountingService $accounting, EntryVisibilityService $visibility)
+    public function store(Request $request, AccountingService $accounting, EntryVisibilityService $visibility, PartyAdvanceService $advances)
     {
         $data = $this->validated($request);
         $companyId = auth()->user()->current_company_id;
 
-        DB::transaction(function () use ($request, $data, $companyId, $accounting, $visibility) {
+        DB::transaction(function () use ($request, $data, $companyId, $accounting, $visibility, $advances) {
             $attachment = $request->hasFile('attachment')
                 ? $request->file('attachment')->store('purchase-attachments', 'public')
                 : null;
@@ -85,23 +108,37 @@ class PurchaseBillController extends Controller
                 ]);
             }
 
+            if ($bill->party_id) {
+                $advanceTotal = round((float) collect($request->input('advance_applications', []))->sum(fn($row) => (float) ($row['amount'] ?? 0)), 2);
+                abort_if($advanceTotal > (float) $bill->grand_total + 0.01, 422, 'Advance settlement cannot exceed bill total.');
+                $advances->applyForDocument(
+                    (int) $bill->party_id,
+                    'out',
+                    PurchaseBill::class,
+                    $bill->id,
+                    $bill->invoice_no,
+                    $request->input('advance_applications', [])
+                );
+            }
+
             $visibility->syncFromRequest($request, $bill);
         });
 
         return redirect()->route('admin.purchases.index')->with('success', 'Purchase posted with stock and party ledger.');
     }
 
-    public function update(Request $request, PurchaseBill $purchase, AccountingService $accounting, EntryVisibilityService $visibility)
+    public function update(Request $request, PurchaseBill $purchase, AccountingService $accounting, EntryVisibilityService $visibility, PartyAdvanceService $advances)
     {
         $visibility->authorizeView($purchase);
         abort_if($purchase->source_sales_invoice_id, 403, 'Auto inter-company purchase direct edit nahi ho sakta. Source sale invoice edit karein.');
         $data = $this->validated($request);
 
-        DB::transaction(function () use ($request, $data, $purchase, $accounting, $visibility) {
+        DB::transaction(function () use ($request, $data, $purchase, $accounting, $visibility, $advances) {
             $purchase->load('items');
             $oldValues = $purchase->replicate()->toArray();
             $oldValues['items'] = $purchase->items->toArray();
 
+            $advances->releaseForDocument(PurchaseBill::class, $purchase->id);
             $this->reversePurchasePosting($purchase, $accounting);
 
             $attachment = $purchase->attachment;
@@ -129,6 +166,19 @@ class PurchaseBillController extends Controller
                     'debit' => 0,
                     'description' => 'Purchase bill payable updated.',
                 ]);
+            }
+
+            if ($purchase->party_id) {
+                $advanceTotal = round((float) collect($request->input('advance_applications', []))->sum(fn($row) => (float) ($row['amount'] ?? 0)), 2);
+                abort_if($advanceTotal > (float) $purchase->grand_total + 0.01, 422, 'Advance settlement cannot exceed bill total.');
+                $advances->applyForDocument(
+                    (int) $purchase->party_id,
+                    'out',
+                    PurchaseBill::class,
+                    $purchase->id,
+                    $purchase->invoice_no,
+                    $request->input('advance_applications', [])
+                );
             }
 
             $visibility->syncFromRequest($request, $purchase);
@@ -212,6 +262,9 @@ class PurchaseBillController extends Controller
             'tax_percent.*' => ['nullable','numeric','min:0'],
             'discount_value.*' => ['nullable','numeric','min:0'],
             'selected_units.*' => ['nullable','string'],
+            'advance_applications' => ['nullable','array'],
+            'advance_applications.*.party_advance_id' => ['required_with:advance_applications','integer'],
+            'advance_applications.*.amount' => ['required_with:advance_applications','numeric','min:0.01'],
         ]);
     }
 

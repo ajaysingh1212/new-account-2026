@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\Accounts\BankAccountController;
 use App\Http\Controllers\Admin\Accounts\BankTransactionController;
 use App\Http\Controllers\Admin\Accounts\CostCenterController;
 use App\Http\Controllers\Admin\Accounts\PartyController;
+use App\Http\Controllers\Admin\Accounts\PartyAdvanceController;
 use App\Http\Controllers\Admin\Accounts\PartyPaymentController;
 use App\Http\Controllers\Admin\Accounts\SubCostCenterController;
 use App\Http\Controllers\Admin\Inventory\ItemController;
@@ -85,6 +86,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
     });
     Route::middleware('permission:party_payments.view')->group(function () {
         Route::get('party-payments/open-bills', [PartyPaymentController::class, 'openBills'])->name('party-payments.open-bills');
+        Route::get('party-advances/available', [PartyAdvanceController::class, 'available'])->name('party-advances.available');
         Route::resource('party-payments', PartyPaymentController::class)->only(['index','create','store']);
     });
     Route::middleware('permission:product_types.view')->group(function () {

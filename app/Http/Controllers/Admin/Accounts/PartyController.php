@@ -109,14 +109,35 @@ class PartyController extends Controller
         return redirect()->route('admin.parties.index')->with('success', 'Party created successfully.');
     }
 
-    public function show(Party $party, EntryVisibilityService $visibility, PartyOutstandingService $outstanding)
+    public function show($party)
     {
+        $partyId = is_object($party)
+            ? ($party->getKey() ?: (int) request()->route('party'))
+            : (int) $party;
+        $party = Party::findOrFail($partyId);
+        $visibility = app(EntryVisibilityService::class);
+        $outstanding = app(PartyOutstandingService::class);
         $visibility->authorizeView($party);
         $ageingBalance = $outstanding->balanceForParty($visibility, $party->id);
         $statementRows = $outstanding->statementRows($visibility, $party->id);
         $statementSummary = $outstanding->statementSummary($visibility, $party->id);
+        $availableCustomerAdvances = $party->advances()->where('direction', 'in')->where('remaining_amount', '>', 0)->get();
+        $availableSupplierAdvances = $party->advances()->where('direction', 'out')->where('remaining_amount', '>', 0)->get();
+        $advanceHistory = $party->advances()
+            ->with(['payment.bankAccount', 'allocations'])
+            ->latest('advance_date')
+            ->latest('id')
+            ->get();
 
-        return view('admin.parties.show', compact('party', 'ageingBalance', 'statementRows', 'statementSummary'));
+        return view('admin.parties.show', compact(
+            'party',
+            'ageingBalance',
+            'statementRows',
+            'statementSummary',
+            'availableCustomerAdvances',
+            'availableSupplierAdvances',
+            'advanceHistory'
+        ));
     }
 
     public function edit(Party $party, EntryVisibilityService $visibility)

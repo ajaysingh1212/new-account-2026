@@ -25,6 +25,7 @@
     <input type="hidden" name="payment_type" value="{{ $type }}">
     <input type="hidden" name="settlement_source" id="settlementSource" value="bills">
     <input type="hidden" name="opening_balance_amount" id="openingBalanceAmount">
+    <input type="hidden" name="advance_amount" id="advanceAmount">
     <div class="payment-panel">
         <div class="panel-head">Payment Details</div>
         <div class="p-4">
@@ -49,6 +50,13 @@
                 </div>
             </div>
             <div id="openingSelected" class="opening-selected"><div class="d-flex justify-content-between align-items-center"><span><i class="fas fa-check-circle mr-1"></i> <span id="openingSelectedText"></span></span><button type="button" id="clearOpeningSettlement" class="btn btn-sm btn-outline-success">Change to bills</button></div></div>
+
+            <div id="advanceAction" class="opening-action">
+                <div class="d-flex flex-wrap align-items-center justify-content-between" style="gap:14px">
+                    <div class="d-flex align-items-center" style="gap:12px"><div class="opening-icon" style="background:#0ea5e9"><i class="fas fa-hand-holding-usd"></i></div><div><span class="opening-chip" style="background:#e0f2fe;color:#0369a1">Advance payment</span><div class="mt-1"><b id="advanceActionAmount">Rs 0.00</b> recorded</div><div class="text-muted small" id="advanceActionNote">Select a party to see its current advance balance.</div></div></div>
+                    <button type="button" id="openAdvanceModal" class="btn btn-info"><i class="fas fa-plus mr-1"></i> Create advance payment</button>
+                </div>
+            </div>
 
             <div class="form-group">
                 <label>{{ $type === 'payment_out' ? 'Pending Purchase Bills' : 'Pending Sales Invoices' }}</label>
@@ -85,11 +93,31 @@
         <div class="modal-footer border-0 px-4 pb-4"><button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button><button type="button" id="confirmOpeningSettlement" class="btn btn-primary px-4"><i class="fas fa-check mr-1"></i> Use this amount</button></div>
     </div></div>
 </div>
+
+<div class="modal fade opening-modal" id="advanceModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document"><div class="modal-content">
+        <div class="modal-header"><div><div style="opacity:.7;font-size:12px;text-transform:uppercase;font-weight:800;letter-spacing:.5px">Payment Advance</div><h4 class="modal-title mt-1">{{ $type === 'payment_out' ? 'Pay advance to party' : 'Receive advance from party' }}</h4></div><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+        <div class="modal-body">
+            <div class="row mb-4">
+                <div class="col-md-4 mb-2"><div class="opening-metric"><span>Current advance balance</span><strong id="advanceAvailable">Rs 0.00</strong></div></div>
+                <div class="col-md-4 mb-2"><div class="opening-metric"><span>Party</span><strong id="advanceParty">-</strong></div></div>
+                <div class="col-md-4 mb-2"><div class="opening-metric" style="border-color:#bae6fd;background:#f0f9ff"><span>Type</span><strong style="color:#0369a1">{{ $type === 'payment_out' ? 'Supplier Advance' : 'Customer Advance' }}</strong></div></div>
+            </div>
+            <div class="opening-amount-box mb-4">
+                <label class="font-weight-bold">Advance amount</label>
+                <div class="input-group input-group-lg"><div class="input-group-prepend"><span class="input-group-text">Rs</span></div><input type="number" id="advanceModalAmount" min="0.01" step="0.01" class="form-control" placeholder="0.00"><div class="input-group-append"><button type="button" id="useFullAdvanceAmount" class="btn btn-outline-info">Fill current balance</button></div></div>
+                <small class="text-muted">This records a new advance payment for the selected party. It is not limited by the current balance shown above.</small>
+            </div>
+            <div class="form-group"><label>Advance note</label><textarea id="advanceModalNote" class="form-control" rows="3" placeholder="Optional note about the advance"></textarea></div>
+        </div>
+        <div class="modal-footer border-0 px-4 pb-4"><button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button><button type="button" id="confirmAdvanceSettlement" class="btn btn-info px-4"><i class="fas fa-check mr-1"></i> Save advance</button></div>
+    </div></div>
+</div>
 @endsection
 
 @push('scripts')
 <script>
-let openBills = [], openingBalance = null;
+let openBills = [], openingBalance = null, availableAdvances = [], selectedPartyText = '';
 function fmt(n){return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function renderTotal(){
     let total=0;
@@ -99,6 +127,19 @@ function renderTotal(){
     $('#payTotal').text(fmt(Math.max(0,total-parseFloat($('#payDiscount').val()||0))));
 }
 function renderOpeningAction(){const usable=openingBalance&&openingBalance.available&&Number(openingBalance.remaining)>0;$('#openingAction').toggle(!!usable);if(usable)$('#openingActionAmount').text(fmt(openingBalance.remaining))}
+function renderAdvanceAction(){
+    const partyId = $('#partySelect').val();
+    if(!partyId){
+        $('#advanceAction').hide();
+        return;
+    }
+    const total = availableAdvances.reduce((sum,row)=>sum+(Number(row.remaining_amount)||0),0);
+    $('#advanceAction').show();
+    $('#advanceActionAmount').text(fmt(total));
+    $('#advanceActionNote').text(total > 0
+        ? `${availableAdvances.length} advance payment(s) already recorded for this party.`
+        : 'No advance payment recorded yet. You can still create one now.');
+}
 function clearOpeningSettlement(){
     $('#settlementSource').val('bills');$('#openingBalanceAmount').val('');$('#openingSelected').hide();$('#billList').show();renderOpeningAction();renderTotal();
 }
@@ -116,10 +157,10 @@ function renderBills(){
 }
 async function fetchBills(){
     const partyId=$('#partySelect').val();clearOpeningSettlement();
-    if(!partyId){openBills=[];openingBalance=null;renderBills();renderOpeningAction();return}
+    if(!partyId){openBills=[];openingBalance=null;availableAdvances=[];selectedPartyText='';renderBills();renderOpeningAction();renderAdvanceAction();return}
     $('#billList').html('<div class="text-muted p-3">Loading bills...</div>');
     const res=await fetch(`{{ route('admin.party-payments.open-bills') }}?party_id=${partyId}&payment_type={{ $type }}`,{headers:{Accept:'application/json'}});
-    const payload=res.ok?await res.json():{bills:[],opening_balance:null};openBills=payload.bills||[];openingBalance=payload.opening_balance||null;renderBills();renderOpeningAction();
+    const payload=res.ok?await res.json():{bills:[],opening_balance:null,available_advances:[]};openBills=payload.bills||[];openingBalance=payload.opening_balance||null;availableAdvances=payload.available_advances||[];selectedPartyText=$('#partySelect option:selected').text().trim();renderBills();renderOpeningAction();renderAdvanceAction();
 }
 $('#partySelect').on('change',fetchBills);
 $('#openOpeningModal').on('click',function(){
@@ -135,6 +176,37 @@ $('#confirmOpeningSettlement').on('click',function(){
     if(amount<=0){alert('Opening balance payment amount enter karein.');return}
     if(amount>remaining){alert('Aap opening balance se jyada payment nahi kar sakte.');$('#openingModalAmount').val(remaining.toFixed(2));return}
     $('.bill-check:checked').prop('checked',false).trigger('change');$('#settlementSource').val('opening_balance');$('#openingBalanceAmount').val(amount.toFixed(2));$('#openingSelectedText').text(`${fmt(amount)} {{ $type === 'payment_out' ? 'payable' : 'receivable' }} against opening balance`);$('#openingSelected').show();$('#openingAction').hide();$('#billList').hide();$('#openingBalanceModal').modal('hide');renderTotal();
+});
+$('#openAdvanceModal').on('click',function(){
+    const partyId = $('#partySelect').val();
+    if(!partyId){alert('Advance payment ke liye pehle party select karein.');return;}
+    const total=availableAdvances.reduce((sum,row)=>sum+(Number(row.remaining_amount)||0),0);
+    $('#advanceAvailable').text(fmt(total));
+    $('#advanceParty').text(selectedPartyText || ($('#partySelect option:selected').text().trim() || '-'));
+    $('#advanceModalAmount').val(total > 0 ? total.toFixed(2) : '');
+    $('#advanceModalNote').val('');
+    $('#advanceModal').modal('show');
+});
+$('#useFullAdvanceAmount').on('click',function(){
+    const total=availableAdvances.reduce((sum,row)=>sum+(Number(row.remaining_amount)||0),0);
+    if(total>0){ $('#advanceModalAmount').val(total.toFixed(2)); }
+});
+$('#advanceModalAmount').on('input',function(){
+    if(parseFloat(this.value||0)<=0){return}
+});
+$('#confirmAdvanceSettlement').on('click',function(){
+    const amount=parseFloat($('#advanceModalAmount').val()||0);
+    if(amount<=0){alert('Advance amount enter karein.');return}
+    $('.bill-check:checked').prop('checked',false).trigger('change');
+    $('#settlementSource').val('advance');
+    $('#advanceAmount').val(amount.toFixed(2));
+    $('#payAmount').val(amount.toFixed(2));
+    $('#openingBalanceAmount').val('');
+    $('#openingSelected').hide();
+    $('#openingAction').hide();
+    $('#billList').show();
+    $('#advanceModal').modal('hide');
+    $('#payTotal').text(fmt(Math.max(0, amount-parseFloat($('#payDiscount').val()||0))));
 });
 $('#clearOpeningSettlement').on('click',clearOpeningSettlement);
 $(document).on('change','.bill-check',function(){

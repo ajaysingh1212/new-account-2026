@@ -14,6 +14,7 @@ use App\Models\SalesInvoice;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
 use App\Services\PartyOutstandingService;
+use App\Services\PartyAdvanceService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
@@ -46,7 +47,7 @@ class PartyPaymentController extends Controller
         ]);
     }
 
-    public function openBills(Request $request, PartyOutstandingService $outstanding)
+    public function openBills(Request $request, PartyOutstandingService $outstanding, PartyAdvanceService $advances)
     {
         $companyId = auth()->user()->current_company_id;
         $data = $request->validate([
@@ -56,6 +57,8 @@ class PartyPaymentController extends Controller
 
         $party = Party::where('company_id', $companyId)->findOrFail($data['party_id']);
         $bills = $outstanding->openBillsForPayment($party->id, $data['payment_type']);
+        $advanceDirection = $data['payment_type'] === 'payment_in' ? 'in' : 'out';
+        $availableAdvances = $advances->availableForParty($party->id, $advanceDirection);
 
         $openingBalanceAvailable = ($data['payment_type'] === 'payment_in' && $party->opening_balance_type === 'receivable')
             || ($data['payment_type'] === 'payment_out' && $party->opening_balance_type === 'payable');
@@ -86,10 +89,11 @@ class PartyPaymentController extends Controller
                     'account' => $allocation->payment?->bankAccount?->account_name ?: '-',
                 ])->values(),
             ],
+            'available_advances' => $availableAdvances,
         ]);
     }
 
-    public function store(Request $request, AccountingService $accounting, EntryVisibilityService $visibility, PartyOutstandingService $outstanding)
+    public function store(Request $request, AccountingService $accounting, EntryVisibilityService $visibility, PartyOutstandingService $outstanding, PartyAdvanceService $advanceService)
     {
         $companyId = auth()->user()->current_company_id;
         $data = $request->validate([
@@ -106,7 +110,7 @@ class PartyPaymentController extends Controller
             'allocations' => ['nullable','array'],
             'allocations.*.bill_id' => ['required_with:allocations','integer'],
             'allocations.*.amount' => ['required_with:allocations','numeric','min:0.01'],
-            'settlement_source' => ['nullable', Rule::in(['bills','opening_balance'])],
+            'settlement_source' => ['nullable', Rule::in(['bills','opening_balance','advance'])],
             'opening_balance_amount' => ['nullable','numeric','min:0.01'],
         ]);
 
@@ -116,15 +120,17 @@ class PartyPaymentController extends Controller
             ? $request->file('attachment')->store('payment-attachments', 'public')
             : null;
 
-        DB::transaction(function () use ($data, $companyId, $accounting, $visibility, $outstanding) {
+        DB::transaction(function () use ($data, $companyId, $accounting, $visibility, $outstanding, $advanceService) {
             $party = Party::where('company_id', $companyId)->lockForUpdate()->findOrFail($data['party_id']);
             $account = BankAccount::where('company_id', $companyId)->lockForUpdate()->findOrFail($data['bank_account_id']);
             $allocations = collect($data['allocations'] ?? [])
                 ->filter(fn($row) => (float) ($row['amount'] ?? 0) > 0)
                 ->values();
             $isOpeningSettlement = ($data['settlement_source'] ?? null) === 'opening_balance';
-            abort_if(!$isOpeningSettlement && $allocations->isEmpty(), 422, 'Select at least one bill and enter payment amount.');
+            $isAdvanceSettlement = ($data['settlement_source'] ?? null) === 'advance';
+            abort_if(!$isOpeningSettlement && !$isAdvanceSettlement && $allocations->isEmpty(), 422, 'Select at least one bill and enter payment amount.');
             abort_if($isOpeningSettlement && $allocations->isNotEmpty(), 422, 'Opening balance and invoice payments must be posted separately.');
+            abort_if($isAdvanceSettlement && $allocations->isNotEmpty(), 422, 'Advance payment must be posted without bill allocations.');
 
             $payment = PartyPayment::create(array_merge($data, [
                 'company_id' => $companyId,
@@ -192,7 +198,9 @@ class PartyPaymentController extends Controller
                 }
             }
 
-            abort_if(abs($allocatedTotal - (float) $payment->amount) > 0.01, 422, 'Invoice allocation total must match payment amount.');
+            if (!$isAdvanceSettlement) {
+                abort_if(abs($allocatedTotal - (float) $payment->amount) > 0.01, 422, 'Invoice allocation total must match payment amount.');
+            }
 
             $isIn = $payment->payment_type === 'payment_in';
             $partyDebit = $isIn ? 0 : $payment->total_amount;
@@ -202,6 +210,12 @@ class PartyPaymentController extends Controller
                 ? (float) $account->current_balance + (float) $payment->total_amount
                 : (float) $account->current_balance - (float) $payment->total_amount;
 
+            $ledgerDescription = $payment->description ?: ($isOpeningSettlement
+                ? ($isIn ? 'Payment received against opening balance.' : 'Payment paid against opening balance.')
+                : ($isAdvanceSettlement
+                    ? ($isIn ? 'Advance payment received from party.' : 'Advance payment paid to party.')
+                    : ($isIn ? 'Payment received from party.' : 'Payment paid to party.')));
+
             $accounting->postPartyLedger($party, [
                 'entry_date' => $payment->payment_date,
                 'entry_type' => $payment->payment_type,
@@ -210,9 +224,7 @@ class PartyPaymentController extends Controller
                 'reference_no' => $payment->reference_no,
                 'debit' => $partyDebit,
                 'credit' => $partyCredit,
-                'description' => $payment->description ?: ($isOpeningSettlement
-                    ? ($isIn ? 'Payment received against opening balance.' : 'Payment paid against opening balance.')
-                    : ($isIn ? 'Payment received from party.' : 'Payment paid to party.')),
+                'description' => $ledgerDescription,
             ]);
 
             $account->update(['current_balance' => $bankBalance]);
@@ -229,7 +241,9 @@ class PartyPaymentController extends Controller
                 'reference_id' => $payment->id,
                 'reference_no' => $payment->reference_no,
                 'payment_mode' => $payment->payment_mode,
-                'description' => $payment->description ?: ($isOpeningSettlement ? 'Against party opening balance.' : null),
+                'description' => $payment->description ?: ($isAdvanceSettlement
+                    ? 'Advance payment.'
+                    : ($isOpeningSettlement ? 'Against party opening balance.' : null)),
                 'attachment' => $payment->attachment,
                 'created_by' => auth()->id(),
             ]);
@@ -246,6 +260,10 @@ class PartyPaymentController extends Controller
                     'visible_to_users' => [],
                 ]
             );
+
+            if ($isAdvanceSettlement) {
+                $advanceService->createAdvanceFromPayment($payment);
+            }
         });
 
         return redirect()->route('admin.party-payments.index', ['type' => $data['payment_type']])
