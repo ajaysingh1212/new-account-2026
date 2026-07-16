@@ -119,7 +119,7 @@ class SalesInvoiceController extends Controller
             'advance_applications.*.amount' => ['required_with:advance_applications','numeric','min:0.01'],
         ]);
 
-        DB::transaction(function () use ($request, $data, $accounting, $visibility) {
+        DB::transaction(function () use ($request, $data, $accounting, $visibility, $advances) {
             $attachment = $request->hasFile('attachment')
                 ? $request->file('attachment')->store('sales-attachments', 'public')
                 : null;
@@ -173,7 +173,7 @@ class SalesInvoiceController extends Controller
         $visibility->authorizeView($sale);
         $data = $this->validated($request);
 
-        DB::transaction(function () use ($request, $data, $sale, $accounting, $visibility) {
+        DB::transaction(function () use ($request, $data, $sale, $accounting, $visibility, $advances) {
             $sale->load('items');
             $oldValues = $sale->replicate()->toArray();
             $oldValues['items'] = $sale->items->toArray();
