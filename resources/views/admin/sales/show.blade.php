@@ -10,6 +10,7 @@
         <div class="row mb-3">
             <div class="col-md-3"><b>Party</b><br>{{ $invoice->party?->display_name ?: 'Cash' }}</div>
             <div class="col-md-2"><b>Date</b><br>{{ $invoice->billing_date?->format('d M Y') }}</div>
+            <div class="col-md-2"><b>PO Date</b><br>{{ $invoice->po_date?->format('d M Y') ?: '-' }}</div>
             <div class="col-md-2"><b>Type</b><br>{{ ucfirst($invoice->sale_type) }}</div>
             <div class="col-md-2"><b>Total</b><br>Rs {{ number_format((float)$invoice->grand_total,2) }}</div>
             <div class="col-md-3">@if($invoice->attachment)<b>Attachment</b><br><a href="{{ asset('storage/'.$invoice->attachment) }}" target="_blank">Open attachment</a>@endif</div>

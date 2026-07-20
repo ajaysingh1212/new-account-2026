@@ -21,6 +21,7 @@ use App\Http\Controllers\Admin\ReportController;
 use App\Http\Controllers\Admin\ReplacementController;
 use App\Http\Controllers\Admin\ExpenseController;
 use App\Http\Controllers\Admin\ExpenseLedgerController;
+use App\Http\Controllers\Admin\OtherTransactionController;
 use App\Http\Controllers\Admin\TermsTemplateController;
 use App\Http\Controllers\Admin\Sales\DeliveryChallanController;
 use App\Http\Controllers\Admin\Sales\EstimateController;
@@ -80,6 +81,13 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('expenses', ExpenseController::class)->only(['create','store'])->middleware('permission:expenses.create');
         Route::resource('expenses', ExpenseController::class)->only(['edit','update'])->middleware('permission:expenses.edit');
         Route::resource('expenses', ExpenseController::class)->only(['index','show']);
+    });
+    Route::middleware('permission:other_transactions.view')->group(function () {
+        Route::post('other-transactions/{otherTransaction}/approve', [OtherTransactionController::class, 'approve'])->middleware('permission:other_transactions.approve')->name('other-transactions.approve');
+        Route::post('other-transactions/{otherTransaction}/reject', [OtherTransactionController::class, 'reject'])->middleware('permission:other_transactions.approve')->name('other-transactions.reject');
+        Route::resource('other-transactions', OtherTransactionController::class)->only(['create','store'])->middleware('permission:other_transactions.create');
+        Route::resource('other-transactions', OtherTransactionController::class)->only(['edit','update'])->middleware('permission:other_transactions.edit');
+        Route::resource('other-transactions', OtherTransactionController::class)->only(['index','show']);
     });
     Route::middleware('permission:terms.manage')->group(function () {
         Route::resource('terms', TermsTemplateController::class)->except(['show','destroy']);

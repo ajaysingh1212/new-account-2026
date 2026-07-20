@@ -19,24 +19,25 @@
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
         <h3 class="card-title m-0">{{ $selectedAccount->account_name }}</h3>
-        <strong>Current Balance: ₹ {{ number_format((float) $selectedAccount->current_balance, 2) }}</strong>
+        <strong>Current Balance: Rs {{ number_format((float) $selectedAccount->current_balance, 2) }}</strong>
     </div>
     <div class="card-body">
         <div class="table-responsive">
             <table id="bankReportTable" class="table table-hover">
-                <thead><tr><th>Date</th><th>Type</th><th>Party Details</th><th>Related Account</th><th>Reference</th><th>Description</th><th>In</th><th>Out</th><th>Balance</th></tr></thead>
+                <thead><tr><th>Date</th><th>Type</th><th>Party Details</th><th>Ledger</th><th>Related Account</th><th>Reference</th><th>Description</th><th>In</th><th>Out</th><th>Balance</th></tr></thead>
                 <tbody>
                 @foreach($transactions as $transaction)
                     <tr>
                         <td>{{ $transaction->transaction_date?->format('d M Y') }}</td>
                         <td>{{ str_replace('_', ' ', ucfirst($transaction->transaction_type)) }}</td>
-                        <td>{{ $transaction->party?->display_name ?: '—' }}<br><small class="text-muted">{{ $transaction->party?->phone }}</small></td>
-                        <td>{{ $transaction->relatedBankAccount?->account_name ?: '—' }}</td>
-                        <td>{{ $transaction->reference_no ?: '—' }}</td>
+                        <td>{{ $transaction->party?->display_name ?: '-' }}<br><small class="text-muted">{{ $transaction->party?->phone }}</small></td>
+                        <td>{{ $transaction->ledger_name ?: '-' }}</td>
+                        <td>{{ $transaction->relatedBankAccount?->account_name ?: '-' }}</td>
+                        <td>{{ $transaction->reference_no ?: '-' }}</td>
                         <td>{{ $transaction->description }}</td>
-                        <td class="text-success">{{ $transaction->direction === 'in' ? '₹ '.number_format((float) $transaction->amount, 2) : '—' }}</td>
-                        <td class="text-danger">{{ $transaction->direction === 'out' ? '₹ '.number_format((float) $transaction->amount, 2) : '—' }}</td>
-                        <td><strong>₹ {{ number_format((float) $transaction->balance_after, 2) }}</strong></td>
+                        <td class="text-success">{{ $transaction->direction === 'in' ? 'Rs '.number_format((float) $transaction->amount, 2) : '-' }}</td>
+                        <td class="text-danger">{{ $transaction->direction === 'out' ? 'Rs '.number_format((float) $transaction->amount, 2) : '-' }}</td>
+                        <td><strong>Rs {{ number_format((float) $transaction->balance_after, 2) }}</strong></td>
                     </tr>
                 @endforeach
                 </tbody>

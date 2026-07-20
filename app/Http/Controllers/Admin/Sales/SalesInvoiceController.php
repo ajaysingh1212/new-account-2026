@@ -94,6 +94,7 @@ class SalesInvoiceController extends Controller
             'sale_type' => ['required','in:credit,cash'],
             'invoice_no' => ['nullable','max:20'],
             'billing_date' => ['required','date'],
+            'po_date' => ['nullable','date'],
             'reference_no' => ['nullable','max:255'],
             'phone' => ['nullable','max:255'],
             'billing_address' => ['nullable','string'],
@@ -178,25 +179,29 @@ class SalesInvoiceController extends Controller
             $oldValues = $sale->replicate()->toArray();
             $oldValues['items'] = $sale->items->toArray();
 
-            // ✅ Reversal se PEHLE original quantities capture karo
-            $originalItemQtys = $sale->items
-                ->groupBy('item_id')
-                ->map(fn($lines) => $lines->sum('quantity'))
-                ->all();
-            $originalUnitsByItem = $sale->items
-                ->groupBy('item_id')
-                ->map(fn($lines) => $lines->flatMap(fn($line) => $line->selected_units ?? [])->values()->all())
-                ->all();
+            $linesChanged = $this->lineSignature($sale->items->toArray()) !== $this->requestLineSignature($request);
+            $headerChanged = $this->salesHeaderChanged($sale, $data);
+            $repostStock = $linesChanged;
+            $repostLedger = $linesChanged || $headerChanged;
 
-            $advances->releaseForDocument(SalesInvoice::class, $sale->id);
-            $this->reverseSalePosting($sale, $accounting);
+            if ($repostLedger) {
+                $advances->releaseForDocument(SalesInvoice::class, $sale->id);
+                $this->reverseSaleLedger($sale, $accounting);
+            }
+
+            if ($repostStock) {
+                $this->reverseSaleStock($sale, $accounting);
+            }
 
             $attachment = $sale->attachment;
             if ($request->hasFile('attachment')) {
                 $attachment = $request->file('attachment')->store('sales-attachments', 'public');
             }
 
-            $sale->items()->delete();
+            if ($repostStock) {
+                $sale->items()->delete();
+            }
+
             $sale->update(array_merge($data, [
                 'invoice_no' => $data['invoice_no'] ?: $sale->invoice_no,
                 'attachment' => $attachment,
@@ -204,13 +209,13 @@ class SalesInvoiceController extends Controller
                 'inter_company_target_company_ids' => $request->boolean('inter_company_transfer') ? $this->validatedTargetCompanyIds($request, $sale->company_id) : null,
             ]));
 
-            $unitPool = $this->finishedGoodsUnitPool($sale->company_id, $sale->id);
+            if ($repostStock) {
+                $unitPool = $this->finishedGoodsUnitPool($sale->company_id, $sale->id);
+                $totals = $this->storeLines($request, $sale, $accounting, $unitPool);
+                $sale->update($totals);
+            }
 
-            // ✅ originalItemQtys pass karo storeLines mein
-            $totals = $this->storeLines($request, $sale, $accounting, $unitPool, $originalItemQtys, $originalUnitsByItem);
-            $sale->update($totals);
-
-            if ($sale->sale_type === 'credit' && $sale->party_id) {
+            if ($repostLedger && $sale->sale_type === 'credit' && $sale->party_id) {
                 $accounting->postPartyLedger($sale->party, [
                     'entry_date' => $sale->billing_date,
                     'entry_type' => 'sale',
@@ -223,7 +228,7 @@ class SalesInvoiceController extends Controller
                 ]);
             }
 
-            if ($sale->party_id) {
+            if ($sale->party_id && $repostLedger) {
                 $advanceTotal = round((float) collect($request->input('advance_applications', []))->sum(fn($row) => (float) ($row['amount'] ?? 0)), 2);
                 abort_if($advanceTotal > (float) $sale->grand_total + 0.01, 422, 'Advance settlement cannot exceed invoice total.');
                 $advances->applyForDocument(
@@ -237,15 +242,17 @@ class SalesInvoiceController extends Controller
             }
 
             $visibility->syncFromRequest($request, $sale);
-            if ($sale->inter_company_transfer) {
-                $this->createInterCompanyPurchases($sale->fresh(['items.item', 'party']), $accounting, $request);
-            } else {
-                $this->removeInterCompanyPurchases($sale, $accounting);
+            if ($repostStock) {
+                if ($sale->inter_company_transfer) {
+                    $this->createInterCompanyPurchases($sale->fresh(['items.item', 'party']), $accounting, $request);
+                } else {
+                    $this->removeInterCompanyPurchases($sale, $accounting);
+                }
             }
             $this->logUpdate($sale, $oldValues, $sale->fresh('items')->toArray());
         });
 
-        return redirect()->route('admin.sales.show', $sale)->with('success', 'Sales invoice updated with stock, party ledger and advance settlement reposted.');
+        return redirect()->route('admin.sales.show', $sale)->with('success', 'Sales invoice updated.');
     }
 
     public function show(SalesInvoice $sale, EntryVisibilityService $visibility)
@@ -330,6 +337,7 @@ class SalesInvoiceController extends Controller
             'sale_type' => ['required','in:credit,cash'],
             'invoice_no' => ['nullable','max:20'],
             'billing_date' => ['required','date'],
+            'po_date' => ['nullable','date'],
             'reference_no' => ['nullable','max:255'],
             'phone' => ['nullable','max:255'],
             'billing_address' => ['nullable','string'],
@@ -518,6 +526,85 @@ class SalesInvoiceController extends Controller
                 'description' => 'Sales ledger reversal before update.',
             ]);
         }
+    }
+
+    private function reverseSaleStock(SalesInvoice $invoice, AccountingService $accounting): void
+    {
+        foreach ($invoice->items as $line) {
+            if (!$line->item) {
+                continue;
+            }
+
+            $accounting->moveStock($line->item, [
+                'party_id' => $invoice->party_id,
+                'movement_date' => now()->toDateString(),
+                'movement_type' => 'sale_reversal',
+                'direction' => 'in',
+                'quantity' => (float) $line->quantity,
+                'unit_price' => $line->item->purchase_price,
+                'total_value' => (float) $line->quantity * (float) $line->item->purchase_price,
+                'reference_type' => SalesInvoice::class,
+                'reference_id' => $invoice->id,
+                'reference_no' => $invoice->invoice_no,
+                'description' => 'Sales stock reversal before update.',
+                'movement_units' => $line->selected_units ?? [],
+            ]);
+        }
+    }
+
+    private function reverseSaleLedger(SalesInvoice $invoice, AccountingService $accounting): void
+    {
+        if ($invoice->sale_type === 'credit' && $invoice->party_id) {
+            $accounting->postPartyLedger($invoice->party, [
+                'entry_date' => now()->toDateString(),
+                'entry_type' => 'sale_reversal',
+                'reference_type' => SalesInvoice::class,
+                'reference_id' => $invoice->id,
+                'reference_no' => $invoice->invoice_no,
+                'debit' => 0,
+                'credit' => $invoice->grand_total,
+                'description' => 'Sales ledger reversal before update.',
+            ]);
+        }
+    }
+
+    private function salesHeaderChanged(SalesInvoice $sale, array $data): bool
+    {
+        return (string) $sale->sale_type !== (string) ($data['sale_type'] ?? $sale->sale_type)
+            || (int) $sale->party_id !== (int) ($data['party_id'] ?? $sale->party_id);
+    }
+
+    private function requestLineSignature(Request $request): string
+    {
+        $payload = [];
+        foreach ((array) $request->input('item_id', []) as $i => $itemId) {
+            $payload[] = [
+                'item_id' => (int) $itemId,
+                'quantity' => (float) ($request->input("quantity.$i") ?? 0),
+                'unit_price' => (float) ($request->input("unit_price.$i") ?? 0),
+                'discount_type' => (string) ($request->input("discount_type.$i") ?? 'percent'),
+                'discount_value' => (float) ($request->input("discount_value.$i") ?? 0),
+                'tax_mode' => (string) ($request->input("tax_mode.$i") ?? 'with_gst'),
+                'tax_percent' => (float) ($request->input("tax_percent.$i") ?? 0),
+            ];
+        }
+
+        return md5(json_encode($payload));
+    }
+
+    private function lineSignature(array $lines): string
+    {
+        $payload = collect($lines)->map(fn($line) => [
+            'item_id' => (int) ($line['item_id'] ?? 0),
+            'quantity' => (float) ($line['quantity'] ?? 0),
+            'unit_price' => (float) ($line['unit_price'] ?? 0),
+            'discount_type' => (string) ($line['discount_type'] ?? 'percent'),
+            'discount_value' => (float) ($line['discount_value'] ?? 0),
+            'tax_mode' => (float) ($line['tax_percent'] ?? 0) > 0 ? 'with_gst' : 'without_gst',
+            'tax_percent' => (float) ($line['tax_percent'] ?? 0),
+        ])->values()->all();
+
+        return md5(json_encode($payload));
     }
 
     private function finishedGoodsUnitPool(int $companyId, ?int $currentInvoiceId = null): array
@@ -1056,3 +1143,4 @@ class SalesInvoiceController extends Controller
         ];
     }
 }
+

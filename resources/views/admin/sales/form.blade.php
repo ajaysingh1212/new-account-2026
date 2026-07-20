@@ -118,6 +118,11 @@
                     value="{{ old('billing_date', isset($invoice) ? $invoice->billing_date?->format('Y-m-d') : now()->toDateString()) }}" required>
             </div>
             <div class="col-md-2 form-group">
+                <label>PO Date</label>
+                <input type="date" name="po_date" class="form-control"
+                    value="{{ old('po_date', isset($invoice) ? $invoice->po_date?->format('Y-m-d') : '') }}">
+            </div>
+            <div class="col-md-2 form-group">
                 <label>Reference</label>
                 <input name="reference_no" class="form-control" value="{{ old('reference_no',$invoice->reference_no ?? '') }}">
             </div>

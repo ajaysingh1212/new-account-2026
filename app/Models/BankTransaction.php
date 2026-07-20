@@ -8,7 +8,7 @@ class BankTransaction extends Model
 {
     protected $fillable = [
         'company_id','bank_account_id','related_bank_account_id','party_id','transaction_date',
-        'transaction_type','direction','amount','balance_after','reference_no','payment_mode',
+        'ledger_name','expense_ledger_id','transaction_type','direction','amount','balance_after','reference_no','payment_mode',
         'reference_type','reference_id','description','attachment','transfer_group','created_by',
     ];
 

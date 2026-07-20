@@ -3,7 +3,7 @@
     $canAnySale = $user->can('sales.view') || $user->can('estimates.view') || $user->can('delivery_challans.view') || $user->can('stock_out_challans.view') || $user->can('party_payments.view') || $user->can('replacements.view');
     $canAnyPurchase = $user->can('purchase.view') || $user->can('smart_purchase.view') || $user->can('purchase_estimates.view') || $user->can('party_payments.view');
     $canAnyBanking = $user->can('banking.view') || $user->can('cost_centers.view');
-    $canAnyExpense = $user->can('expenses.view');
+    $canAnyExpense = $user->can('expenses.view') || $user->can('other_transactions.view');
     $canAnyReport = $user->can('reports.party') || $user->can('reports.stock') || $user->can('reports.expense') || $user->can('reports.gst') || $user->can('reports.transaction');
     $canManagement = $user->isSuperAdmin() || $user->isAdmin() || $user->can('users.view') || $user->can('roles.view') || $user->can('audit.view') || $user->can('terms.manage');
     $hasCrmAccess = $user->isSuperAdmin() || (bool) $user->currentCompany?->has_crm_access;
@@ -139,10 +139,11 @@
 
                 @if($canAnyExpense)
                     <li class="nav-header">EXPENSE</li>
-                    <li class="nav-item has-treeview {{ request()->routeIs('admin.expenses*','admin.expense-ledgers*') ? 'menu-open' : '' }}">
-                        <a href="#" class="nav-link {{ request()->routeIs('admin.expenses*','admin.expense-ledgers*') ? 'active' : '' }}"><i class="nav-icon fas fa-receipt" style="color:#10B981"></i><p>Expense <i class="right fas fa-angle-left"></i></p></a>
+                    <li class="nav-item has-treeview {{ request()->routeIs('admin.expenses*','admin.expense-ledgers*','admin.other-transactions*') ? 'menu-open' : '' }}">
+                        <a href="#" class="nav-link {{ request()->routeIs('admin.expenses*','admin.expense-ledgers*','admin.other-transactions*') ? 'active' : '' }}"><i class="nav-icon fas fa-receipt" style="color:#10B981"></i><p>Expense <i class="right fas fa-angle-left"></i></p></a>
                         <ul class="nav nav-treeview">
                             <li class="nav-item"><a href="{{ route('admin.expenses.index') }}" class="nav-link {{ request()->routeIs('admin.expenses*') ? 'active' : '' }}"><i class="fas fa-clipboard-check nav-icon"></i><p>Expense Approval</p></a></li>
+                            <li class="nav-item"><a href="{{ route('admin.other-transactions.index') }}" class="nav-link {{ request()->routeIs('admin.other-transactions*') ? 'active' : '' }}"><i class="fas fa-exchange-alt nav-icon"></i><p>Other Income / Expense</p></a></li>
                             <li class="nav-item"><a href="{{ route('admin.expense-ledgers.index') }}" class="nav-link {{ request()->routeIs('admin.expense-ledgers*') ? 'active' : '' }}"><i class="fas fa-book nav-icon"></i><p>Expense Ledgers</p></a></li>
                         </ul>
                     </li>

@@ -22,5 +22,6 @@ class ExpenseLedger extends Model
 
     public function company() { return $this->belongsTo(Company::class); }
     public function expenses() { return $this->hasMany(Expense::class); }
+    public function otherTransactions() { return $this->hasMany(OtherTransaction::class, 'expense_ledger_id'); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
 }

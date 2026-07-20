@@ -138,24 +138,40 @@ class PurchaseBillController extends Controller
             $oldValues = $purchase->replicate()->toArray();
             $oldValues['items'] = $purchase->items->toArray();
 
-            $advances->releaseForDocument(PurchaseBill::class, $purchase->id);
-            $this->reversePurchasePosting($purchase, $accounting);
+            $linesChanged = $this->lineSignature($purchase->items->toArray()) !== $this->requestLineSignature($request);
+            $headerChanged = $this->purchaseHeaderChanged($purchase, $data);
+            $repostStock = $linesChanged;
+            $repostLedger = $linesChanged || $headerChanged;
+
+            if ($repostLedger) {
+                $advances->releaseForDocument(PurchaseBill::class, $purchase->id);
+                $this->reversePurchaseLedger($purchase, $accounting);
+            }
+
+            if ($repostStock) {
+                $this->reversePurchaseStock($purchase, $accounting);
+            }
 
             $attachment = $purchase->attachment;
             if ($request->hasFile('attachment')) {
                 $attachment = $request->file('attachment')->store('purchase-attachments', 'public');
             }
 
-            $purchase->items()->delete();
+            if ($repostStock) {
+                $purchase->items()->delete();
+            }
+
             $purchase->update(array_merge($data, [
                 'invoice_no' => $data['invoice_no'] ?: $purchase->invoice_no,
                 'attachment' => $attachment,
             ]));
 
-            $totals = $this->storeLines($request, $purchase, $accounting, 'purchase');
-            $purchase->update($totals);
+            if ($repostStock) {
+                $totals = $this->storeLines($request, $purchase, $accounting, 'purchase');
+                $purchase->update($totals);
+            }
 
-            if ($purchase->purchase_type === 'credit' && $purchase->party_id) {
+            if ($repostLedger && $purchase->purchase_type === 'credit' && $purchase->party_id) {
                 $accounting->postPartyLedger($purchase->party, [
                     'entry_date' => $purchase->billing_date,
                     'entry_type' => 'purchase',
@@ -168,7 +184,7 @@ class PurchaseBillController extends Controller
                 ]);
             }
 
-            if ($purchase->party_id) {
+            if ($purchase->party_id && $repostLedger) {
                 $advanceTotal = round((float) collect($request->input('advance_applications', []))->sum(fn($row) => (float) ($row['amount'] ?? 0)), 2);
                 abort_if($advanceTotal > (float) $purchase->grand_total + 0.01, 422, 'Advance settlement cannot exceed bill total.');
                 $advances->applyForDocument(
@@ -182,10 +198,14 @@ class PurchaseBillController extends Controller
             }
 
             $visibility->syncFromRequest($request, $purchase);
-            $this->logUpdate($purchase, $oldValues, $purchase->fresh('items')->toArray());
+            if ($repostStock) {
+                $this->logUpdate($purchase, $oldValues, $purchase->fresh('items')->toArray());
+            } else {
+                $this->logUpdate($purchase, $oldValues, $purchase->fresh()->toArray());
+            }
         });
 
-        return redirect()->route('admin.purchases.show', $purchase)->with('success', 'Purchase bill updated with stock and party ledger reposted.');
+        return redirect()->route('admin.purchases.show', $purchase)->with('success', 'Purchase bill updated.');
     }
 
     public function show(PurchaseBill $purchase, EntryVisibilityService $visibility)
@@ -367,6 +387,83 @@ class PurchaseBillController extends Controller
         }
     }
 
+    private function reversePurchaseStock(PurchaseBill $bill, AccountingService $accounting): void
+    {
+        foreach ($bill->items as $line) {
+            if (!$line->item) {
+                continue;
+            }
+
+            $accounting->moveStock($line->item, [
+                'party_id' => $bill->party_id,
+                'movement_date' => now()->toDateString(),
+                'movement_type' => 'purchase_reversal',
+                'direction' => 'out',
+                'quantity' => (float) $line->quantity,
+                'unit_price' => $line->unit_price,
+                'total_value' => $line->line_total,
+                'reference_type' => PurchaseBill::class,
+                'reference_id' => $bill->id,
+                'reference_no' => $bill->invoice_no,
+                'description' => 'Purchase stock reversal before update.',
+                'movement_units' => $line->selected_units ?? [],
+            ]);
+        }
+    }
+
+    private function reversePurchaseLedger(PurchaseBill $bill, AccountingService $accounting): void
+    {
+        if ($bill->purchase_type === 'credit' && $bill->party_id) {
+            $accounting->postPartyLedger($bill->party, [
+                'entry_date' => now()->toDateString(),
+                'entry_type' => 'purchase_reversal',
+                'reference_type' => PurchaseBill::class,
+                'reference_id' => $bill->id,
+                'reference_no' => $bill->invoice_no,
+                'credit' => 0,
+                'debit' => $bill->grand_total,
+                'description' => 'Purchase ledger reversal before update.',
+            ]);
+        }
+    }
+
+    private function purchaseHeaderChanged(PurchaseBill $purchase, array $data): bool
+    {
+        return (string) $purchase->purchase_type !== (string) ($data['purchase_type'] ?? $purchase->purchase_type)
+            || (int) $purchase->party_id !== (int) ($data['party_id'] ?? $purchase->party_id);
+    }
+
+    private function requestLineSignature(Request $request): string
+    {
+        $payload = [];
+        foreach ((array) $request->input('item_id', []) as $i => $itemId) {
+            $payload[] = [
+                'item_id' => (int) $itemId,
+                'quantity' => (float) ($request->input("quantity.$i") ?? 0),
+                'unit_price' => (float) ($request->input("unit_price.$i") ?? 0),
+                'discount_type' => (string) ($request->input("discount_type.$i") ?? 'percent'),
+                'discount_value' => (float) ($request->input("discount_value.$i") ?? 0),
+                'tax_percent' => (float) ($request->input("tax_percent.$i") ?? 0),
+            ];
+        }
+
+        return md5(json_encode($payload));
+    }
+
+    private function lineSignature(array $lines): string
+    {
+        $payload = collect($lines)->map(fn($line) => [
+            'item_id' => (int) ($line['item_id'] ?? 0),
+            'quantity' => (float) ($line['quantity'] ?? 0),
+            'unit_price' => (float) ($line['unit_price'] ?? 0),
+            'discount_type' => (string) ($line['discount_type'] ?? 'percent'),
+            'discount_value' => (float) ($line['discount_value'] ?? 0),
+            'tax_percent' => (float) ($line['tax_percent'] ?? 0),
+        ])->values()->all();
+
+        return md5(json_encode($payload));
+    }
+
     private function logUpdate(PurchaseBill $bill, array $oldValues, array $newValues): void
     {
         $user = auth()->user();
@@ -425,3 +522,4 @@ class PurchaseBillController extends Controller
         return str_pad((string) (PurchaseBill::where('company_id', auth()->user()->current_company_id)->withTrashed()->count() + 1), 8, '0', STR_PAD_LEFT);
     }
 }
+

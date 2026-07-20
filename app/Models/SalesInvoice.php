@@ -11,13 +11,14 @@ class SalesInvoice extends Model
 
     protected $fillable = [
         'company_id','party_id','cost_center_id','sub_cost_center_id','sale_type','invoice_no',
-        'billing_date','reference_no','phone','billing_address','shipping_address','subtotal',
+        'billing_date','po_date','reference_no','phone','billing_address','shipping_address','subtotal',
         'discount_amount','tax_amount','grand_total','total_weight','notes','terms','attachment','status','created_by',
         'inter_company_transfer','inter_company_target_company_ids',
     ];
 
     protected $casts = [
         'billing_date' => 'date',
+        'po_date' => 'date',
         'total_weight' => 'decimal:3',
         'inter_company_transfer' => 'boolean',
         'inter_company_target_company_ids' => 'array',
