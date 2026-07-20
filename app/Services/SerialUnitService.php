@@ -151,11 +151,17 @@ class SerialUnitService
 
                     $itemId = (int) $movement->item_id;
                     $balances[$itemId][$identity] ??= [
-                        'count' => 0,
+                        'balance' => 0,
+                        'last_direction' => null,
+                        'last_movement_at' => null,
+                        'last_movement_id' => null,
                         'unit' => $unit,
                         'last_movement' => null,
                     ];
-                    $balances[$itemId][$identity]['count'] += $delta;
+                    $balances[$itemId][$identity]['balance'] += $delta;
+                    $balances[$itemId][$identity]['last_direction'] = $movement->direction;
+                    $balances[$itemId][$identity]['last_movement_at'] = $movement->movement_date?->format('Y-m-d');
+                    $balances[$itemId][$identity]['last_movement_id'] = $movement->id;
                     $balances[$itemId][$identity]['unit'] = array_merge($unit, [
                         'item_id' => $itemId,
                         'item_name' => $movement->item?->name,
@@ -170,7 +176,7 @@ class SerialUnitService
 
         return collect($balances)
             ->map(fn($rows) => collect($rows)
-                ->filter(fn($row) => (int) $row['count'] > 0)
+                ->filter(fn($row) => (int) $row['balance'] > 0 && ($row['last_direction'] ?? null) === 'in')
                 ->map(fn($row) => $row['unit'])
                 ->values()
                 ->all())

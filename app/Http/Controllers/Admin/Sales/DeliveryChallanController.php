@@ -22,7 +22,7 @@ class DeliveryChallanController extends Controller
     public function index(EntryVisibilityService $visibility)
     {
         $challans = $visibility->scopeForUser(
-            DeliveryChallan::with(['party','creator','convertedInvoice'])->latest(),
+            DeliveryChallan::with(['party','creator','convertedInvoice','items'])->latest(),
             DeliveryChallan::class
         )->get();
 

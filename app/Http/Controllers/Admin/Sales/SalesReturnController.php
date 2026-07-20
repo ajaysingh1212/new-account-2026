@@ -17,7 +17,7 @@ class SalesReturnController extends Controller
 {
     public function index(EntryVisibilityService $visibility)
     {
-        $returns = $visibility->scopeForUser(SalesReturn::with(['invoice','party','creator'])->latest(), SalesReturn::class)->get();
+        $returns = $visibility->scopeForUser(SalesReturn::with(['invoice','party','creator','items'])->latest(), SalesReturn::class)->get();
         return view('admin.sales-returns.index', compact('returns'));
     }
 

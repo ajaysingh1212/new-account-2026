@@ -109,4 +109,51 @@ class SerialUnitServiceTest extends TestCase
 
         $this->assertSame([], app(SerialUnitService::class)->currentStockUnitsByItem($company->id));
     }
+
+    #[Test]
+    public function it_hides_serials_whose_latest_movement_is_out_even_if_earlier_inbound_rows_exist(): void
+    {
+        $user = User::factory()->create(['user_type' => 'super_admin']);
+        $company = Company::create(['name' => 'Latest Movement Company', 'created_by' => $user->id]);
+        $type = ProductType::create([
+            'company_id' => $company->id,
+            'code' => 'FG',
+            'name' => 'Finished Goods',
+            'nature' => 'finished_goods',
+        ]);
+        $item = Item::create([
+            'company_id' => $company->id,
+            'product_type_id' => $type->id,
+            'item_code' => 'GPS-2',
+            'name' => 'GPS Tracker',
+            'unit' => 'PCS',
+            'purchase_price' => 100,
+            'track_stock' => true,
+            'status' => 'active',
+        ]);
+
+        $unit = ['serial_no' => 'SER-STATE-1', 'key' => '1-0'];
+        foreach ([
+            ['2026-07-01', 'in', 1],
+            ['2026-07-02', 'out', 1],
+            ['2026-07-03', 'in', 1],
+            ['2026-07-04', 'in', 1],
+            ['2026-07-05', 'out', 1],
+        ] as [$date, $direction, $qty]) {
+            StockMovement::create([
+                'company_id' => $company->id,
+                'item_id' => $item->id,
+                'movement_date' => $date,
+                'movement_type' => 'sale_adjustment',
+                'direction' => $direction,
+                'quantity' => $qty,
+                'unit_price' => 100,
+                'total_value' => 100,
+                'stock_after' => $direction === 'in' ? 1 : 0,
+                'movement_units' => [$unit],
+            ]);
+        }
+
+        $this->assertSame([], app(SerialUnitService::class)->currentStockUnitsByItem($company->id));
+    }
 }
