@@ -433,11 +433,19 @@ class ReportController extends Controller
     {
         $filters = $this->filters($request);
         $model = $type === 'sales' ? SalesInvoice::class : PurchaseBill::class;
-        $dateColumn = 'billing_date';
+        $dateColumn = $type === 'sales' ? 'po_date' : 'billing_date';
         $parties = $visibility->scopeForUser(Party::orderBy('display_name'), Party::class)->get();
-        $bills = $visibility->scopeForUser($model::with(['party','items.item'])->whereBetween($dateColumn, [$filters['from'], $filters['to']]), $model)
+        $dateFilter = $type === 'sales'
+            ? "COALESCE(po_date, billing_date)"
+            : 'billing_date';
+
+        $bills = $visibility->scopeForUser(
+            $model::with(['party','items.item'])->whereRaw("{$dateFilter} between ? and ?", [$filters['from'], $filters['to']]),
+            $model
+        )
             ->when($filters['partyId'], fn($q) => $q->where('party_id', $filters['partyId']))
             ->get();
+        $bills->each(fn($bill) => $bill->gst_date = $this->gstBillDate($bill)?->format('d-m-Y'));
 
         $gstBills = $bills->filter(fn($bill) => (float) $bill->tax_amount > 0);
         $withoutGst = $bills->filter(fn($bill) => (float) $bill->tax_amount <= 0);
@@ -454,7 +462,7 @@ class ReportController extends Controller
         })->values();
 
         $invoiceRows = $gstBills->map(fn($bill) => [
-            'date' => $bill->billing_date?->format('d-m-Y'),
+            'date' => $this->gstBillDate($bill)?->format('d-m-Y'),
             'invoice' => $bill->invoice_no,
             'party' => $bill->party?->display_name ?: 'Cash / Walk-in',
             'gstin' => $bill->party?->gstin ?: '-',
@@ -470,6 +478,15 @@ class ReportController extends Controller
         ];
 
         return compact('filters','parties','summary','invoiceRows','withoutGst','totals','type');
+    }
+
+    private function gstBillDate(SalesInvoice|PurchaseBill $bill): ?Carbon
+    {
+        if ($bill instanceof SalesInvoice) {
+            return $bill->po_date ?: $bill->billing_date;
+        }
+
+        return $bill->billing_date;
     }
 
     private function billReport(Request $request, EntryVisibilityService $visibility, string $model, string $viewKey, string $title)

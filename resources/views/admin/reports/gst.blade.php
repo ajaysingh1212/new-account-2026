@@ -56,7 +56,7 @@
     <div class="table-responsive">
         <table id="withoutGstTable" class="table table-hover report-table">
             <thead><tr><th>Date</th><th>Invoice</th><th>Party</th><th>Total</th></tr></thead>
-            <tbody>@foreach($withoutGst as $bill)<tr><td>{{ $bill->billing_date?->format('d-m-Y') }}</td><td>{{ $bill->invoice_no }}</td><td>{{ $bill->party?->display_name ?: 'Cash / Walk-in' }}</td><td>Rs {{ number_format((float)$bill->grand_total, 2) }}</td></tr>@endforeach</tbody>
+            <tbody>@foreach($withoutGst as $bill)<tr><td>{{ $bill->gst_date ?? $bill->billing_date?->format('d-m-Y') }}</td><td>{{ $bill->invoice_no }}</td><td>{{ $bill->party?->display_name ?: 'Cash / Walk-in' }}</td><td>Rs {{ number_format((float)$bill->grand_total, 2) }}</td></tr>@endforeach</tbody>
         </table>
     </div>
 </div>
