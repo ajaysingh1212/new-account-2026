@@ -39,11 +39,12 @@
 
 <div class="stock-table-card table-responsive">
     <table id="stockTable" class="table table-hover">
-        <thead><tr><th>Item</th><th>SKU</th><th>Nature</th><th>Stock</th><th>Incoming</th><th>Serials In Stock</th><th>Purchase Cost</th><th>Value</th><th>Low Warning</th><th>Status</th></tr></thead>
+        <thead><tr><th>Item Id</th><th>Item</th><th>SKU</th><th>Nature</th><th>Stock</th><th>Incoming</th><th>Serials In Stock</th><th>Purchase Cost</th><th>Value</th><th>Low Warning</th><th>Status</th></tr></thead>
         <tbody>
         @foreach($items as $item)
             @php $isLow = $item->low_stock_qty && $item->current_stock <= $item->low_stock_qty; @endphp
             <tr class="{{ $isLow ? 'low-row' : '' }}">
+                <td>{{ $item->id }}</td>
                 <td><b>{{ $item->name }}</b><br><small class="text-muted">{{ $item->item_code }}</small></td>
                 <td>{{ $item->sku ?: '-' }}</td>
                 <td>{{ $item->productType?->name }}<br><small>{{ str_replace('_',' ', $item->productType?->nature ?? '-') }}</small></td>
