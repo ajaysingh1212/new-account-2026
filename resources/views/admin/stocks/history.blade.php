@@ -15,8 +15,43 @@
 <div class="card">
     <div class="card-body table-responsive">
         <table id="historyTable" class="table table-hover">
-            <thead><tr><th>id</th><th>Date</th><th>Item</th><th>Type</th><th>Direction</th><th>Qty</th><th>Serial / VTS / SKU</th><th>Value</th><th>Party</th><th>Ref</th><th>Stock After</th><th>Created By</th></tr></thead>
-            <tbody>@foreach($movements as $m)<tr><td>{{ $m->id }}</td><td>{{ $m->movement_date?->format('d M Y') }}</td><td>{{ $m->item?->name }}<br><small class="text-muted">{{ $m->item?->sku ?: $m->item?->item_code }}</small></td><td>{{ str_replace('_',' ',ucfirst($m->movement_type)) }}</td><td><span class="{{ $m->direction==='in'?'badge-active':'badge-inactive' }}">{{ strtoupper($m->direction) }}</span></td><td>{{ $m->quantity }}</td><td>@forelse(($m->movement_units ?? []) as $unit)<span class="badge badge-info mr-1 mb-1">{{ $unit['serial_no'] ?? $unit['vts_sim'] ?? $unit['sku'] ?? $unit['key'] ?? 'Unit' }}</span>@empty<span class="text-muted">-</span>@endforelse<span class="d-none">{{ collect($m->movement_units ?? [])->flatMap(fn($unit) => [$unit['serial_no'] ?? null, $unit['vts_sim'] ?? null, $unit['sku'] ?? null, $unit['batch_no'] ?? null, $unit['production_batch_no'] ?? null, $unit['key'] ?? null])->filter()->join(' ') }}</span></td><td>Rs {{ number_format((float)$m->total_value,2) }}</td><td>{{ $m->party?->display_name ?: '-' }}</td><td>{{ $m->reference_no }}</td><td>{{ $m->stock_after }}</td><td><strong>{{ $m->creator?->name ?? 'System' }}</strong><br><small class="text-muted">{{ $m->creator?->rolesForCompany($m->company_id)->pluck('name')->join(', ') ?: 'No role' }}</small></td></tr>@endforeach</tbody>
+            <thead><tr><th>Type</th><th>Date</th><th>Item</th><th>Event</th><th>Previous Qty</th><th>Change</th><th>New Qty</th><th>Party / Note</th><th>Ref</th><th>By</th><th>Role</th></tr></thead>
+            <tbody>
+            @foreach($historyRows as $row)
+                <tr>
+                    <td>
+                        @if($row['kind'] === 'adjustment')
+                            <span class="badge badge-primary">Manual</span>
+                        @else
+                            <span class="badge badge-info">Movement</span>
+                        @endif
+                    </td>
+                    <td>{{ optional($row['event_at'])->format('d M Y h:i A') }}</td>
+                    <td>{{ $row['item']?->name }}<br><small class="text-muted">{{ $row['item']?->sku ?: $row['item']?->item_code }}</small></td>
+                    <td>
+                        {{ $row['title'] }}
+                        @if($row['kind'] === 'adjustment')
+                            <br><small class="text-muted">Raw material stock maintained by admin</small>
+                        @endif
+                    </td>
+                    <td>{{ number_format((float) $row['previous_stock'], 3) }}</td>
+                    <td>
+                        @if((float) $row['change'] >= 0)
+                            <span class="badge badge-success">+{{ number_format((float) $row['change'], 3) }}</span>
+                        @else
+                            <span class="badge badge-danger">{{ number_format((float) $row['change'], 3) }}</span>
+                        @endif
+                    </td>
+                    <td>{{ number_format((float) $row['new_stock'], 3) }}</td>
+                    <td>
+                        {{ $row['party'] ?: ($row['note'] ?: '-') }}
+                    </td>
+                    <td>{{ $row['reference'] ?: '-' }}</td>
+                    <td><strong>{{ $row['actor'] ?? 'System' }}</strong></td>
+                    <td><small class="text-muted">{{ $row['role'] ?? 'No role' }}</small></td>
+                </tr>
+            @endforeach
+            </tbody>
         </table>
     </div>
 </div>

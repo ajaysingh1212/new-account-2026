@@ -111,6 +111,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
     Route::middleware('permission:stocks.view')->group(function () {
         Route::get('stocks', [StockController::class, 'index'])->name('stocks.index');
         Route::get('stocks/history', [StockController::class, 'history'])->name('stocks.history');
+        Route::post('stocks/{item}/adjust', [StockController::class, 'adjustRawMaterial'])->middleware('company_admin')->name('stocks.adjust');
         Route::get('stocks/special-stock-out', [StockController::class, 'specialStockOut'])->name('stocks.special-stock-out');
     });
     Route::middleware('permission:replacements.view')->group(function () {

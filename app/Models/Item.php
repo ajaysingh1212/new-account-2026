@@ -37,4 +37,5 @@ class Item extends Model
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
     public function bomMaterials() { return $this->hasMany(ItemBom::class, 'finished_item_id'); }
     public function stockMovements() { return $this->hasMany(StockMovement::class); }
+    public function stockAdjustments() { return $this->hasMany(StockAdjustment::class); }
 }
