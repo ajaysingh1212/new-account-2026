@@ -106,6 +106,23 @@
 .stx-empty .stx-empty-emoji{font-size:48px;margin-bottom:12px;display:block;animation:stxFloat 3s ease-in-out infinite}
 
 @media(max-width:768px){.stx-hero h1{font-size:24px}.stx-target-orb{display:none}}
+
+/* ---------- CHART SIZE FIX + 3D PIE ---------- */
+.stx-chart-box{position:relative;height:300px;width:100%}
+.stx-pie-wrap{display:flex;gap:28px;align-items:center;flex-wrap:wrap}
+.stx-pie-canvas-col{position:relative;height:250px;width:250px;flex:0 0 250px;
+    filter:drop-shadow(0 16px 22px rgba(124,58,237,.30)) drop-shadow(0 2px 6px rgba(15,23,42,.15))}
+.stx-pie-legend{flex:1;min-width:230px;max-height:270px;overflow-y:auto;padding-right:6px}
+.stx-pie-legend-item{display:flex;align-items:center;justify-content:space-between;padding:9px 2px;
+    border-bottom:1px solid #f1f5f9;font-size:13px}
+.stx-pie-legend-item:last-child{border-bottom:0}
+.stx-pie-legend-left{display:flex;align-items:center;gap:10px;font-weight:700}
+.stx-pie-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 3px rgba(0,0,0,.03)}
+.stx-pie-legend-pct{font-weight:800;color:var(--stx-violet)}
+.stx-pie-center-label{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
+.stx-pie-center-label b{font-family:'Outfit',sans-serif;font-size:22px;color:var(--stx-ink);line-height:1.1}
+.stx-pie-center-label span{font-size:10px;color:var(--stx-muted);text-transform:uppercase;letter-spacing:.05em;text-align:center;max-width:110px}
+@media(max-width:576px){.stx-pie-canvas-col{width:210px;height:210px;flex:0 0 210px}}
 </style>
 
 <div id="stx-wrap">
@@ -253,10 +270,18 @@
             </div>
         </div>
         <div class="card-body">
-            <div id="stxPiePane" class="stx-pane active"><canvas id="stxPieChart" height="115"></canvas></div>
-            <div id="stxCandlePane" class="stx-pane"><canvas id="stxCandleChart" height="115"></canvas></div>
-            <div id="stxWavePane" class="stx-pane"><canvas id="stxWaveChart" height="115"></canvas></div>
-            <div id="stxRadarPane" class="stx-pane"><canvas id="stxRadarChart" height="115"></canvas></div>
+            <div id="stxPiePane" class="stx-pane active">
+                <div class="stx-pie-wrap">
+                    <div class="stx-pie-canvas-col">
+                        <canvas id="stxPieChart"></canvas>
+                        <div class="stx-pie-center-label"><b id="stxPieCenterVal">0%</b><span id="stxPieCenterLabel">Top Category</span></div>
+                    </div>
+                    <div class="stx-pie-legend" id="stxPieLegend"></div>
+                </div>
+            </div>
+            <div id="stxCandlePane" class="stx-pane"><div class="stx-chart-box"><canvas id="stxCandleChart"></canvas></div></div>
+            <div id="stxWavePane" class="stx-pane"><div class="stx-chart-box"><canvas id="stxWaveChart"></canvas></div></div>
+            <div id="stxRadarPane" class="stx-pane"><div class="stx-chart-box"><canvas id="stxRadarChart"></canvas></div></div>
             <div id="stxContentPane" class="stx-pane">
                 @if($rows->count())
                 <div class="table-responsive">
@@ -315,12 +340,47 @@
 $(function () {
     const c = @json($charts);
     const palette = ['#7C3AED','#0ea5e9','#f59e0b','#10b981','#ef4444','#ec4899','#2563eb'];
-    const common = { responsive:true, animation:{ duration:1400, easing:'easeOutQuart' },
+    const paletteLight = ['#a78bfa','#7dd3fc','#fcd34d','#6ee7b7','#fca5a5','#f9a8d4','#93c5fd'];
+    const paletteDark  = ['#5b21b6','#0369a1','#b45309','#047857','#b91c1c','#be185d','#1d4ed8'];
+    const common = { responsive:true, maintainAspectRatio:false, animation:{ duration:1400, easing:'easeOutQuart' },
         plugins:{ tooltip:{ enabled:true, displayColors:true } } };
 
+    // ---- 3D-style Pie (doughnut with gradient slices + drop shadow via CSS) ----
     new Chart($('#stxPieChart'), { type:'doughnut',
-        data:{ labels:c.labels, datasets:[{ data:c.actual, backgroundColor:palette, borderWidth:3, borderColor:'#fff', hoverOffset:10 }] },
-        options:{ ...common, cutout:'62%' } });
+        data:{ labels:c.labels, datasets:[{
+            data:c.actual,
+            backgroundColor: function (context) {
+                const { chart, dataIndex } = context;
+                const { ctx, chartArea } = chart;
+                if (!chartArea) return palette[dataIndex % palette.length];
+                const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                gradient.addColorStop(0, paletteLight[dataIndex % paletteLight.length]);
+                gradient.addColorStop(1, paletteDark[dataIndex % paletteDark.length]);
+                return gradient;
+            },
+            borderWidth: 3, borderColor: '#fff', hoverOffset: 16, borderRadius: 6, spacing: 3
+        }] },
+        options: { ...common, cutout: '66%', rotation: -15,
+            plugins: { tooltip: { enabled: true, displayColors: true }, legend: { display: false } } } });
+
+    // ---- Custom legend beside the pie: category-wise target share % ----
+    (function () {
+        const totalTarget = c.target.reduce((sum, v) => sum + (parseFloat(v) || 0), 0) || 1;
+        let topIdx = 0, topShare = -1, legendHtml = '';
+        c.labels.forEach((label, i) => {
+            const share = ((parseFloat(c.target[i]) || 0) / totalTarget) * 100;
+            if (share > topShare) { topShare = share; topIdx = i; }
+            legendHtml += `<div class="stx-pie-legend-item">
+                <span class="stx-pie-legend-left">
+                    <span class="stx-pie-dot" style="background:${paletteDark[i % paletteDark.length]}"></span>${label}
+                </span>
+                <span class="stx-pie-legend-pct">${share.toFixed(1)}%</span>
+            </div>`;
+        });
+        $('#stxPieLegend').html(legendHtml || '<div class="text-muted">Koi data nahi mila</div>');
+        $('#stxPieCenterVal').text(topShare >= 0 ? topShare.toFixed(0) + '%' : '0%');
+        $('#stxPieCenterLabel').text(c.labels[topIdx] ? (c.labels[topIdx] + ' target share') : 'Top Category');
+    })();
 
     new Chart($('#stxCandleChart'), { type:'bar',
         data:{ labels:c.labels, datasets:[
