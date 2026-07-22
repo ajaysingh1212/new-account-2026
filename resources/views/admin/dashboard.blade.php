@@ -133,7 +133,23 @@
                     <tbody>
                     @forelse($ageingMatrix as $row)
                         <tr>
-                            <td><strong>{{ $row['party'] }}</strong><br><small>{{ $row['bill_count'] }} open bill(s)</small></td>
+                            <td>
+                                <strong>{{ $row['party'] }}</strong><br>
+
+                                @if(!empty($row['state']))
+                                    <small class="text-muted">
+                                        <strong>State:</strong> {{ $row['state'] }}
+                                    </small><br>
+                                @endif
+
+                                @if(!empty($row['district']))
+                                    <small class="text-muted">
+                                        <strong>District:</strong> {{ $row['district'] }}
+                                    </small><br>
+                                @endif
+
+                                <small>{{ $row['bill_count'] }} open bill(s)</small>
+                            </td>
                             <td>Rs {{ number_format($row['receivable'],2) }}</td><td>Rs {{ number_format($row['payable'],2) }}</td>
                             @foreach($ageingSlabLabels as $key => $label) @php $cell=$row['slabs'][$key]; @endphp<td title="{{ $cell['invoices'] }}">@if($cell['bills'])<b>Rs {{ number_format($cell['due'],2) }}</b><br><small>{{ $cell['bills'] }} bill(s)</small>@else<span class="text-muted">—</span>@endif</td>@endforeach
                             <td><b>Rs {{ number_format($row['total_due'],2) }}</b></td>

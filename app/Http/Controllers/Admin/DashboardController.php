@@ -266,6 +266,9 @@ class DashboardController extends Controller
                 }
 
                 return [
+                    'state'    => $row['state'] ?? $record?->party?->state ?? '',
+                    'district' => $row['district'] ?? $record?->party?->district ?? '',
+                    'city'     => $row['city'] ?? $record?->party?->city ?? '',
                     'kind' => $row['kind'],
                     'bill_id' => $row['bill_id'],
                     'party_id' => $row['party_id'],

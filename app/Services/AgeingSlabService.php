@@ -34,15 +34,20 @@ class AgeingSlabService
                     ]];
                 })->all();
 
-                return [
-                    'party_id' => $partyBills->first()['party_id'],
-                    'party' => $partyBills->first()['party'],
-                    'receivable' => (float) $partyBills->where('kind', 'receivable')->sum('due'),
-                    'payable' => (float) $partyBills->where('kind', 'payable')->sum('due'),
-                    'total_due' => (float) $partyBills->sum('due'),
-                    'bill_count' => $partyBills->count(),
-                    'slabs' => $cells,
-                ];
+                    return [
+                        'party_id'    => $partyBills->first()['party_id'],
+                        'party'       => $partyBills->first()['party'],
+
+                        'state'       => $partyBills->first()['state'] ?? '',
+                        'district'    => $partyBills->first()['district'] ?? '',
+                        'city'        => $partyBills->first()['city'] ?? '',
+
+                        'receivable'  => (float) $partyBills->where('kind', 'receivable')->sum('due'),
+                        'payable'     => (float) $partyBills->where('kind', 'payable')->sum('due'),
+                        'total_due'   => (float) $partyBills->sum('due'),
+                        'bill_count'  => $partyBills->count(),
+                        'slabs'       => $cells,
+                    ];
             })
             ->sortByDesc('total_due')
             ->values();
