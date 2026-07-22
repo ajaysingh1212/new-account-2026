@@ -138,7 +138,7 @@
 
                                 @if(!empty($row['state']))
                                     <small class="text-muted">
-                                        <strong>State:</strong> {{ $row['state'] }}
+                                        <strong>State:</strong> {{ $row['state'] }} - {{ $row['district'] }}
                                     </small><br>
                                 @endif
 
