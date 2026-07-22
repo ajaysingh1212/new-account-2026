@@ -28,6 +28,7 @@ use App\Http\Controllers\Admin\Sales\EstimateController;
 use App\Http\Controllers\Admin\Sales\SalesInvoiceController;
 use App\Http\Controllers\Admin\Sales\SalesReturnController;
 use App\Http\Controllers\Admin\Sales\StockOutChallanController;
+use App\Http\Controllers\Admin\SalesTargetController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 
@@ -196,6 +197,14 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('sales-returns', SalesReturnController::class)->only(['create','store'])->middleware('permission:sales.create');
         Route::resource('sales-returns', SalesReturnController::class)->only(['edit','update'])->middleware('permission:sales.edit');
         Route::resource('sales-returns', SalesReturnController::class)->only(['index','show']);
+    });
+    Route::middleware('permission:sales_targets.view')->group(function () {
+        Route::get('sales-targets/report', [SalesTargetController::class, 'report'])->middleware('permission:sales_targets.report')->name('sales-targets.report');
+        Route::get('sales-targets/report/export', [SalesTargetController::class, 'export'])->middleware('permission:sales_targets.report')->name('sales-targets.report.export');
+        Route::get('sales-targets/report/print', [SalesTargetController::class, 'print'])->middleware('permission:sales_targets.report')->name('sales-targets.report.print');
+        Route::resource('sales-targets', SalesTargetController::class)->only(['index','create','store'])->middleware('permission:sales_targets.create');
+        Route::resource('sales-targets', SalesTargetController::class)->only(['edit','update'])->middleware('permission:sales_targets.edit');
+        Route::resource('sales-targets', SalesTargetController::class)->only(['destroy'])->middleware('permission:sales_targets.delete');
     });
     Route::middleware('permission:estimates.view')->group(function () {
         Route::get('estimates/{estimate}/print', [EstimateController::class, 'print'])->middleware('permission:estimates.print')->name('estimates.print');

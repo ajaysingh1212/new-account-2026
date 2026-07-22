@@ -83,6 +83,17 @@
                     </li>
                 @endif
 
+                @can('sales_targets.view')
+                    <li class="nav-header">SALES TARGET</li>
+                    <li class="nav-item has-treeview {{ request()->routeIs('admin.sales-targets*') ? 'menu-open' : '' }}">
+                        <a href="#" class="nav-link {{ request()->routeIs('admin.sales-targets*') ? 'active' : '' }}"><i class="nav-icon fas fa-bullseye" style="color:#F59E0B"></i><p>Sales Target <i class="right fas fa-angle-left"></i></p></a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="{{ route('admin.sales-targets.index') }}" class="nav-link {{ request()->routeIs('admin.sales-targets.index') ? 'active' : '' }}"><i class="fas fa-sliders-h nav-icon"></i><p>Set Target</p></a></li>
+                            <li class="nav-item"><a href="{{ route('admin.sales-targets.report') }}" class="nav-link {{ request()->routeIs('admin.sales-targets.report*') ? 'active' : '' }}"><i class="fas fa-chart-pie nav-icon"></i><p>Target Report</p></a></li>
+                        </ul>
+                    </li>
+                @endcan
+
                 @if($canAnyPurchase)
                     <li class="nav-header">PURCHASE</li>
                     <li class="nav-item has-treeview {{ request()->routeIs('admin.purchases*','admin.smart-purchases*','admin.purchase-returns*','admin.purchase-estimates*') ? 'menu-open' : '' }}">
@@ -195,6 +206,7 @@
                                 <li class="nav-item"><a href="{{ route('admin.reports.ageing') }}" class="nav-link"><i class="fas fa-hourglass-half nav-icon"></i><p>Ageing Report</p></a></li>
                                 <li class="nav-item"><a href="{{ route('admin.reports.balance-sheet') }}" class="nav-link"><i class="fas fa-balance-scale nav-icon"></i><p>Balance Sheet</p></a></li>
                                 <li class="nav-item"><a href="{{ route('admin.reports.item-trace') }}" class="nav-link"><i class="fas fa-search-location nav-icon"></i><p>Return Trace Report</p></a></li>
+                                @can('sales_targets.report')<li class="nav-item"><a href="{{ route('admin.sales-targets.report') }}" class="nav-link {{ request()->routeIs('admin.sales-targets.report*') ? 'active' : '' }}"><i class="fas fa-bullseye nav-icon"></i><p>Sales Target Report</p></a></li>@endcan
                             </ul>
                         </li>
                     @endcan

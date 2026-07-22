@@ -118,6 +118,11 @@ class PermissionSeeder extends Seeder
             ['name'=>'View Expense Reports', 'slug'=>'reports.expense', 'module'=>'reports'],
             ['name'=>'View GST Reports', 'slug'=>'reports.gst', 'module'=>'reports'],
             ['name'=>'View Transaction Reports', 'slug'=>'reports.transaction', 'module'=>'reports'],
+            ['name'=>'View Sales Targets', 'slug'=>'sales_targets.view', 'module'=>'sales_targets'],
+            ['name'=>'Create Sales Targets', 'slug'=>'sales_targets.create', 'module'=>'sales_targets'],
+            ['name'=>'Edit Sales Targets', 'slug'=>'sales_targets.edit', 'module'=>'sales_targets'],
+            ['name'=>'Delete Sales Targets', 'slug'=>'sales_targets.delete', 'module'=>'sales_targets'],
+            ['name'=>'View Sales Target Reports', 'slug'=>'sales_targets.report', 'module'=>'sales_targets'],
 
             ['name'=>'View Audit Logs', 'slug'=>'audit.view', 'module'=>'audit'],
             ['name'=>'Manage Terms', 'slug'=>'terms.manage', 'module'=>'terms'],
