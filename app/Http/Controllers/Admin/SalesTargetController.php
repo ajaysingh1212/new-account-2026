@@ -11,6 +11,7 @@ use App\Models\SalesTargetItem;
 use App\Services\EntryVisibilityService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class SalesTargetController extends Controller
@@ -96,10 +97,29 @@ class SalesTargetController extends Controller
                 return ['party' => $target->party?->display_name ?? 'Cash / Walk-in', 'party_id' => $target->party_id, 'category' => $item->productCategory?->name ?? '-', 'category_id' => $item->product_category_id, 'period' => ucfirst(str_replace('_', ' ', $target->period_type)), 'target_type' => $item->target_type, 'target' => $targetValue, 'actual' => $actual, 'actual_amount' => $amount, 'actual_quantity' => $quantity, 'achievement' => $targetValue > 0 ? ($actual / $targetValue) * 100 : 0, 'starts_on' => $target->starts_on->format('d M Y'), 'ends_on' => $target->ends_on->format('d M Y')];
             });
         })->values();
+
         $summary = ['target' => $rows->sum('target'), 'actual' => $rows->sum('actual'), 'amount' => $rows->sum('actual_amount'), 'quantity' => $rows->sum('actual_quantity')];
         $charts = ['labels' => $rows->pluck('category')->values(), 'target' => $rows->pluck('target')->values(), 'actual' => $rows->pluck('actual')->values(), 'achievement' => $rows->pluck('achievement')->values()];
         $filters = ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'party_id' => $partyId, 'product_category_id' => $categoryId, 'quick_period' => $quickPeriod];
-        return view('admin.sales-targets.report', compact('rows','summary','charts','filters','parties','categories'));
+
+        // Category-wise progress: works whether a party is selected or not.
+        // When no party is selected, rows across different parties for the same
+        // category are combined so the bars stay easy to read either way.
+        $progress = $rows->groupBy('category')->map(function ($group) {
+            $target = $group->sum('target');
+            $actual = $group->sum('actual');
+            return [
+                'category' => $group->first()['category'],
+                'target_type' => $group->first()['target_type'],
+                'target' => $target,
+                'actual' => $actual,
+                'achievement' => $target > 0 ? ($actual / $target) * 100 : 0,
+                'parties_count' => $group->pluck('party_id')->unique()->count(),
+            ];
+        })->sortByDesc('achievement')->values();
+        $selectedPartyName = $partyId ? optional($parties->firstWhere('id', $partyId))->display_name : null;
+
+        return view('admin.sales-targets.report', compact('rows','summary','charts','filters','parties','categories','progress','selectedPartyName'));
     }
 
     public function export(Request $request, EntryVisibilityService $visibility): StreamedResponse
@@ -127,7 +147,32 @@ class SalesTargetController extends Controller
 
     private function validateData(Request $request): array
     {
-        return $request->validate(['party_id' => ['required','exists:parties,id'], 'period_type' => ['required','in:daily,weekly,monthly,quarterly_3,quarterly_6,yearly'], 'starts_on' => ['required','date'], 'ends_on' => ['required','date','after_or_equal:starts_on'], 'status' => ['required','in:active,inactive'], 'notes' => ['nullable','string'], 'product_category_ids' => ['required','array','min:1'], 'product_category_ids.*' => ['required','distinct','exists:product_categories,id'], 'target_types' => ['required','array'], 'target_types.*' => ['required','in:amount,quantity,percent'], 'target_values' => ['required','array'], 'target_values.*' => ['required','numeric','min:0'], 'item_notes' => ['nullable','array']]) + ['company_id' => auth()->user()->current_company_id];
+        $data = $request->validate([
+            'party_id' => ['required','exists:parties,id'],
+            'period_type' => ['required','in:daily,weekly,monthly,quarterly_3,quarterly_6,yearly'],
+            'starts_on' => ['required','date'],
+            'ends_on' => ['required','date','after_or_equal:starts_on'],
+            'status' => ['required','in:active,inactive'],
+            'notes' => ['nullable','string'],
+            'total_target_value' => ['required','numeric','min:0.01'],
+            'product_category_ids' => ['required','array','min:1'],
+            'product_category_ids.*' => ['required','distinct','exists:product_categories,id'],
+            'target_types' => ['required','array'],
+            'target_types.*' => ['required','in:amount,quantity,percent'],
+            'target_values' => ['required','array'],
+            'target_values.*' => ['required','numeric','min:0'],
+            'item_notes' => ['nullable','array'],
+        ]) + ['company_id' => auth()->user()->current_company_id];
+
+        if (count(array_unique($data['target_types'])) > 1) {
+            throw ValidationException::withMessages(['target_types' => 'Saare categories ke liye same Target Unit hona chahiye.']);
+        }
+
+        if (abs(array_sum($data['target_values']) - (float) $data['total_target_value']) > 0.01) {
+            throw ValidationException::withMessages(['target_values' => 'Category goals ka total, Total Target Value se match nahi ho raha.']);
+        }
+
+        return $data;
     }
 
     private function saveItems(SalesTarget $target, array $data): void

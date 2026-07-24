@@ -16,7 +16,6 @@
 #stx-wrap{font-family:'Inter','Outfit',sans-serif;color:var(--stx-ink)}
 #stx-wrap *{box-sizing:border-box}
 
-/* ---------- HERO ---------- */
 .stx-hero{
     position:relative;overflow:hidden;border-radius:26px;padding:36px 32px;
     background:linear-gradient(135deg,var(--stx-violet) 0%,var(--stx-indigo) 55%,var(--stx-teal) 100%);
@@ -38,7 +37,6 @@
     animation:stxSpinSlow 12s linear infinite}
 @keyframes stxSpinSlow{from{transform:rotate(0)}to{transform:rotate(360deg)}}
 
-/* ---------- FILTER PANEL ---------- */
 .stx-filter-card{border:0;border-radius:var(--stx-card-radius);box-shadow:0 10px 30px rgba(15,23,42,.06);margin-bottom:22px;
     animation:stxFadeUp .6s ease .08s both}
 .stx-pill{border:1.5px solid #e5e7eb;border-radius:999px;padding:8px 16px;margin:3px;color:var(--stx-muted);background:#fff;
@@ -55,7 +53,6 @@
 .stx-btn-soft{border-radius:12px;font-weight:700;padding:10px 18px;transition:transform .2s}
 .stx-btn-soft:hover{transform:translateY(-2px)}
 
-/* ---------- KPI CARDS ---------- */
 .stx-kpi{border:0;border-radius:var(--stx-card-radius);box-shadow:0 10px 26px rgba(15,23,42,.06);overflow:hidden;position:relative;
     animation:stxFadeUp .6s ease both}
 .stx-kpi:nth-child(1){animation-delay:.12s}.stx-kpi:nth-child(2){animation-delay:.18s}
@@ -67,14 +64,12 @@
 .stx-kpi-bar{height:4px;width:100%;background:#f1f5f9;border-radius:4px;margin-top:14px;overflow:hidden}
 .stx-kpi-bar span{display:block;height:100%;border-radius:4px;width:0;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
 
-/* achievement ring */
 .stx-ring-wrap{position:relative;width:56px;height:56px}
 .stx-ring-wrap svg{transform:rotate(-90deg)}
 .stx-ring-bg{stroke:#f1f5f9}
 .stx-ring-fg{stroke:var(--stx-violet);stroke-linecap:round;transition:stroke-dashoffset 1.2s cubic-bezier(.2,.8,.2,1)}
 .stx-ring-txt{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;font-weight:800}
 
-/* ---------- CHART SEGMENT TABS ---------- */
 .stx-chart-card{border:0;border-radius:var(--stx-card-radius);box-shadow:0 10px 30px rgba(15,23,42,.06);
     animation:stxFadeUp .6s ease .34s both}
 .stx-tabbar{display:inline-flex;background:#f1f5f9;border-radius:14px;padding:5px;gap:2px;flex-wrap:wrap}
@@ -87,7 +82,6 @@
 @keyframes stxFadeIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 @keyframes stxFadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
 
-/* ---------- TABLE ---------- */
 .stx-table thead th{border:0;background:#f8fafc;color:var(--stx-muted);font-size:11px;text-transform:uppercase;
     letter-spacing:.05em;font-weight:700;padding:14px 16px}
 .stx-table tbody tr{transition:background .2s}
@@ -101,13 +95,11 @@
 .stx-mini-bar{height:6px;width:70px;background:#f1f5f9;border-radius:4px;display:inline-block;overflow:hidden;vertical-align:middle;margin-left:8px}
 .stx-mini-bar span{display:block;height:100%;border-radius:4px}
 
-/* empty state */
 .stx-empty{text-align:center;padding:60px 20px;color:var(--stx-muted)}
 .stx-empty .stx-empty-emoji{font-size:48px;margin-bottom:12px;display:block;animation:stxFloat 3s ease-in-out infinite}
 
 @media(max-width:768px){.stx-hero h1{font-size:24px}.stx-target-orb{display:none}}
 
-/* ---------- CHART SIZE FIX + 3D PIE ---------- */
 .stx-chart-box{position:relative;height:300px;width:100%}
 .stx-pie-wrap{display:flex;gap:28px;align-items:center;flex-wrap:wrap}
 .stx-pie-canvas-col{position:relative;height:250px;width:250px;flex:0 0 250px;
@@ -123,9 +115,15 @@
 .stx-pie-center-label b{font-family:'Outfit',sans-serif;font-size:22px;color:var(--stx-ink);line-height:1.1}
 .stx-pie-center-label span{font-size:10px;color:var(--stx-muted);text-transform:uppercase;letter-spacing:.05em;text-align:center;max-width:110px}
 @media(max-width:576px){.stx-pie-canvas-col{width:210px;height:210px;flex:0 0 210px}}
+
+.stx-progress-track{height:10px;border-radius:6px;background:#f1f5f9;overflow:hidden}
+.stx-progress-fill{display:block;height:100%;border-radius:6px;width:0;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
 </style>
 
 <div id="stx-wrap">
+@php
+    $stxPalette = ['#7C3AED','#0ea5e9','#f59e0b','#10b981','#ef4444','#ec4899','#2563eb'];
+@endphp
 
     {{-- ===================== HERO ===================== --}}
     <div class="stx-hero">
@@ -293,7 +291,6 @@
                             </tr>
                         </thead>
                         <tbody>
-                            @php $stxPalette=['#7C3AED','#0ea5e9','#f59e0b','#10b981','#ef4444','#ec4899','#2563eb']; @endphp
                             @foreach($rows as $i => $row)
                             <tr>
                                 <td><strong>{{ $row['party'] }}</strong></td>
@@ -331,6 +328,49 @@
             </div>
         </div>
     </div>
+
+    {{-- ===================== CATEGORY-WISE PROGRESS ===================== --}}
+    <div class="card stx-chart-card mt-3">
+        <div class="card-header bg-white border-0 pt-3 pb-2">
+            <h5 class="mb-0">🎯 @if($selectedPartyName) {{ $selectedPartyName }} ka Category-wise Progress @else Overall Category-wise Progress (Sabhi Parties) @endif</h5>
+            <small class="text-muted">Target vs Actual, selected date range ke liye</small>
+        </div>
+        <div class="card-body">
+            @if($progress->count())
+            <div class="stx-progress-list">
+                @foreach($progress as $p)
+                @php
+                    $unitSuffix = $p['target_type']==='amount' ? '₹' : ($p['target_type']==='quantity' ? '' : '%');
+                    $pct = min($p['achievement'], 100);
+                @endphp
+                <div class="stx-progress-item mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <span class="stx-cat-chip">
+                            <span class="stx-cat-dot" style="background:{{ $stxPalette[$loop->index % count($stxPalette)] }}"></span>
+                            {{ $p['category'] }}
+                            @if(!$selectedPartyName && $p['parties_count'] > 1)<small class="text-muted ml-1">({{ $p['parties_count'] }} parties)</small>@endif
+                        </span>
+                        <span class="stx-badge-ach {{ $p['achievement']>=100?'good':'warn' }}">{{ number_format($p['achievement'],1) }}%</span>
+                    </div>
+                    <div class="stx-progress-track">
+                        <div class="stx-progress-fill" data-pct="{{ $pct }}" style="background:{{ $p['achievement']>=100 ? 'linear-gradient(90deg,#10b981,#5eead4)' : 'linear-gradient(90deg,#7C3AED,#6366F1)' }}"></div>
+                    </div>
+                    <div class="d-flex justify-content-between mt-1">
+                        <small class="text-muted">Target: {{ $unitSuffix }} {{ number_format($p['target'],2) }}</small>
+                        <small class="text-muted">Complete: {{ $unitSuffix }} {{ number_format($p['actual'],2) }}</small>
+                    </div>
+                </div>
+                @endforeach
+            </div>
+            @else
+            <div class="stx-empty">
+                <span class="stx-empty-emoji">🎯</span>
+                <h5>Abhi koi target progress nahi hai</h5>
+                <p class="mb-0">Filters change karke phir dekhein.</p>
+            </div>
+            @endif
+        </div>
+    </div>
 </div>
 @endsection
 
@@ -345,7 +385,6 @@ $(function () {
     const common = { responsive:true, maintainAspectRatio:false, animation:{ duration:1400, easing:'easeOutQuart' },
         plugins:{ tooltip:{ enabled:true, displayColors:true } } };
 
-    // ---- 3D-style Pie (doughnut with gradient slices + drop shadow via CSS) ----
     new Chart($('#stxPieChart'), { type:'doughnut',
         data:{ labels:c.labels, datasets:[{
             data:c.actual,
@@ -363,7 +402,6 @@ $(function () {
         options: { ...common, cutout: '66%', rotation: -15,
             plugins: { tooltip: { enabled: true, displayColors: true }, legend: { display: false } } } });
 
-    // ---- Custom legend beside the pie: category-wise target share % ----
     (function () {
         const totalTarget = c.target.reduce((sum, v) => sum + (parseFloat(v) || 0), 0) || 1;
         let topIdx = 0, topShare = -1, legendHtml = '';
@@ -399,7 +437,6 @@ $(function () {
             backgroundColor:'rgba(124,58,237,.2)', borderColor:'#7C3AED', pointBackgroundColor:palette }] },
         options:{ ...common, scales:{ r:{ beginAtZero:true, suggestedMax:100 } } } });
 
-    // tab switching
     $('.stx-tab').on('click', function () {
         $('.stx-tab').removeClass('active');
         $('.stx-pane').removeClass('active');
@@ -407,12 +444,10 @@ $(function () {
         $('#' + $(this).data('pane')).addClass('active');
     });
 
-    // DataTable
     if ($('#stxReportTable').length) {
         $('#stxReportTable').DataTable({ pageLength:25, order:[[5,'desc']] });
     }
 
-    // KPI count-up animation
     $('.stx-count').each(function () {
         const $el = $(this), target = parseFloat($el.data('target')) || 0;
         let start = 0; const duration = 1100, startTime = performance.now();
@@ -425,7 +460,6 @@ $(function () {
         requestAnimationFrame(step);
     });
 
-    // Achievement ring fill
     const $ring = $('#stxAchRing');
     if ($ring.length) {
         const pct = Math.min(parseFloat($ring.data('pct')) || 0, 100);
@@ -434,7 +468,11 @@ $(function () {
         setTimeout(() => $ring.css('stroke-dashoffset', offset), 200);
     }
 
-    // Hinglish toast feedback (SweetAlert2)
+    $('.stx-progress-fill').each(function(){
+        const $bar = $(this), pct = Math.min(parseFloat($bar.data('pct'))||0, 100);
+        setTimeout(()=> $bar.css('width', pct+'%'), 250);
+    });
+
     $('#stxFilterForm').on('submit', function () {
         if (window.Swal) {
             Swal.fire({ toast:true, position:'top-end', showConfirmButton:false, timer:1400,
