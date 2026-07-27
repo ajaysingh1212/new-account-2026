@@ -17,6 +17,8 @@
     @method('PUT')
     <input type="hidden" name="sales_invoice_item_id" id="salesInvoiceItemId" value="{{ $replacement->sales_invoice_item_id }}">
     <input type="hidden" name="returned_unit" id="returnedUnit" value='@json($replacement->returned_unit)'>
+    <input type="hidden" name="issued_item_id" id="issuedItemId" value="{{ $replacement->issued_item_id ?: $replacement->item_id }}">
+    <div class="row mb-3"><div class="col-md-6 form-group"><label>Replacement party ID (leave blank for original)</label><input name="target_party_id" class="form-control" value="{{ $replacement->target_party_id }}"></div><div class="col-md-3 form-group"><label>Ledger amount</label><input type="number" step="0.01" min="0" name="ledger_amount" class="form-control" value="{{ $replacement->ledger_amount }}"></div><div class="col-md-3 form-group pt-4"><label><input type="checkbox" name="ledger_enabled" value="1" @checked($replacement->ledger_enabled)> Add to ledger</label></div></div>
     <div class="row">
         <div class="col-md-8 form-group"><label>Bill / Serial / SKU / Buyer Code</label><input id="lookupQ" class="form-control" placeholder="Example: 1392414026"></div>
         <div class="col-md-2 form-group"><button type="button" id="lookupBtn" class="btn btn-primary btn-block"><i class="fas fa-search mr-1"></i>Search</button></div>
@@ -60,6 +62,7 @@ $(document).on('click','.result-row',function(){
     $('.result-row').removeClass('active'); $(this).addClass('active');
     const row = window.lookupRows[$(this).data('index')];
     $('#salesInvoiceItemId').val(row.invoice_item_id);
+    $('#issuedItemId').val(row.item_id);
     $('#returnedUnit').val(JSON.stringify(row.unit || {}));
     $('#customerName').val(row.party);
     $('#customerEmail').val(row.party_email || '');

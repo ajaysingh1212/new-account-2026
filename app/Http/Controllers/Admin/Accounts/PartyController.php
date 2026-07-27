@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\Party;
 use App\Models\PartyLedger;
+use App\Models\PartyOpeningBalanceAdjustment;
 use App\Services\EntryVisibilityService;
 use App\Services\PartyOutstandingService;
 use Illuminate\Http\Request;
@@ -128,6 +129,11 @@ class PartyController extends Controller
             ->latest('advance_date')
             ->latest('id')
             ->get();
+        $openingBalanceAdjustments = $party->openingBalanceAdjustments()
+            ->with('creator')
+            ->latest('adjustment_date')
+            ->latest('id')
+            ->get();
 
         return view('admin.parties.show', compact(
             'party',
@@ -136,7 +142,8 @@ class PartyController extends Controller
             'statementSummary',
             'availableCustomerAdvances',
             'availableSupplierAdvances',
-            'advanceHistory'
+            'advanceHistory',
+            'openingBalanceAdjustments'
         ));
     }
 

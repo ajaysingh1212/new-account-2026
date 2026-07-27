@@ -11,9 +11,10 @@
         </div>
     </div>
     <div class="card-body">
+        @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
         <div class="table-responsive">
             <table id="paymentsTable" class="table table-hover">
-                <thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Bank/Cash</th><th>Bills</th><th>Reference</th><th>Amount</th><th>Discount</th><th>Total</th><th>Mode</th><th>Created By</th></tr></thead>
+                <thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Bank/Cash</th><th>Bills</th><th>Reference</th><th>Amount</th><th>Discount</th><th>Total</th><th>Mode</th><th>Created By</th><th>Actions</th></tr></thead>
                 <tbody>
                 @foreach($payments as $payment)
                     <tr>
@@ -39,6 +40,18 @@
                         <td><strong>Rs {{ number_format((float) $payment->total_amount, 2) }}</strong></td>
                         <td>{{ $payment->payment_mode ?: '-' }}</td>
                         <td><strong>{{ $payment->creator?->name ?? 'System' }}</strong><br><small class="text-muted">{{ $payment->creator?->rolesForCompany($payment->company_id)->pluck('name')->join(', ') ?: 'No role' }}</small></td>
+                        <td>
+                            @can('party_payments.create')
+                                <a href="{{ route('admin.party-payments.edit', $payment) }}" class="btn btn-sm btn-info mb-1"><i class="fas fa-edit"></i></a>
+                            @endcan
+                            @can('party_payments.delete')
+                                <form action="{{ route('admin.party-payments.destroy', $payment) }}" method="POST" class="d-inline" onsubmit="return confirm('Is payment ko delete karne par payment revert ho jayega aur create/update ka sara ledger effect undo ho jayega. Kya aap continue karna chahte hain?');">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button class="btn btn-sm btn-danger mb-1"><i class="fas fa-trash"></i></button>
+                                </form>
+                            @endcan
+                        </td>
                     </tr>
                 @endforeach
                 </tbody>

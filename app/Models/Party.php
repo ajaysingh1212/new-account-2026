@@ -29,6 +29,7 @@ class Party extends Model
     public function company() { return $this->belongsTo(Company::class); }
     public function ledgers() { return $this->hasMany(PartyLedger::class); }
     public function advances() { return $this->hasMany(PartyAdvance::class); }
+    public function openingBalanceAdjustments() { return $this->hasMany(PartyOpeningBalanceAdjustment::class); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
 
     public function getBalanceLabelAttribute(): string

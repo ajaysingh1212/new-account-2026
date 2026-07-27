@@ -4,7 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Item;
-use App\Models\PartyLedger;
+use App\Models\Party;
 use App\Models\ProductionBatch;
 use App\Models\Replacement;
 use App\Models\SalesInvoice;
@@ -40,7 +40,15 @@ class ReplacementController extends Controller
 
     public function create()
     {
-        return view('admin.replacements.create', ['replacementNo' => $this->nextNo()]);
+        $companyId = auth()->user()->current_company_id;
+
+        return view('admin.replacements.create', [
+            'replacementNo' => $this->nextNo(),
+            'parties' => Party::where('company_id', $companyId)->where('status', 'active')->orderBy('display_name')->get(),
+            'replacementItems' => Item::where('company_id', $companyId)
+                ->where('status', 'active')->where('track_stock', true)->where('current_stock', '>', 0)
+                ->orderBy('name')->get(),
+        ]);
     }
 
     public function lookup(Request $request)
@@ -49,22 +57,41 @@ class ReplacementController extends Controller
         $term = trim((string) $request->input('q', ''));
         abort_if($term === '', 422, 'Search value required.');
         $needle = mb_strtolower($term);
+        $alreadyRequestedKeys = Replacement::where('company_id', $companyId)
+            ->where('status', 'completed')
+            ->get()->pluck('returned_unit')->filter()
+            ->map(fn($unit) => is_array($unit) ? ($unit['key'] ?? null) : null)
+            ->filter()->values()->all();
 
+        // Do not rely only on a SQL LIKE against the JSON selected_units column.
+        // MySQL/SQLite JSON storage differs, while the sales screen reads the
+        // same serial from decoded selected_units. Fetch candidate bills and
+        // perform the serial match in PHP so every sold serial is searchable.
         $invoices = SalesInvoice::with(['party','items.item'])
             ->where('company_id', $companyId)
             ->where(function ($query) use ($term) {
                 $query->where('invoice_no', 'like', "%{$term}%")
-                    ->orWhereHas('items', fn($itemQuery) => $itemQuery
-                        ->where('selected_units', 'like', "%{$term}%")
-                        ->orWhereHas('item', fn($q) => $q->where('sku', 'like', "%{$term}%")->orWhere('item_code', 'like', "%{$term}%")));
+                    ->orWhereHas('items.item', fn($q) => $q->where('sku', 'like', "%{$term}%")->orWhere('item_code', 'like', "%{$term}%"));
             })
-            ->latest('billing_date')
-            ->limit(20)
-            ->get();
+            ->latest('billing_date')->limit(50)->get();
 
-        $rows = $invoices->flatMap(function (SalesInvoice $invoice) use ($needle) {
-            return $invoice->items->flatMap(function (SalesInvoiceItem $line) use ($invoice, $needle) {
-                $units = collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit))->values();
+        $serialInvoices = SalesInvoice::with(['party','items.item'])
+            ->where('company_id', $companyId)
+            ->latest('billing_date')->limit(500)->get()
+            ->filter(fn(SalesInvoice $invoice) => collect($invoice->items)->contains(
+                fn(SalesInvoiceItem $line) => collect($line->selected_units ?? [])->contains(
+                    fn($unit) => is_array($unit) && collect($unit)->contains(
+                        fn($value) => str_contains(mb_strtolower((string) $value), $needle)
+                    )
+                )
+            ));
+        $invoices = $invoices->concat($serialInvoices)->unique('id')->values();
+
+        $rows = $invoices->flatMap(function (SalesInvoice $invoice) use ($needle, $alreadyRequestedKeys) {
+            return $invoice->items->flatMap(function (SalesInvoiceItem $line) use ($invoice, $needle, $alreadyRequestedKeys) {
+                $units = collect($line->selected_units ?? [])
+                    ->filter(fn($unit) => is_array($unit) && !in_array($unit['key'] ?? null, $alreadyRequestedKeys, true))
+                    ->values();
                 $lineMatches = str_contains(mb_strtolower((string) $invoice->invoice_no), $needle)
                     || str_contains(mb_strtolower((string) $line->item?->sku), $needle)
                     || str_contains(mb_strtolower((string) $line->item?->item_code), $needle);
@@ -100,6 +127,10 @@ class ReplacementController extends Controller
 
         $data = $request->validate([
             'sales_invoice_item_id' => ['required','exists:sales_invoice_items,id'],
+            'issued_item_id' => ['required','exists:items,id'],
+            'target_party_id' => ['nullable','exists:parties,id'],
+            'ledger_enabled' => ['nullable','boolean'],
+            'ledger_amount' => ['nullable','numeric','min:0'],
             'returned_unit' => ['nullable','string'],
             'customer_name' => ['nullable','string','max:255'],
             'customer_email' => ['nullable','email','max:255'],
@@ -115,6 +146,12 @@ class ReplacementController extends Controller
         $line = SalesInvoiceItem::with(['salesInvoice.party','item'])
             ->whereHas('salesInvoice', fn($q) => $q->where('company_id', $companyId))
             ->findOrFail($data['sales_invoice_item_id']);
+        $issuedItem = Item::where('company_id', $companyId)->where('status', 'active')
+            ->where('track_stock', true)->where('current_stock', '>', 0)->findOrFail($data['issued_item_id']);
+        $targetPartyId = $data['target_party_id'] ?: $line->salesInvoice->party_id;
+        if ($targetPartyId) {
+            Party::where('company_id', $companyId)->findOrFail($targetPartyId);
+        }
         $unit = json_decode($data['returned_unit'] ?? '[]', true) ?: [];
 
         $images = [];
@@ -127,9 +164,11 @@ class ReplacementController extends Controller
         $replacement = Replacement::create([
             'company_id' => $companyId,
             'party_id' => $line->salesInvoice->party_id,
+            'target_party_id' => $targetPartyId,
             'sales_invoice_id' => $line->sales_invoice_id,
             'sales_invoice_item_id' => $line->id,
             'item_id' => $line->item_id,
+            'issued_item_id' => $issuedItem->id,
             'replacement_no' => $this->nextNo(),
             'request_date' => now()->toDateString(),
             'returned_unit' => $unit,
@@ -138,6 +177,8 @@ class ReplacementController extends Controller
             'customer_phone' => $data['customer_phone'] ?? null,
             'customer_address' => $data['customer_address'] ?? null,
             'request_reason' => $data['request_reason'],
+            'ledger_enabled' => $request->boolean('ledger_enabled'),
+            'ledger_amount' => $request->boolean('ledger_enabled') ? (float) ($data['ledger_amount'] ?? $line->line_total) : null,
             'product_images' => $images,
             'created_by' => auth()->id(),
         ]);
@@ -149,11 +190,12 @@ class ReplacementController extends Controller
     public function show(Replacement $replacement, EntryVisibilityService $visibility, SerialUnitService $serialUnits)
     {
         $visibility->authorizeView($replacement);
-        $replacement->load(['party','item','invoice.items.item','invoiceItem.item','creator','approver']);
+        $replacement->load(['party','targetParty','item','issuedItem','invoice.items.item','invoiceItem.item','creator','approver']);
         $availableUnits = [];
 
         if ($replacement->status === 'approved') {
-            $availableUnits = collect($serialUnits->currentStockUnitsByItem($replacement->company_id, $replacement->item_id)[$replacement->item_id] ?? [])
+            $issuedItemId = $replacement->issued_item_id ?: $replacement->item_id;
+            $availableUnits = collect($serialUnits->currentStockUnitsByItem($replacement->company_id, $issuedItemId)[$issuedItemId] ?? [])
                 ->values()
                 ->all();
         }
@@ -165,7 +207,7 @@ class ReplacementController extends Controller
     {
         $visibility->authorizeView($replacement);
         abort_unless(in_array($replacement->status, ['pending', 'rejected'], true), 422, 'Only pending or rejected replacements can be edited.');
-        $replacement->load(['party','item','invoice','invoiceItem']);
+        $replacement->load(['party','targetParty','item','issuedItem','invoice','invoiceItem']);
 
         return view('admin.replacements.edit', compact('replacement'));
     }
@@ -178,6 +220,10 @@ class ReplacementController extends Controller
         $companyId = auth()->user()->current_company_id;
         $data = $request->validate([
             'sales_invoice_item_id' => ['required','exists:sales_invoice_items,id'],
+            'issued_item_id' => ['required','exists:items,id'],
+            'target_party_id' => ['nullable','exists:parties,id'],
+            'ledger_enabled' => ['nullable','boolean'],
+            'ledger_amount' => ['nullable','numeric','min:0'],
             'returned_unit' => ['nullable','string'],
             'customer_name' => ['nullable','string','max:255'],
             'customer_email' => ['nullable','email','max:255'],
@@ -193,6 +239,12 @@ class ReplacementController extends Controller
         $line = SalesInvoiceItem::with(['salesInvoice.party','item'])
             ->whereHas('salesInvoice', fn($q) => $q->where('company_id', $companyId))
             ->findOrFail($data['sales_invoice_item_id']);
+        $issuedItem = Item::where('company_id', $companyId)->where('status', 'active')
+            ->where('track_stock', true)->where('current_stock', '>', 0)->findOrFail($data['issued_item_id']);
+        $targetPartyId = $data['target_party_id'] ?: $line->salesInvoice->party_id;
+        if ($targetPartyId) {
+            Party::where('company_id', $companyId)->findOrFail($targetPartyId);
+        }
         $unit = json_decode($data['returned_unit'] ?? '[]', true) ?: [];
 
         $images = $replacement->product_images ?? [];
@@ -204,15 +256,19 @@ class ReplacementController extends Controller
 
         $replacement->fill([
             'party_id' => $line->salesInvoice->party_id,
+            'target_party_id' => $targetPartyId,
             'sales_invoice_id' => $line->sales_invoice_id,
             'sales_invoice_item_id' => $line->id,
             'item_id' => $line->item_id,
+            'issued_item_id' => $issuedItem->id,
             'returned_unit' => $unit,
             'customer_name' => $data['customer_name'] ?: ($line->salesInvoice->party?->display_name ?: $replacement->customer_name),
             'customer_email' => $data['customer_email'] ?? null,
             'customer_phone' => $data['customer_phone'] ?? null,
             'customer_address' => $data['customer_address'] ?? null,
             'request_reason' => $data['request_reason'],
+            'ledger_enabled' => $request->boolean('ledger_enabled'),
+            'ledger_amount' => $request->boolean('ledger_enabled') ? (float) ($data['ledger_amount'] ?? $line->line_total) : null,
             'product_images' => $images,
         ]);
         $replacement->save();
@@ -276,13 +332,14 @@ class ReplacementController extends Controller
         abort_unless($replacement->status === 'approved', 422, 'Approve replacement before issuing stock.');
         $data = $request->validate([
             'issued_unit' => ['required','string'],
-            'issue_narration' => ['required','string'],
+            'issue_narration' => ['nullable','string'],
             'issue_attachment' => ['nullable','file','max:4096'],
         ]);
 
         DB::transaction(function () use ($replacement, $data, $request, $serialUnits, $accounting) {
-            $replacement->refresh()->load(['item','party']);
-            $item = Item::lockForUpdate()->findOrFail($replacement->item_id);
+            $replacement->refresh()->load(['item','party','targetParty','invoiceItem']);
+            $item = Item::lockForUpdate()->findOrFail($replacement->issued_item_id ?: $replacement->item_id);
+            $targetParty = $replacement->targetParty ?: $replacement->party;
             $requestedUnit = json_decode($data['issued_unit'], true) ?: [];
             $requestedIdentity = $serialUnits->unitIdentity($requestedUnit);
             $availableUnit = collect($serialUnits->currentStockUnitsByItem($replacement->company_id, $item->id)[$item->id] ?? [])
@@ -293,7 +350,7 @@ class ReplacementController extends Controller
             }
 
             $movement = $accounting->moveStock($item, [
-                'party_id' => $replacement->party_id,
+                'party_id' => $targetParty?->id,
                 'movement_date' => now()->toDateString(),
                 'movement_type' => 'replacement_issue',
                 'direction' => 'out',
@@ -303,24 +360,20 @@ class ReplacementController extends Controller
                 'reference_type' => Replacement::class,
                 'reference_id' => $replacement->id,
                 'reference_no' => $replacement->replacement_no,
-                'description' => $data['issue_narration'],
+                'description' => $data['issue_narration'] ?: 'Replacement item issued.',
                 'movement_units' => [$availableUnit],
             ]);
 
-            if ($replacement->party) {
-                PartyLedger::create([
-                    'company_id' => $replacement->company_id,
-                    'party_id' => $replacement->party_id,
+            if ($targetParty && $replacement->ledger_enabled && (float) $replacement->ledger_amount > 0) {
+                $accounting->postPartyLedger($targetParty, [
                     'entry_date' => now()->toDateString(),
                     'entry_type' => 'replacement',
                     'reference_type' => Replacement::class,
                     'reference_id' => $replacement->id,
                     'reference_no' => $replacement->replacement_no,
-                    'debit' => 0,
+                    'debit' => (float) $replacement->ledger_amount,
                     'credit' => 0,
-                    'balance_after' => $replacement->party->current_balance,
-                    'description' => 'Replacement item issued without ledger amount.',
-                    'created_by' => auth()->id(),
+                    'description' => 'Replacement item payable added to party ledger.',
                 ]);
             }
 
@@ -417,6 +470,13 @@ class ReplacementController extends Controller
             'production_date' => $batch->production_date?->format('d M Y'),
             'quantity' => (float) $batch->quantity,
             'cost_per_unit' => (float) $batch->cost_per_unit,
+            'raw_materials' => Item::with('bomMaterials.rawItem')->find($itemId)?->bomMaterials
+                ->map(fn($bom) => [
+                    'name' => $bom->rawItem?->name ?: 'Service',
+                    'quantity' => (float) $bom->qty_per_unit,
+                    'unit' => $bom->rawItem?->unit ?: '',
+                    'line_type' => $bom->line_type ?? 'raw_material',
+                ])->values()->all() ?: [],
         ];
     }
 }

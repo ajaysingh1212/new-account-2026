@@ -326,6 +326,53 @@
     </div>
 </div>
 
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h3 class="card-title m-0"><i class="fas fa-balance-scale mr-2 text-purple"></i> Opening Balance Adjustments</h3>
+        <small class="text-muted">Yahan dikhega kisne kab receivable/payable ko kam ya zyada kiya.</small>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover table-bordered mb-0">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Changed By</th>
+                        <th>Role</th>
+                        <th>Previous</th>
+                        <th>Action</th>
+                        <th>Adjusted</th>
+                        <th>New Amount</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @forelse($openingBalanceAdjustments as $adjustment)
+                        <tr style="background:{{ $adjustment->direction === 'increase' ? '#f0fdf4' : '#fff7ed' }};">
+                            <td><strong>{{ $adjustment->adjustment_date?->format('d M Y') ?: '—' }}</strong></td>
+                            <td>{{ $adjustment->creator?->name ?: 'System' }}</td>
+                            <td>{{ $adjustment->created_role ?: 'No role' }}</td>
+                            <td>Rs {{ number_format((float) $adjustment->previous_amount, 2) }}</td>
+                            <td>
+                                <span class="badge {{ $adjustment->direction === 'increase' ? 'badge-success' : 'badge-warning' }}">
+                                    {{ ucfirst($adjustment->direction) }}
+                                </span>
+                            </td>
+                            <td>Rs {{ number_format(abs((float) $adjustment->adjustment_amount), 2) }}</td>
+                            <td><strong>Rs {{ number_format((float) $adjustment->new_amount, 2) }}</strong></td>
+                            <td>{{ $adjustment->reason ?: '-' }}</td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td colspan="8" class="text-center text-muted py-4">No opening balance adjustments found.</td>
+                        </tr>
+                    @endforelse
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
 {{-- Ledger Statement --}}
 <div class="card border-0 shadow-sm">
 

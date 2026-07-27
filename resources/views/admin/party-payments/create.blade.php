@@ -1,5 +1,5 @@
 @extends('layouts.admin')
-@section('title', $type === 'payment_out' ? 'Payment Out' : 'Payment In')
+@section('title', $type === 'payment_out' ? (($payment ?? null) ? 'Edit Payment Out' : 'Payment Out') : (($payment ?? null) ? 'Edit Payment In' : 'Payment In'))
 
 @push('styles')
 <style>
@@ -17,30 +17,45 @@
 
 @section('content')
 <div class="payment-hero mb-4">
-    <h3><i class="fas {{ $type === 'payment_out' ? 'fa-arrow-up' : 'fa-arrow-down' }} mr-2"></i>{{ $type === 'payment_out' ? 'Payment Out' : 'Payment In' }}</h3>
+    <h3><i class="fas {{ $type === 'payment_out' ? 'fa-arrow-up' : 'fa-arrow-down' }} mr-2"></i>{{ $payment ?? null ? 'Edit ' : '' }}{{ $type === 'payment_out' ? 'Payment Out' : 'Payment In' }}</h3>
     <div style="opacity:.75;font-size:13px;">Party statement and bank/cash balance will be updated together.</div>
 </div>
-<form method="POST" action="{{ route('admin.party-payments.store') }}" enctype="multipart/form-data">
+<form method="POST" action="{{ isset($payment) ? route('admin.party-payments.update', $payment) : route('admin.party-payments.store') }}" enctype="multipart/form-data">
     @csrf
+    @if(isset($payment)) @method('PUT') @endif
     <input type="hidden" name="payment_type" value="{{ $type }}">
-    <input type="hidden" name="settlement_source" id="settlementSource" value="bills">
-    <input type="hidden" name="opening_balance_amount" id="openingBalanceAmount">
+    <input type="hidden" name="settlement_source" id="settlementSource" value="{{ old('settlement_source', isset($payment) && $payment->advance ? 'advance' : ((isset($payment) && $payment->allocations->where('bill_type', 'opening_balance')->isNotEmpty()) ? 'opening_balance' : 'bills')) }}">
+    <input type="hidden" name="opening_balance_amount" id="openingBalanceAmount" value="{{ old('opening_balance_amount', isset($payment) && $payment->allocations->where('bill_type', 'opening_balance')->isNotEmpty() ? number_format((float) $payment->allocations->where('bill_type', 'opening_balance')->sum('amount'), 2, '.', '') : '') }}">
     <input type="hidden" name="advance_amount" id="advanceAmount">
+    <input type="hidden" name="adjustment_type" id="adjustmentType" value="{{ old('adjustment_type') }}">
+    <input type="hidden" name="adjustment_amount" id="adjustmentAmount" value="{{ old('adjustment_amount') }}">
+    <input type="hidden" name="adjustment_note" id="adjustmentNote" value="{{ old('adjustment_note') }}">
+    <input type="hidden" name="existing_attachment" value="{{ old('existing_attachment', $payment->attachment ?? '') }}">
     <div class="payment-panel">
         <div class="panel-head">Payment Details</div>
         <div class="p-4">
             @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
             <div class="row">
-                <div class="col-md-4 form-group"><label>Select Party *</label><select name="party_id" id="partySelect" class="form-control select2" required><option value="">Select party</option>@foreach($parties as $party)<option value="{{ $party->id }}" @selected((string) old('party_id', request('party_id')) === (string) $party->id)>{{ $party->display_name }} | Balance Rs {{ number_format(abs((float)$party->current_balance),2) }} {{ $party->balance_label }}</option>@endforeach</select></div>
-                <div class="col-md-4 form-group"><label>Select Bank/Cash *</label><select name="bank_account_id" class="form-control select2" required><option value="">Select account</option>@foreach($accounts as $account)<option value="{{ $account->id }}" @selected((string) old('bank_account_id') === (string) $account->id)>{{ $account->account_name }} | Rs {{ number_format((float)$account->current_balance,2) }}</option>@endforeach</select></div>
-                <div class="col-md-2 form-group"><label>Date *</label><input type="date" name="payment_date" class="form-control" value="{{ old('payment_date', now()->toDateString()) }}" required></div>
-                <div class="col-md-2 form-group"><label>Reference No.</label><input name="reference_no" class="form-control" value="{{ old('reference_no') }}"></div>
+                <div class="col-md-4 form-group"><label>Select Party *</label><select name="party_id" id="partySelect" class="form-control select2" required><option value="">Select party</option>@foreach($parties as $party)<option value="{{ $party->id }}" @selected((string) old('party_id', request('party_id', $payment->party_id ?? '')) === (string) $party->id)>{{ $party->display_name }} | Balance Rs {{ number_format(abs((float)$party->current_balance),2) }} {{ $party->balance_label }}</option>@endforeach</select></div>
+                <div class="col-md-4 form-group"><label>Select Bank/Cash *</label><select name="bank_account_id" class="form-control select2" required><option value="">Select account</option>@foreach($accounts as $account)<option value="{{ $account->id }}" @selected((string) old('bank_account_id', $payment->bank_account_id ?? '') === (string) $account->id)>{{ $account->account_name }} | Rs {{ number_format((float)$account->current_balance,2) }}</option>@endforeach</select></div>
+                <div class="col-md-2 form-group"><label>Date *</label><input type="date" name="payment_date" class="form-control" value="{{ old('payment_date', optional($payment->payment_date ?? null)->format('Y-m-d') ?? now()->toDateString()) }}" required></div>
+                <div class="col-md-2 form-group"><label>Reference No.</label><input name="reference_no" class="form-control" value="{{ old('reference_no', $payment->reference_no ?? '') }}"></div>
             </div>
             <div class="row">
-                <div class="col-md-3 form-group"><label>Amount *</label><input type="number" step="0.01" min="0.01" name="amount" id="payAmount" class="form-control" readonly required></div>
-                <div class="col-md-3 form-group"><label>Discount</label><input type="number" step="0.01" min="0" name="discount_amount" id="payDiscount" class="form-control" value="{{ old('discount_amount', 0) }}"></div>
-                <div class="col-md-3 form-group"><label>Payment Mode</label><select name="payment_mode" class="form-control">@foreach(['UPI','NEFT','RTGS','IMPS','Cash','Cheque','Card','Other'] as $mode)<option @selected(old('payment_mode') === $mode)>{{ $mode }}</option>@endforeach</select></div>
+                <div class="col-md-3 form-group"><label>Amount *</label><input type="number" step="0.01" min="0.01" name="amount" id="payAmount" class="form-control" readonly required value="{{ old('amount', isset($payment) ? number_format((float) $payment->amount, 2, '.', '') : '') }}"></div>
+                <div class="col-md-3 form-group"><label>Discount</label><input type="number" step="0.01" min="0" name="discount_amount" id="payDiscount" class="form-control" value="{{ old('discount_amount', isset($payment) ? number_format((float) $payment->discount_amount, 2, '.', '') : 0) }}"></div>
+                <div class="col-md-3 form-group"><label>Payment Mode</label><select name="payment_mode" class="form-control">@foreach(['UPI','NEFT','RTGS','IMPS','Cash','Cheque','Card','Other'] as $mode)<option @selected(old('payment_mode', $payment->payment_mode ?? '') === $mode)>{{ $mode }}</option>@endforeach</select></div>
                 <div class="col-md-3"><div class="live-total"><div style="font-size:12px;color:#7a7194;">Net bank settlement</div><div class="amount" id="payTotal">Rs 0.00</div></div></div>
+            </div>
+
+            <div class="mb-3">
+                <button type="button" id="openAdjustmentModal" class="btn btn-outline-warning btn-sm" style="display:none"><i class="fas fa-pen-alt mr-1"></i> Receivable ko kam / zyada karein</button>
+                <div id="adjustmentSelected" class="opening-selected mt-2" style="display:none;border-color:#fdba74;background:#fff7ed;color:#9a3412;">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-exclamation-circle mr-1"></i> <span id="adjustmentSelectedText"></span></span>
+                        <button type="button" id="clearAdjustmentSelection" class="btn btn-sm btn-outline-warning">Remove</button>
+                    </div>
+                </div>
             </div>
 
             <div id="openingAction" class="opening-action">
@@ -63,13 +78,13 @@
                 <div id="billList" class="text-muted p-3" style="border:1px dashed #ddd;border-radius:12px;">Select party to fetch open bills.</div>
             </div>
             <div class="row">
-                <div class="col-md-6 form-group"><label>Description</label><textarea name="description" class="form-control" rows="4">{{ old('description') }}</textarea></div>
-                <div class="col-md-6 form-group"><label>Attachment</label><input type="file" name="attachment" class="form-control"><small class="text-muted">Receipt, cheque copy, UTR proof, etc.</small></div>
+                <div class="col-md-6 form-group"><label>Description</label><textarea name="description" class="form-control" rows="4">{{ old('description', $payment->description ?? '') }}</textarea></div>
+                <div class="col-md-6 form-group"><label>Attachment</label><input type="file" name="attachment" class="form-control"><small class="text-muted">Receipt, cheque copy, UTR proof, etc.</small>@if(!empty($payment?->attachment))<div class="mt-2 small text-muted">Current file: {{ basename($payment->attachment) }}</div>@endif</div>
             </div>
         </div>
         <div class="p-4 text-right" style="border-top:1px solid #f0eaf8;">
             <a href="{{ route('admin.party-payments.index', ['type' => $type]) }}" class="btn btn-outline-secondary">Cancel</a>
-            <button class="btn btn-primary"><i class="fas fa-save mr-1"></i> Post Payment</button>
+            <button class="btn btn-primary"><i class="fas fa-save mr-1"></i> {{ isset($payment) ? 'Update Payment' : 'Post Payment' }}</button>
         </div>
     </div>
 </form>
@@ -113,15 +128,72 @@
         <div class="modal-footer border-0 px-4 pb-4"><button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button><button type="button" id="confirmAdvanceSettlement" class="btn btn-info px-4"><i class="fas fa-check mr-1"></i> Save advance</button></div>
     </div></div>
 </div>
+
+<div class="modal fade opening-modal" id="adjustmentModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered" role="document"><div class="modal-content">
+        <div class="modal-header"><div><div style="opacity:.7;font-size:12px;text-transform:uppercase;font-weight:800;letter-spacing:.5px">Receivable Correction</div><h4 class="modal-title mt-1">Opening balance ko kam ya zyada karein</h4></div><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+        <div class="modal-body">
+            <div id="adjustmentHistory" class="mb-4"></div>
+            <div class="row">
+                <div class="col-md-4 form-group">
+                    <label>Action</label>
+                    <select id="adjustmentModalType" class="form-control">
+                        <option value="increase">Amount Increase</option>
+                        <option value="decrease">Amount Decrease</option>
+                    </select>
+                </div>
+                <div class="col-md-4 form-group">
+                    <label>Amount</label>
+                    <input type="number" id="adjustmentModalAmount" min="0.01" step="0.01" class="form-control" placeholder="0.00">
+                </div>
+                <div class="col-md-4 form-group">
+                    <label>Effective opening balance</label>
+                    <input type="text" id="adjustmentProjectedBalance" class="form-control" readonly>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Reason / Note</label>
+                <textarea id="adjustmentModalNote" class="form-control" rows="3" placeholder="Kyun amount correct kiya gaya"></textarea>
+            </div>
+        </div>
+        <div class="modal-footer border-0 px-4 pb-4"><button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancel</button><button type="button" id="confirmAdjustmentSelection" class="btn btn-warning px-4"><i class="fas fa-check mr-1"></i> Use correction</button></div>
+    </div></div>
+</div>
 @endsection
 
 @push('scripts')
+@php
+    $existingPaymentPayload = null;
+    if (isset($payment)) {
+        $existingPaymentPayload = [
+            'id' => $payment->id,
+            'settlement_source' => $payment->advance
+                ? 'advance'
+                : ($payment->allocations->where('bill_type', 'opening_balance')->isNotEmpty() ? 'opening_balance' : 'bills'),
+            'advance_amount' => $payment->advance ? (float) $payment->amount : null,
+            'opening_amount' => $payment->allocations->where('bill_type', 'opening_balance')->isNotEmpty()
+                ? (float) $payment->allocations->where('bill_type', 'opening_balance')->sum('amount')
+                : null,
+            'allocations' => $payment->allocations
+                ->where('bill_type', '!=', 'opening_balance')
+                ->map(function ($row) {
+                    return [
+                        'bill_id' => $row->bill_id,
+                        'amount' => (float) $row->amount,
+                    ];
+                })
+                ->values()
+                ->all(),
+        ];
+    }
+@endphp
 <script>
-let openBills = [], openingBalance = null, availableAdvances = [], selectedPartyText = '';
+let openBills = [], openingBalance = null, availableAdvances = [], selectedPartyText = '', adjustmentHistory = [];
+const existingPayment = @json($existingPaymentPayload);
 function fmt(n){return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function renderTotal(){
     let total=0;
-    if($('#settlementSource').val()==='opening_balance') total=parseFloat($('#openingBalanceAmount').val()||0);
+    if($('#settlementSource').val()==='opening_balance' || $('#settlementSource').val()==='advance') total=parseFloat(($('#settlementSource').val()==='advance' ? $('#advanceAmount').val() : $('#openingBalanceAmount').val())||0);
     else $('.bill-check:checked').each(function(){total+=parseFloat($(this).closest('.bill-row').find('.allocation-input').val()||0)});
     $('#payAmount').val(total ? total.toFixed(2) : '');
     $('#payTotal').text(fmt(Math.max(0,total-parseFloat($('#payDiscount').val()||0))));
@@ -140,6 +212,23 @@ function renderAdvanceAction(){
         ? `${availableAdvances.length} advance payment(s) already recorded for this party.`
         : 'No advance payment recorded yet. You can still create one now.');
 }
+function renderAdjustmentButton(){
+    $('#openAdjustmentModal').toggle(!!$('#partySelect').val() && '{{ $type }}' === 'payment_in');
+}
+function renderAdjustmentHistory(){
+    if(!adjustmentHistory.length){
+        $('#adjustmentHistory').html('<div class="text-muted small">Abhi tak koi manual correction nahi hua.</div>');
+        return;
+    }
+    $('#adjustmentHistory').html(`<div class="table-responsive"><table class="table table-sm table-bordered mb-0"><thead><tr><th>Date</th><th>User</th><th>Role</th><th>Before</th><th>Action</th><th>Change</th><th>After</th></tr></thead><tbody>${adjustmentHistory.map(row=>`<tr style="background:${row.direction==='increase'?'#f0fdf4':'#fff7ed'}"><td>${row.date||'-'}</td><td>${row.user}</td><td>${row.role}</td><td>${fmt(row.previous_amount)}</td><td>${row.direction}</td><td>${fmt(row.adjustment_amount)}</td><td>${fmt(row.new_amount)}</td></tr>`).join('')}</tbody></table></div>`);
+}
+function updateProjectedBalance(){
+    const current = Number(openingBalance?.total || 0);
+    const amount = Number($('#adjustmentModalAmount').val() || 0);
+    const type = $('#adjustmentModalType').val();
+    const next = Math.max(0, current + (type === 'decrease' ? -amount : amount));
+    $('#adjustmentProjectedBalance').val(fmt(next));
+}
 function clearOpeningSettlement(){
     $('#settlementSource').val('bills');$('#openingBalanceAmount').val('');$('#openingSelected').hide();$('#billList').show();renderOpeningAction();renderTotal();
 }
@@ -157,10 +246,30 @@ function renderBills(){
 }
 async function fetchBills(){
     const partyId=$('#partySelect').val();clearOpeningSettlement();
-    if(!partyId){openBills=[];openingBalance=null;availableAdvances=[];selectedPartyText='';renderBills();renderOpeningAction();renderAdvanceAction();return}
+    if(!partyId){openBills=[];openingBalance=null;availableAdvances=[];adjustmentHistory=[];selectedPartyText='';renderBills();renderOpeningAction();renderAdvanceAction();renderAdjustmentButton();return}
     $('#billList').html('<div class="text-muted p-3">Loading bills...</div>');
     const res=await fetch(`{{ route('admin.party-payments.open-bills') }}?party_id=${partyId}&payment_type={{ $type }}`,{headers:{Accept:'application/json'}});
-    const payload=res.ok?await res.json():{bills:[],opening_balance:null,available_advances:[]};openBills=payload.bills||[];openingBalance=payload.opening_balance||null;availableAdvances=payload.available_advances||[];selectedPartyText=$('#partySelect option:selected').text().trim();renderBills();renderOpeningAction();renderAdvanceAction();
+    const payload=res.ok?await res.json():{bills:[],opening_balance:null,available_advances:[],adjustment_history:[]};openBills=payload.bills||[];openingBalance=payload.opening_balance||null;availableAdvances=payload.available_advances||[];adjustmentHistory=payload.adjustment_history||[];selectedPartyText=$('#partySelect option:selected').text().trim();renderBills();renderOpeningAction();renderAdvanceAction();renderAdjustmentButton();
+    if(existingPayment && String(existingPayment.id) !== ''){
+        if(existingPayment.settlement_source==='opening_balance' && existingPayment.opening_amount){
+            $('#settlementSource').val('opening_balance');
+            $('#openingBalanceAmount').val(Number(existingPayment.opening_amount).toFixed(2));
+            $('#openingSelectedText').text(`${fmt(existingPayment.opening_amount)} {{ $type === 'payment_out' ? 'payable' : 'receivable' }} against opening balance`);
+            $('#openingSelected').show();
+            $('#openingAction').hide();
+            $('#billList').hide();
+        } else if(existingPayment.settlement_source==='advance' && existingPayment.advance_amount){
+            $('#settlementSource').val('advance');
+            $('#advanceAmount').val(Number(existingPayment.advance_amount).toFixed(2));
+        } else if(Array.isArray(existingPayment.allocations)){
+            existingPayment.allocations.forEach(row=>{
+                const card = $(`input[name$="[bill_id]"][value="${row.bill_id}"]`).closest('.bill-row');
+                card.find('.bill-check').prop('checked', true).trigger('change');
+                card.find('.allocation-input').val(Number(row.amount).toFixed(2));
+            });
+        }
+        renderTotal();
+    }
 }
 $('#partySelect').on('change',fetchBills);
 $('#openOpeningModal').on('click',function(){
@@ -186,6 +295,31 @@ $('#openAdvanceModal').on('click',function(){
     $('#advanceModalAmount').val(total > 0 ? total.toFixed(2) : '');
     $('#advanceModalNote').val('');
     $('#advanceModal').modal('show');
+});
+$('#openAdjustmentModal').on('click',function(){
+    renderAdjustmentHistory();
+    $('#adjustmentModalType').val($('#adjustmentType').val() || 'increase');
+    $('#adjustmentModalAmount').val($('#adjustmentAmount').val() || '');
+    $('#adjustmentModalNote').val($('#adjustmentNote').val() || '');
+    updateProjectedBalance();
+    $('#adjustmentModal').modal('show');
+});
+$('#adjustmentModalType,#adjustmentModalAmount').on('input change',updateProjectedBalance);
+$('#confirmAdjustmentSelection').on('click',function(){
+    const amount=parseFloat($('#adjustmentModalAmount').val()||0);
+    const type=$('#adjustmentModalType').val();
+    const note=$('#adjustmentModalNote').val().trim();
+    if(amount<=0){alert('Adjustment amount enter karein.');return}
+    $('#adjustmentType').val(type);
+    $('#adjustmentAmount').val(amount.toFixed(2));
+    $('#adjustmentNote').val(note);
+    $('#adjustmentSelectedText').text(`${type === 'increase' ? 'Increase' : 'Decrease'} by ${fmt(amount)}${note ? ' | ' + note : ''}`);
+    $('#adjustmentSelected').show();
+    $('#adjustmentModal').modal('hide');
+});
+$('#clearAdjustmentSelection').on('click',function(){
+    $('#adjustmentType,#adjustmentAmount,#adjustmentNote').val('');
+    $('#adjustmentSelected').hide();
 });
 $('#useFullAdvanceAmount').on('click',function(){
     const total=availableAdvances.reduce((sum,row)=>sum+(Number(row.remaining_amount)||0),0);
@@ -214,6 +348,6 @@ $(document).on('change','.bill-check',function(){
     const row=$(this).closest('.bill-row'),due=parseFloat(row.data('due')||0);row.toggleClass('active',this.checked);row.find('.pay-box').toggle(this.checked);row.find('input[name]').prop('disabled',!this.checked);if(this.checked&&!row.find('.allocation-input').val())row.find('.allocation-input').val(due.toFixed(2));if(!this.checked)row.find('.allocation-input').val('');renderTotal();
 });
 $(document).on('input','.allocation-input,#payDiscount',function(){const row=$(this).closest('.bill-row');if(row.length&&parseFloat(this.value||0)>parseFloat(row.data('due')||0)){alert('Aap bill due amount se jyada payment nahi kar sakte.');this.value=parseFloat(row.data('due')||0).toFixed(2)}renderTotal()});
-renderTotal();if($('#partySelect').val())fetchBills();
+renderTotal();renderAdjustmentButton();if($('#partySelect').val())fetchBills();
 </script>
 @endpush

@@ -10,11 +10,11 @@ class Replacement extends Model
     use SoftDeletes;
 
     protected $fillable = [
-        'company_id','party_id','sales_invoice_id','sales_invoice_item_id','item_id',
+        'company_id','party_id','target_party_id','sales_invoice_id','sales_invoice_item_id','item_id',
         'replacement_no','request_date','returned_unit','issued_unit','issued_item_id',
         'stock_movement_id','customer_name','customer_email','customer_phone',
         'customer_address','request_reason','product_images','status','admin_reason',
-        'admin_attachment','issue_narration','issue_attachment','created_by',
+        'admin_attachment','issue_narration','issue_attachment','ledger_enabled','ledger_amount','created_by',
         'approved_by','approved_at','issued_at',
     ];
 
@@ -25,10 +25,13 @@ class Replacement extends Model
         'product_images' => 'array',
         'approved_at' => 'datetime',
         'issued_at' => 'datetime',
+        'ledger_enabled' => 'boolean',
+        'ledger_amount' => 'decimal:2',
     ];
 
     public function company() { return $this->belongsTo(Company::class); }
     public function party() { return $this->belongsTo(Party::class); }
+    public function targetParty() { return $this->belongsTo(Party::class, 'target_party_id'); }
     public function invoice() { return $this->belongsTo(SalesInvoice::class, 'sales_invoice_id'); }
     public function invoiceItem() { return $this->belongsTo(SalesInvoiceItem::class, 'sales_invoice_item_id'); }
     public function item() { return $this->belongsTo(Item::class); }

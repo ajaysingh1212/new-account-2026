@@ -11,9 +11,9 @@
 <div class="card"><div class="card-header d-flex justify-content-between align-items-center"><h3 class="card-title m-0">{{ $replacement->replacement_no }}</h3><div><a href="{{ route('admin.replacements.index') }}" class="btn btn-light btn-sm">Back</a>@if(in_array($replacement->status, ['pending','rejected'], true))<a href="{{ route('admin.replacements.edit', $replacement) }}" class="btn btn-warning btn-sm ml-2">Edit</a><form action="{{ route('admin.replacements.destroy', $replacement) }}" method="POST" onsubmit="return confirm('Delete this replacement request?');" style="display:inline"><input type="hidden" name="_token" value="{{ csrf_token() }}"><input type="hidden" name="_method" value="DELETE"><button class="btn btn-danger btn-sm ml-2">Delete</button></form>@endif</div></div>
 <div class="card-body">
     <div class="row">
-        <div class="col-md-4"><h5>Party / Customer</h5><p><b>{{ $replacement->party?->display_name ?: $replacement->customer_name }}</b><br>{{ $replacement->customer_phone }}<br>{{ $replacement->customer_email }}<br>{{ $replacement->customer_address }}</p></div>
+        <div class="col-md-4"><h5>Party / Customer</h5><p><b>{{ $replacement->party?->display_name ?: $replacement->customer_name }}</b>@if($replacement->targetParty && $replacement->targetParty->id !== $replacement->party?->id)<br><span class="text-primary">Replacement party: {{ $replacement->targetParty->display_name }}</span>@endif<br>{{ $replacement->customer_phone }}<br>{{ $replacement->customer_email }}<br>{{ $replacement->customer_address }}</p></div>
         <div class="col-md-4"><h5>Sold Item</h5><p><b>{{ $replacement->item?->name }}</b><br>SKU: {{ $replacement->item?->sku ?: '-' }}<br>Invoice: {{ $replacement->invoice?->invoice_no }} | Selling date: {{ $replacement->invoice?->billing_date?->format('d M Y') }}<br>Sale price: Rs {{ number_format((float)($replacement->invoiceItem?->unit_price ?? 0),2) }} | Line: Rs {{ number_format((float)($replacement->invoiceItem?->line_total ?? 0),2) }}<br>Current selling price: Rs {{ number_format((float)($replacement->item?->sale_price ?? 0),2) }}</p></div>
-        <div class="col-md-4"><h5>Status</h5><p><span class="badge badge-primary">{{ ucfirst($replacement->status) }}</span><br>Reason: {{ $replacement->request_reason }}</p></div>
+        <div class="col-md-4"><h5>Status</h5><p><span class="badge badge-primary">{{ ucfirst($replacement->status) }}</span><br>Reason: {{ $replacement->request_reason }}<br>Ledger: {{ $replacement->ledger_enabled ? 'Yes — Rs '.number_format((float)$replacement->ledger_amount,2) : 'No' }}</p></div>
     </div>
     <h5>Returned Serial</h5>
     <p>{{ $replacement->returned_unit['serial_no'] ?? '-' }} | VTS: {{ $replacement->returned_unit['vts_sim'] ?? '-' }} | Buyer: {{ $replacement->returned_unit['buyer_code'] ?? '-' }} | Key: {{ $replacement->returned_unit['key'] ?? '-' }} | Production: {{ $replacement->returned_unit['production_date'] ?? '-' }} | Batch: {{ $replacement->returned_unit['production_batch_no'] ?? $replacement->returned_unit['batch_no'] ?? '-' }}</p>
@@ -27,7 +27,7 @@
     @endif
 
     @if($replacement->status === 'approved')
-        <div class="card bg-light"><div class="card-body"><h5>Issue Replacement Stock</h5>
+        <div class="card bg-light"><div class="card-body"><h5>Issue Replacement Stock</h5><p class="text-muted">Issuing: <b>{{ $replacement->issuedItem?->name ?: $replacement->item?->name }}</b>. Approval ke baad selected serial stock se minus hoga.</p>
             @if(empty($availableUnits))
                 <div class="alert alert-warning">Same item current stock me available nahi hai.</div>
             @else
@@ -60,7 +60,7 @@
                             </div>
                         @endforeach
                     </div>
-                    <div class="form-group"><label>Narration</label><textarea name="issue_narration" class="form-control" required></textarea></div>
+                    <div class="form-group"><label>Narration <small class="text-muted">(optional)</small></label><textarea name="issue_narration" class="form-control"></textarea></div>
                     <div class="form-group"><label>Attachment</label><input type="file" name="issue_attachment" class="form-control"></div>
                     <button class="btn btn-primary">Issue Replacement</button>
                 </form>
