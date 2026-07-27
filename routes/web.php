@@ -98,7 +98,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::get('party-advances/available', [PartyAdvanceController::class, 'available'])->name('party-advances.available');
         Route::resource('party-payments', PartyPaymentController::class)->only(['index','create','store']);
         Route::resource('party-payments', PartyPaymentController::class)->only(['edit','update'])->middleware('permission:party_payments.create');
-        Route::resource('party-payments', PartyPaymentController::class)->only(['destroy'])->middleware('permission:party_payments.delete');
+        Route::resource('party-payments', PartyPaymentController::class)->only(['destroy'])->middleware('permission:party_payments.create');
     });
     Route::middleware('permission:product_types.view')->group(function () {
         Route::resource('product-types', ProductTypeController::class)->only(['index']);

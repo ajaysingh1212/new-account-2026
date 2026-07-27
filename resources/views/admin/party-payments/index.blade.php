@@ -43,8 +43,6 @@
                         <td>
                             @can('party_payments.create')
                                 <a href="{{ route('admin.party-payments.edit', $payment) }}" class="btn btn-sm btn-info mb-1"><i class="fas fa-edit"></i></a>
-                            @endcan
-                            @can('party_payments.delete')
                                 <form action="{{ route('admin.party-payments.destroy', $payment) }}" method="POST" class="d-inline" onsubmit="return confirm('Is payment ko delete karne par payment revert ho jayega aur create/update ka sara ledger effect undo ho jayega. Kya aap continue karna chahte hain?');">
                                     @csrf
                                     @method('DELETE')

@@ -112,6 +112,8 @@ class PermissionSeeder extends Seeder
 
             ['name'=>'View Party Payments', 'slug'=>'party_payments.view', 'module'=>'party_payments'],
             ['name'=>'Create Party Payments', 'slug'=>'party_payments.create', 'module'=>'party_payments'],
+            ['name'=>'Edit Party Payments', 'slug'=>'party_payments.edit', 'module'=>'party_payments'],
+            ['name'=>'Delete Party Payments', 'slug'=>'party_payments.delete', 'module'=>'party_payments'],
 
             ['name'=>'View Party Reports', 'slug'=>'reports.party', 'module'=>'reports'],
             ['name'=>'View Stock Reports', 'slug'=>'reports.stock', 'module'=>'reports'],
