@@ -32,7 +32,7 @@
                     <td>
                         <a href="{{ route('admin.delivery-challans.show', $challan) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a>
                         @if($canManage && $challan->status !== 'cancelled' && !$challan->convertedInvoice && auth()->user()->can('delivery_challans.edit'))
-                            <form action="{{ route('admin.delivery-challans.convert', $challan) }}" method="POST" class="d-inline" onsubmit="return confirm('Convert this delivery challan to sale? Stock will not change again.');">@csrf <button class="btn btn-success btn-sm"><i class="fas fa-sync"></i></button></form>
+                            <a href="{{ route('admin.delivery-challans.convert-form', $challan) }}" class="btn btn-success btn-sm" title="Convert to Sale"><i class="fas fa-sync"></i></a>
                             <a href="{{ route('admin.delivery-challans.edit', $challan) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>
                         @endif
                         @can('delivery_challans.print')<a href="{{ route('admin.delivery-challans.print', $challan) }}" class="btn btn-secondary btn-sm" target="_blank"><i class="fas fa-print"></i></a>@endcan
