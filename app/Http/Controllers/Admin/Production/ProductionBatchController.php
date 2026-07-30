@@ -10,6 +10,7 @@ use App\Models\Party;
 use App\Models\ProductionBatch;
 use App\Models\SalesInvoiceItem;
 use App\Models\StockMovement;
+use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\CrmIdentifierPropagationService;
 use App\Services\EntryVisibilityService;

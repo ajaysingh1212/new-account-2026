@@ -37,7 +37,7 @@
             @if($errors->any())<div class="alert alert-danger">{{ $errors->first() }}</div>@endif
             <div class="row">
                 <div class="col-md-4 form-group"><label>Select Party *</label><select name="party_id" id="partySelect" class="form-control select2" required><option value="">Select party</option>@foreach($parties as $party)<option value="{{ $party->id }}" @selected((string) old('party_id', request('party_id', $payment->party_id ?? '')) === (string) $party->id)>{{ $party->display_name }} | Balance Rs {{ number_format(abs((float)$party->current_balance),2) }} {{ $party->balance_label }}</option>@endforeach</select></div>
-                <div class="col-md-4 form-group"><label>Select Bank/Cash *</label><select name="bank_account_id" class="form-control select2" required><option value="">Select account</option>@foreach($accounts as $account)<option value="{{ $account->id }}" @selected((string) old('bank_account_id', $payment->bank_account_id ?? '') === (string) $account->id)>{{ $account->account_name }} | Rs {{ number_format((float)$account->current_balance,2) }}</option>@endforeach</select></div>
+                <div class="col-md-4 form-group"><label id="bankLabel">Select Bank/Cash *</label><select name="bank_account_id" id="bankAccountSelect" class="form-control select2" required><option value="">Select account</option>@foreach($accounts as $account)<option value="{{ $account->id }}" @selected((string) old('bank_account_id', $payment->bank_account_id ?? '') === (string) $account->id)>{{ $account->account_name }} | Rs {{ number_format((float)$account->current_balance,2) }}</option>@endforeach</select></div>
                 <div class="col-md-2 form-group"><label>Date *</label><input type="date" name="payment_date" class="form-control" value="{{ old('payment_date', optional($payment->payment_date ?? null)->format('Y-m-d') ?? now()->toDateString()) }}" required></div>
                 <div class="col-md-2 form-group"><label>Reference No.</label><input name="reference_no" class="form-control" value="{{ old('reference_no', $payment->reference_no ?? '') }}"></div>
             </div>
@@ -197,6 +197,7 @@ function renderTotal(){
     else $('.bill-check:checked').each(function(){total+=parseFloat($(this).closest('.bill-row').find('.allocation-input').val()||0)});
     $('#payAmount').val(total ? total.toFixed(2) : '');
     $('#payTotal').text(fmt(Math.max(0,total-parseFloat($('#payDiscount').val()||0))));
+    syncBankRequirement();
 }
 function renderOpeningAction(){const usable=openingBalance&&openingBalance.available&&Number(openingBalance.remaining)>0;$('#openingAction').toggle(!!usable);if(usable)$('#openingActionAmount').text(fmt(openingBalance.remaining))}
 function renderAdvanceAction(){
@@ -214,6 +215,13 @@ function renderAdvanceAction(){
 }
 function renderAdjustmentButton(){
     $('#openAdjustmentModal').toggle(!!$('#partySelect').val() && '{{ $type }}' === 'payment_in');
+}
+function syncBankRequirement(){
+    const hasRealPayment = Number($('#payAmount').val() || 0) > 0;
+    const hasBills = $('.bill-check:checked').length > 0;
+    const needsBank = hasRealPayment || hasBills || $('#settlementSource').val()==='opening_balance' || $('#settlementSource').val()==='advance';
+    $('#bankAccountSelect').prop('required', needsBank);
+    $('#bankLabel').text(needsBank ? 'Select Bank/Cash *' : 'Select Bank/Cash');
 }
 function renderAdjustmentHistory(){
     if(!adjustmentHistory.length){
@@ -320,6 +328,7 @@ $('#confirmAdjustmentSelection').on('click',function(){
 $('#clearAdjustmentSelection').on('click',function(){
     $('#adjustmentType,#adjustmentAmount,#adjustmentNote').val('');
     $('#adjustmentSelected').hide();
+    syncBankRequirement();
 });
 $('#useFullAdvanceAmount').on('click',function(){
     const total=availableAdvances.reduce((sum,row)=>sum+(Number(row.remaining_amount)||0),0);
@@ -341,6 +350,7 @@ $('#confirmAdvanceSettlement').on('click',function(){
     $('#billList').show();
     $('#advanceModal').modal('hide');
     $('#payTotal').text(fmt(Math.max(0, amount-parseFloat($('#payDiscount').val()||0))));
+    syncBankRequirement();
 });
 $('#clearOpeningSettlement').on('click',clearOpeningSettlement);
 $(document).on('change','.bill-check',function(){
@@ -348,6 +358,6 @@ $(document).on('change','.bill-check',function(){
     const row=$(this).closest('.bill-row'),due=parseFloat(row.data('due')||0);row.toggleClass('active',this.checked);row.find('.pay-box').toggle(this.checked);row.find('input[name]').prop('disabled',!this.checked);if(this.checked&&!row.find('.allocation-input').val())row.find('.allocation-input').val(due.toFixed(2));if(!this.checked)row.find('.allocation-input').val('');renderTotal();
 });
 $(document).on('input','.allocation-input,#payDiscount',function(){const row=$(this).closest('.bill-row');if(row.length&&parseFloat(this.value||0)>parseFloat(row.data('due')||0)){alert('Aap bill due amount se jyada payment nahi kar sakte.');this.value=parseFloat(row.data('due')||0).toFixed(2)}renderTotal()});
-renderTotal();renderAdjustmentButton();if($('#partySelect').val())fetchBills();
+renderTotal();renderAdjustmentButton();syncBankRequirement();if($('#partySelect').val())fetchBills();
 </script>
 @endpush

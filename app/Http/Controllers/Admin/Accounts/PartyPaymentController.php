@@ -122,7 +122,14 @@ class PartyPaymentController extends Controller
     public function store(Request $request, AccountingService $accounting, EntryVisibilityService $visibility, PartyOutstandingService $outstanding, PartyAdvanceService $advanceService)
     {
         $data = $this->validatedData($request);
+        $adjustmentOnly = $this->isAdjustmentOnly($data);
+
         $payment = DB::transaction(fn() => $this->persistPayment($data, $request, $accounting, $visibility, $outstanding, $advanceService));
+
+        if (!$payment) {
+            return redirect()->route('admin.party-payments.index', ['type' => $data['payment_type']])
+                ->with('success', 'Opening balance adjustment saved successfully.');
+        }
 
         AuditLog::log('created', [
             'model' => PartyPayment::class,
@@ -187,10 +194,10 @@ class PartyPaymentController extends Controller
         $data = $request->validate([
             'payment_type' => ['required', Rule::in(['payment_in','payment_out'])],
             'party_id' => ['required', Rule::exists('parties', 'id')->where('company_id', $companyId)],
-            'bank_account_id' => ['required', Rule::exists('bank_accounts', 'id')->where('company_id', $companyId)],
+            'bank_account_id' => ['nullable', Rule::exists('bank_accounts', 'id')->where('company_id', $companyId)],
             'payment_date' => ['required','date'],
             'reference_no' => ['nullable','string','max:255'],
-            'amount' => ['required','numeric','min:0.01'],
+            'amount' => ['nullable','numeric','min:0'],
             'discount_amount' => ['nullable','numeric','min:0'],
             'payment_mode' => ['nullable','string','max:40'],
             'description' => ['nullable','string'],
@@ -212,16 +219,26 @@ class PartyPaymentController extends Controller
             ? $request->file('attachment')->store('payment-attachments', 'public')
             : ($payment?->attachment ?: ($data['existing_attachment'] ?? null));
 
+        $adjustmentOnly = $this->isAdjustmentOnly($data);
+        if (!$adjustmentOnly) {
+            abort_if(empty($data['bank_account_id']), 422, 'Bank/Cash account select karein.');
+            abort_if((float) ($data['amount'] ?? 0) <= 0, 422, 'Payment amount enter karein.');
+        }
+
         return $data;
     }
 
-    private function persistPayment(array $data, Request $request, AccountingService $accounting, EntryVisibilityService $visibility, PartyOutstandingService $outstanding, PartyAdvanceService $advanceService, ?PartyPayment $payment = null): PartyPayment
+    private function persistPayment(array $data, Request $request, AccountingService $accounting, EntryVisibilityService $visibility, PartyOutstandingService $outstanding, PartyAdvanceService $advanceService, ?PartyPayment $payment = null): ?PartyPayment
     {
         $companyId = auth()->user()->current_company_id;
         $party = Party::where('company_id', $companyId)->lockForUpdate()->findOrFail($data['party_id']);
-        $account = BankAccount::where('company_id', $companyId)->lockForUpdate()->findOrFail($data['bank_account_id']);
 
         $this->applyOpeningAdjustmentIfNeeded($party, $data);
+        if ($this->isAdjustmentOnly($data)) {
+            return null;
+        }
+
+        $account = BankAccount::where('company_id', $companyId)->lockForUpdate()->findOrFail($data['bank_account_id']);
 
         $allocations = collect($data['allocations'] ?? [])
             ->filter(fn($row) => (float) ($row['amount'] ?? 0) > 0)
@@ -366,6 +383,17 @@ class PartyPaymentController extends Controller
         }
 
         return $payment;
+    }
+
+    private function isAdjustmentOnly(array $data): bool
+    {
+        $hasAdjustment = !empty($data['adjustment_type']) && (float) ($data['adjustment_amount'] ?? 0) > 0;
+        $hasBills = collect($data['allocations'] ?? [])->contains(fn($row) => (float) ($row['amount'] ?? 0) > 0);
+        $hasOpeningSettlement = ($data['settlement_source'] ?? null) === 'opening_balance' && (float) ($data['opening_balance_amount'] ?? 0) > 0;
+        $hasAdvanceSettlement = ($data['settlement_source'] ?? null) === 'advance';
+        $hasPaymentAmount = (float) ($data['amount'] ?? 0) > 0;
+
+        return $hasAdjustment && !$hasBills && !$hasOpeningSettlement && !$hasAdvanceSettlement && !$hasPaymentAmount;
     }
 
     private function applyOpeningAdjustmentIfNeeded(Party $party, array $data): void
