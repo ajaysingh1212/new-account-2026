@@ -31,6 +31,7 @@
                         @endif
                     </td>
                     <td>
+                        <button type="button" class="btn btn-primary btn-sm estimate-detail-btn" title="Profit and item details" data-detail='@json($detail ?? [])' data-pdf="{{ route('admin.estimates.detail-pdf', $estimate) }}"><i class="fas fa-chart-line"></i></button>
                         <a href="{{ route('admin.estimates.show', $estimate) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a>
                         @if($canManage && $estimate->status !== 'converted' && $estimate->status !== 'cancelled' && auth()->user()->can('estimates.convert'))
                             <a href="{{ route('admin.estimates.convert-form', $estimate) }}" class="btn btn-success btn-sm"><i class="fas fa-sync mr-1"></i>Convert</a>
@@ -45,5 +46,49 @@
         </table>
     </div>
 </div>
+<div class="modal fade" id="estimateDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content" style="border:0;border-radius:16px;overflow:hidden;">
+            <div class="modal-header" style="background:linear-gradient(135deg,#111827,#0f766e);color:#fff;border:0;">
+                <div><h5 class="modal-title mb-0" id="estimateDetailTitle">Estimate Details</h5><small id="estimateDetailSub"></small></div>
+                <div><a href="#" target="_blank" class="btn btn-light btn-sm" id="estimateDetailPdf"><i class="fas fa-file-pdf mr-1"></i>PDF</a><button type="button" class="close text-white ml-2" data-dismiss="modal"><span>&times;</span></button></div>
+            </div>
+            <div class="modal-body" style="background:#f8fafc;">
+                <div class="row" id="estimateDetailMetrics"></div>
+                <div class="row">
+                    <div class="col-lg-5 mb-3"><div class="p-3 bg-white rounded border h-100"><h6 class="font-weight-bold">Party & CRM</h6><div id="estimateDetailParty" class="small"></div></div></div>
+                    <div class="col-lg-7 mb-3"><div class="p-3 bg-white rounded border h-100"><h6 class="font-weight-bold">Items, Pricing, BOM & Units</h6><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Item</th><th>Qty</th><th>Sale</th><th>Cost</th><th>Profit</th><th>Profit %</th></tr></thead><tbody id="estimateDetailItems"></tbody></table></div></div></div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 @endsection
-@push('scripts')<script>$('#estimatesTable').DataTable({pageLength:25, columnDefs:[{orderable:false, targets:8}]});</script>@endpush
+@push('scripts')<script>
+$('#estimatesTable').DataTable({pageLength:25, columnDefs:[{orderable:false, targets:8}]});
+const emoney = value => 'Rs ' + Number(value || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
+$(document).on('click', '.estimate-detail-btn', function() {
+    const detail = $(this).data('detail') || {};
+    $('#estimateDetailTitle').text('Estimate ' + (detail.estimate || detail.invoice || '-'));
+    $('#estimateDetailSub').text([detail.date, detail.party?.name].filter(Boolean).join(' | '));
+    $('#estimateDetailPdf').attr('href', $(this).data('pdf'));
+    const metrics = [
+        ['Estimate Total', detail.amounts?.total],
+        ['Purchase Cost', detail.amounts?.cost],
+        ['Profit / Loss', detail.amounts?.profit],
+        ['Profit % on Cost', detail.amounts?.profit_percent, '%'],
+    ];
+    $('#estimateDetailMetrics').html(metrics.map(([label, value, suffix]) => `<div class="col-md-3 mb-3"><div class="p-3 bg-white rounded border"><small class="text-muted text-uppercase font-weight-bold">${label}</small><div class="h5 mb-0 ${Number(value) < 0 ? 'text-danger' : ''}">${suffix === '%' ? Number(value || 0).toFixed(2) + '%' : emoney(value)}</div></div></div>`).join(''));
+    $('#estimateDetailParty').html(`<b>${detail.party?.name || 'Cash / Walk-in'}</b><br>Legal: ${detail.party?.legal_name || '-'}<br>Phone: ${detail.party?.phone || detail.phone || '-'}<br>Email: ${detail.party?.email || '-'}<br>GSTIN: ${detail.party?.gstin || '-'}<br>City: ${detail.party?.city || '-'}<hr class="my-2">Billing: ${detail.billing_address || '-'}<br>Shipping: ${detail.shipping_address || '-'}`);
+    $('#estimateDetailItems').html((detail.items || []).map(item => {
+        const bom = (item.bom || []).map(row => {
+            const amount = Number(row.amount || 0);
+            const type = row.line_type === 'service' ? 'Service' : 'Raw';
+            return `${type} - ${row.name}: ${Number(row.qty_per_unit || 0)} ${row.unit || ''} @ ${emoney(row.unit_price || row.purchase_price)} = ${emoney(amount)}`;
+        }).join('<br>') || '-';
+        const units = (item.units || []).length ? item.units.map(unit => `${unit.serial_no || '-'} / ${unit.vts_sim || '-'} / ${unit.batch_no || '-'} / ${unit.buyer_code || '-'}`).join('<br>') : 'Not allocated yet (assigned on conversion to Sales Invoice)';
+        return `<tr><td><b>${item.name}</b><br><small>${item.description || '-'}</small><br><small><b>BOM:</b><br>${bom}</small><br><small><b>CRM Units:</b><br>${units}</small></td><td>${Number(item.qty || 0).toFixed(2)} ${item.unit || ''}</td><td>${emoney(item.amount)}</td><td>${emoney(item.cost)}</td><td class="${Number(item.profit) < 0 ? 'text-danger' : 'text-success'}"><b>${emoney(item.profit)}</b></td><td class="${Number(item.profit_percent) < 0 ? 'text-danger' : 'text-success'}"><b>${Number(item.profit_percent || 0).toFixed(2)}%</b></td></tr>`;
+    }).join('') || '<tr><td colspan="6" class="text-center text-muted">No item details.</td></tr>');
+    $('#estimateDetailModal').modal('show');
+});
+</script>@endpush

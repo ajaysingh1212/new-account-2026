@@ -1,5 +1,8 @@
 @extends('layouts.admin')
 @section('title','Pending Orders')
+@push('styles')
+@include('admin.partials.segment-viz-styles')
+@endpush
 @section('content')
 <div class="card">
     <div class="card-header"><h3 class="card-title m-0">Pending Orders</h3></div>
@@ -18,10 +21,36 @@
             <div class="col-md-3"><div class="small-box bg-success"><div class="inner"><h3>Rs {{ number_format($summary['profit'],2) }}</h3><p>Possible Profit</p></div></div></div>
             <div class="col-md-3"><div class="small-box bg-warning"><div class="inner"><h3>{{ number_format($summary['profit_percent'],2) }}%</h3><p>Profit on Cost</p></div></div></div>
         </div>
+
         <div class="row">
-            <div class="col-md-6"><canvas id="partyChart" height="130"></canvas></div>
-            <div class="col-md-6"><canvas id="categoryChart" height="130"></canvas></div>
+            <div class="col-lg-6 mb-3">
+                <div class="segment-report-modal segment-report-inline">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="font-weight-bold m-0">Pending by Category</h5>
+                    </div>
+                    <div class="segment-filter-grid">
+                        <select class="form-control segment-filter" data-filter="category" data-placeholder="All Categories"></select>
+                        <select class="form-control segment-filter" data-filter="party" data-placeholder="All Parties"></select>
+                        <select class="form-control segment-filter" data-filter="state" data-placeholder="All States"></select>
+                    </div>
+                    @include('admin.partials.segment-viz-body', ['segments' => $categorySegments, 'amountLabel' => 'Pending Sales'])
+                </div>
+            </div>
+            <div class="col-lg-6 mb-3">
+                <div class="segment-report-modal segment-report-inline">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="font-weight-bold m-0">Pending by Party</h5>
+                    </div>
+                    <div class="segment-filter-grid">
+                        <select class="form-control segment-filter" data-filter="category" data-placeholder="All Categories"></select>
+                        <select class="form-control segment-filter" data-filter="party" data-placeholder="All Parties"></select>
+                        <select class="form-control segment-filter" data-filter="state" data-placeholder="All States"></select>
+                    </div>
+                    @include('admin.partials.segment-viz-body', ['segments' => $partySegments, 'amountLabel' => 'Pending Sales'])
+                </div>
+            </div>
         </div>
+
         <div class="table-responsive mt-3">
             <table id="pendingTable" class="table table-hover">
                 <thead><tr><th>Date</th><th>Party</th><th>Challan</th><th>Category</th><th>Item</th><th>Pending Qty</th><th>Stock Now</th><th>Sales</th><th>Cost</th><th>Profit</th><th>%</th><th></th></tr></thead>
@@ -46,13 +75,9 @@
 <div class="modal fade" id="detailModal"><div class="modal-dialog modal-lg"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Item Details</h5><button class="close" data-dismiss="modal">&times;</button></div><div class="modal-body"><table class="table"><thead><tr><th>Raw Material</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody id="rawRows"></tbody></table></div></div></div></div>
 @endsection
 @push('scripts')
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+@include('admin.partials.segment-viz-scripts')
 <script>
 $('#pendingTable').DataTable({pageLength:25, columnDefs:[{orderable:false, targets:11}]});
-const partyData=@json($partyWise->map(fn($rows,$name)=>['name'=>$name,'sales'=>(float)$rows->sum('line_total')])->values());
-const catData=@json($categoryWise);
-function drawChart(id,data,label){new Chart(document.getElementById(id),{type:'bar',data:{labels:data.map(x=>x.name),datasets:[{label:label,data:data.map(x=>x.sales),backgroundColor:['#2563eb','#14b8a6','#f59e0b','#ef4444','#7c3aed','#22c55e']}]},options:{responsive:true,plugins:{legend:{display:false}}}})}
-drawChart('partyChart',partyData,'Party Pending');drawChart('categoryChart',catData,'Category Pending');
 $(document).on('click','.detail-btn',function(){let rows=$(this).data('detail')||[];$('.modal-title').text($(this).data('title'));$('#rawRows').html(rows.length?rows.map(r=>`<tr><td>${r.name}</td><td>${Number(r.qty||0).toFixed(2)} ${r.unit||''}</td><td>Rs ${Number(r.unit_price||0).toFixed(2)}</td><td>Rs ${Number(r.amount||0).toFixed(2)}</td></tr>`).join(''):'<tr><td colspan="4">No raw material details.</td></tr>');$('#detailModal').modal('show')});
 </script>
 @endpush

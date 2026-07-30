@@ -1,3 +1,6 @@
+@extends('layouts.admin')
+@section('title', 'Convert ' . ($sourceLabel ?? 'Document') . ' to Sale')
+@section('content')
 @php
     $lineData = collect($lineData ?? []);
     $isDeliveryChallan = ($sourceType ?? '') === 'delivery_challan';
@@ -378,3 +381,4 @@ if (prefill.length) {
 }
 </script>
 @endpush
+@endsection
