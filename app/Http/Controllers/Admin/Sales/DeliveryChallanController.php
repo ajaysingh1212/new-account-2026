@@ -8,6 +8,7 @@ use App\Models\DeliveryChallan;
 use App\Models\DeliveryChallanItem;
 use App\Models\Item;
 use App\Models\Party;
+use App\Models\PendingOrder;
 use App\Models\SalesInvoice;
 use App\Models\SalesInvoiceItem;
 use App\Models\SubCostCenter;
@@ -107,54 +108,146 @@ class DeliveryChallanController extends Controller
         return view('admin.delivery-challans.print', compact('deliveryChallan'));
     }
 
-    public function convert(DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility, AccountingService $accounting)
+    public function convertForm(DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility, SerialUnitService $serialUnits)
     {
         $visibility->authorizeManage($deliveryChallan);
         abort_if($deliveryChallan->status === 'cancelled', 422, 'Cancelled challan cannot be converted.');
         abort_if($deliveryChallan->converted_sales_invoice_id, 422, 'Delivery challan already converted to sale.');
 
-        DB::transaction(function () use ($deliveryChallan, $accounting) {
-            $deliveryChallan->load(['items.item', 'party']);
+        $deliveryChallan->load(['party', 'items.item']);
+        $companyId = $deliveryChallan->company_id;
+        $items = $deliveryChallan->items->map(function (DeliveryChallanItem $line) {
+            $item = $line->item;
+
+            return [
+                'item_id' => $line->item_id,
+                'name' => $item?->name ?: 'Item',
+                'code' => $item?->item_code ?: '-',
+                'unit' => $line->unit ?: $item?->unit,
+                'quantity' => (float) $line->quantity,
+                'unit_price' => (float) $line->unit_price,
+                'discount_type' => $line->discount_type,
+                'discount_value' => (float) $line->discount_value,
+                'tax_percent' => (float) $line->tax_percent,
+                'description' => $line->description,
+                'selected_units' => $line->selected_units ?? [],
+                'weight' => (float) ($item?->per_quantity_weight ?? 0),
+                'current_stock' => (float) ($item?->current_stock ?? 0),
+            ];
+        })->values();
+
+        $activeItems = Item::where('company_id', $companyId)
+            ->where('status', 'active')
+            ->whereHas('productType', fn($q) => $q->where('nature', 'finished_goods'))
+            ->orderBy('name')
+            ->get();
+
+        return view('admin.sales.convert', [
+            'sourceType' => 'delivery_challan',
+            'sourceLabel' => 'Delivery Challan',
+            'source' => $deliveryChallan,
+            'parties' => Party::where('company_id', $companyId)->where('status', 'active')->orderBy('display_name')->get(),
+            'items' => $activeItems,
+            'lineData' => $items,
+            'unitPool' => $serialUnits->unitPool($companyId, 'delivery_challan', $deliveryChallan->id),
+            'itemMeta' => $activeItems->mapWithKeys(fn(Item $item) => [
+                $item->id => [
+                    'requires_gps' => $serialUnits->isGpsItem($item),
+                    'weight' => (float) ($item->per_quantity_weight ?? 0),
+                    'current_stock' => (float) ($item->current_stock ?? 0),
+                ],
+            ])->all(),
+            'actionRoute' => route('admin.delivery-challans.convert', $deliveryChallan),
+            'backRoute' => route('admin.delivery-challans.show', $deliveryChallan),
+            'saleNo' => $this->nextSaleNo(),
+        ]);
+    }
+
+    public function convert(Request $request, DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility, AccountingService $accounting, SerialUnitService $serialUnits)
+    {
+        $visibility->authorizeManage($deliveryChallan);
+        abort_if($deliveryChallan->status === 'cancelled', 422, 'Cancelled challan cannot be converted.');
+        abort_if($deliveryChallan->converted_sales_invoice_id, 422, 'Delivery challan already converted to sale.');
+
+        $data = $request->validate([
+            'party_id' => ['nullable','exists:parties,id'],
+            'sale_type' => ['required','in:credit,cash'],
+            'invoice_no' => ['nullable','max:20'],
+            'billing_date' => ['required','date'],
+            'reference_no' => ['nullable','max:255'],
+            'phone' => ['nullable','max:255'],
+            'billing_address' => ['nullable','string'],
+            'shipping_address' => ['nullable','string'],
+            'discount_amount' => ['nullable','numeric','min:0'],
+            'notes' => ['nullable','string'],
+            'terms' => ['nullable','string'],
+            'selected_units.*' => ['nullable','string'],
+        ]);
+
+        DB::transaction(function () use ($request, $deliveryChallan, $accounting, $data, $serialUnits) {
+            $deliveryChallan->load(['items.item.bomMaterials.rawItem', 'party']);
+            $unitPool = $serialUnits->unitPool($deliveryChallan->company_id, 'delivery_challan', $deliveryChallan->id);
 
             $invoice = SalesInvoice::create([
                 'company_id' => $deliveryChallan->company_id,
-                'party_id' => $deliveryChallan->party_id,
+                'party_id' => $data['party_id'] ?: $deliveryChallan->party_id,
                 'cost_center_id' => $deliveryChallan->cost_center_id,
                 'sub_cost_center_id' => $deliveryChallan->sub_cost_center_id,
-                'sale_type' => $deliveryChallan->party_id ? 'credit' : 'cash',
-                'invoice_no' => $this->nextSaleNo(),
-                'billing_date' => $deliveryChallan->challan_date?->toDateString() ?? now()->toDateString(),
-                'reference_no' => $deliveryChallan->challan_no,
-                'phone' => $deliveryChallan->phone,
-                'billing_address' => $deliveryChallan->billing_address,
-                'shipping_address' => $deliveryChallan->shipping_address,
+                'sale_type' => $data['sale_type'],
+                'invoice_no' => $data['invoice_no'] ?: $this->nextSaleNo(),
+                'billing_date' => $data['billing_date'],
+                'reference_no' => $data['reference_no'] ?: $deliveryChallan->challan_no,
+                'phone' => $data['phone'] ?? $deliveryChallan->phone,
+                'billing_address' => $data['billing_address'] ?? $deliveryChallan->billing_address,
+                'shipping_address' => $data['shipping_address'] ?? $deliveryChallan->shipping_address,
                 'subtotal' => 0,
                 'discount_amount' => 0,
                 'tax_amount' => 0,
                 'grand_total' => 0,
-                'notes' => trim((string) $deliveryChallan->notes . "\nConverted from delivery challan {$deliveryChallan->challan_no}."),
-                'terms' => $deliveryChallan->terms,
+                'notes' => trim((string) ($data['notes'] ?? $deliveryChallan->notes) . "\nConverted from delivery challan {$deliveryChallan->challan_no}."),
+                'terms' => $data['terms'] ?? $deliveryChallan->terms,
                 'status' => 'posted',
                 'created_by' => auth()->id(),
             ]);
 
-            $subtotal = $tax = $lineDiscountTotal = 0;
-            foreach ($deliveryChallan->items as $line) {
+            $subtotal = $tax = $lineDiscountTotal = $selectedGrossTotal = $challanGrossTotal = 0;
+            $invoiceHasLines = false;
+            foreach ($deliveryChallan->items->values() as $i => $line) {
                 $item = $line->item;
                 if (!$item) {
+                    continue;
+                }
+
+                $requestedUnits = json_decode($request->selected_units[$i] ?? '[]', true) ?: [];
+                $selectedUnits = $serialUnits->reconcile($requestedUnits, $unitPool[$item->id] ?? [], min((int) $line->quantity, count($requestedUnits)), $serialUnits->isGpsItem($item));
+                $selectedQty = count($selectedUnits);
+                abort_if($selectedQty > (int) $line->quantity, 422, "{$item->name} ke selected units challan quantity se zyada hain.");
+                $challanGrossTotal += (float) $line->line_total;
+                $pendingQty = max(0, (float) $line->quantity - $selectedQty);
+                if ($pendingQty > 0) {
+                    $this->createPendingOrder($deliveryChallan, $line, $pendingQty);
+                }
+                if ($selectedQty <= 0) {
                     continue;
                 }
 
                 $lineDiscount = (float) ($line->discount_amount ?? 0);
                 $lineTax = (float) ($line->tax_amount ?? 0);
                 $gross = (float) $line->line_total;
+                if ($selectedQty < (float) $line->quantity) {
+                    $ratio = $selectedQty / (float) $line->quantity;
+                    $lineDiscount = round($lineDiscount * $ratio, 2);
+                    $lineTax = round($lineTax * $ratio, 2);
+                    $gross = round($gross * $ratio, 2);
+                }
                 $net = max(0, $gross - $lineTax);
+                $selectedGrossTotal += $gross;
 
                 SalesInvoiceItem::create([
                     'sales_invoice_id' => $invoice->id,
                     'item_id' => $line->item_id,
                     'description' => $line->description,
-                    'quantity' => $line->quantity,
+                    'quantity' => $selectedQty,
                     'unit' => $line->unit,
                     'unit_price' => $line->unit_price,
                     'discount_type' => $line->discount_type,
@@ -163,22 +256,49 @@ class DeliveryChallanController extends Controller
                     'tax_percent' => $line->tax_percent,
                     'tax_amount' => $lineTax,
                     'line_total' => $gross,
-                    'selected_units' => $line->selected_units ?? [],
+                    'selected_units' => $selectedUnits,
                 ]);
+                $invoiceHasLines = true;
+                $newUnits = collect($selectedUnits)
+                    ->reject(fn($unit) => in_array($unit['key'] ?? null, collect($line->selected_units ?? [])->pluck('key')->all(), true))
+                    ->values()
+                    ->all();
+                if (count($newUnits) > 0) {
+                    $accounting->moveStock($item, [
+                        'party_id' => $invoice->party_id,
+                        'movement_date' => $invoice->billing_date,
+                        'movement_type' => 'delivery_challan_conversion',
+                        'direction' => 'out',
+                        'quantity' => count($newUnits),
+                        'unit_price' => $item->purchase_price,
+                        'total_value' => count($newUnits) * (float) $item->purchase_price,
+                        'reference_type' => SalesInvoice::class,
+                        'reference_id' => $invoice->id,
+                        'reference_no' => $invoice->invoice_no,
+                        'description' => 'Additional stock out while converting delivery challan.',
+                        'movement_units' => $newUnits,
+                    ]);
+                }
 
                 $subtotal += $net;
                 $tax += $lineTax;
                 $lineDiscountTotal += $lineDiscount;
             }
 
-            $invoice->update([
+            if (!$invoiceHasLines) {
+                $invoice->delete();
+            } else {
+                $overallDiscount = (float) ($data['discount_amount'] ?? $deliveryChallan->discount_amount ?? 0);
+                $overallDiscount = $challanGrossTotal > 0 ? round($overallDiscount * ($selectedGrossTotal / $challanGrossTotal), 2) : 0;
+                $invoice->update([
                 'subtotal' => $subtotal,
-                'discount_amount' => $lineDiscountTotal + (float) $deliveryChallan->discount_amount,
+                'discount_amount' => $lineDiscountTotal + $overallDiscount,
                 'tax_amount' => $tax,
-                'grand_total' => max(0, $subtotal + $tax - (float) $deliveryChallan->discount_amount),
-            ]);
+                'grand_total' => max(0, $subtotal + $tax - $overallDiscount),
+                ]);
+            }
 
-            if ($invoice->party_id) {
+            if ($invoiceHasLines && $invoice->party_id) {
                 $accounting->postPartyLedger($invoice->party, [
                     'entry_date' => $invoice->billing_date,
                     'entry_type' => 'sale',
@@ -193,12 +313,12 @@ class DeliveryChallanController extends Controller
 
             $deliveryChallan->update([
                 'status' => 'converted',
-                'converted_sales_invoice_id' => $invoice->id,
+                'converted_sales_invoice_id' => $invoiceHasLines ? $invoice->id : null,
                 'converted_at' => now(),
             ]);
         });
 
-        return redirect()->route('admin.delivery-challans.show', $deliveryChallan)->with('success', 'Delivery challan converted to sale.');
+        return redirect()->route('admin.delivery-challans.show', $deliveryChallan)->with('success', 'Delivery challan converted. Pending items moved to Pending Orders.');
     }
 
     public function cancel(DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility, AccountingService $accounting)
@@ -283,13 +403,18 @@ class DeliveryChallanController extends Controller
             abort_unless((int)$item->company_id === (int)$challan->company_id, 422, 'Selected item does not belong to this company.');
             abort_if($item->productType?->nature === 'raw_material', 422, 'Raw materials cannot be dispatched from Delivery Challan.');
             abort_if($item->track_stock && (int)$qty != $qty, 422, "Quantity must be a whole number for {$item->name}.");
-            abort_if($item->track_stock && (float)$item->current_stock < $qty, 422, "Insufficient stock for {$item->name}.");
             $serials = app(SerialUnitService::class);
             $pool = collect($serials->unitPool($challan->company_id, 'delivery_challan', $challan->id)[$item->id] ?? [])
                 ->map(function($unit) use ($reservedKeys) { if (in_array($unit['key'] ?? null,$reservedKeys,true)) $unit['sold']=true; return $unit; })->all();
             $requested = json_decode($request->selected_units[$i] ?? '[]', true) ?: [];
-            $selectedUnits = $item->track_stock ? $serials->reconcile($requested, $pool, (int)$qty, $serials->isGpsItem($item)) : [];
-            abort_if($item->track_stock && count($selectedUnits) !== (int)$qty, 422, "{$item->name} ke liye {$qty} available serial/VTS units required hain.");
+            $availableCount = collect($pool)
+                ->where('sold', false)
+                ->when($serials->isGpsItem($item), fn($units) => $units->filter(fn($unit) => !empty($unit['vts_sim'])))
+                ->count();
+            $selectedUnits = $item->track_stock ? $serials->reconcile($requested, $pool, min((int)$qty, count($requested)), $serials->isGpsItem($item)) : [];
+            abort_if($item->track_stock && (float)$item->current_stock > 0 && count($requested) === 0, 422, "{$item->name} stock me hai, Serial / VTS select karna jaruri hai.");
+            abort_if($item->track_stock && $availableCount > 0 && count($selectedUnits) < min((int)$qty, $availableCount), 422, "{$item->name} ke available " . min((int)$qty, $availableCount) . " serial/VTS units select karna jaruri hai.");
+            abort_if($item->track_stock && count($selectedUnits) > (int)$qty, 422, "{$item->name} ke selected units quantity se zyada hain.");
             abort_if($serials->isGpsItem($item) && collect($selectedUnits)->contains(fn($u) => empty($u['vts_sim'])), 422, "GPS item {$item->name} ke liye SIM/VTS number wala unit select karein.");
             $reservedKeys = array_merge($reservedKeys, collect($selectedUnits)->pluck('key')->all());
             $price = (float) ($request->unit_price[$i] ?? 0);
@@ -317,14 +442,16 @@ class DeliveryChallanController extends Controller
                 'selected_units' => $selectedUnits,
             ]);
 
-            $accounting->moveStock($item, [
+            if (count($selectedUnits) > 0) {
+                $accounting->moveStock($item, [
                 'party_id' => $challan->party_id, 'movement_date' => $challan->challan_date,
-                'movement_type' => 'delivery_challan', 'direction' => 'out', 'quantity' => $qty,
-                'unit_price' => $item->purchase_price, 'total_value' => $qty * (float)$item->purchase_price,
+                'movement_type' => 'delivery_challan', 'direction' => 'out', 'quantity' => count($selectedUnits),
+                'unit_price' => $item->purchase_price, 'total_value' => count($selectedUnits) * (float)$item->purchase_price,
                 'reference_type' => DeliveryChallan::class, 'reference_id' => $challan->id,
                 'reference_no' => $challan->challan_no, 'description' => 'Delivery challan stock dispatch.',
                 'movement_units' => $selectedUnits,
-            ]);
+                ]);
+            }
 
             $subtotal += $taxable;
             $tax += $taxAmount;
@@ -344,16 +471,54 @@ class DeliveryChallanController extends Controller
     private function reverseStock(DeliveryChallan $challan, AccountingService $accounting, string $type): void
     {
         foreach ($challan->items as $line) if ($line->item) {
+            $selectedQty = count($line->selected_units ?? []);
+            if ($selectedQty <= 0) {
+                continue;
+            }
             $accounting->moveStock($line->item, [
                 'party_id' => $challan->party_id, 'movement_date' => now()->toDateString(),
-                'movement_type' => $type, 'direction' => 'in', 'quantity' => (float)$line->quantity,
+                'movement_type' => $type, 'direction' => 'in', 'quantity' => $selectedQty,
                 'unit_price' => $line->item->purchase_price,
-                'total_value' => (float)$line->quantity * (float)$line->item->purchase_price,
+                'total_value' => $selectedQty * (float)$line->item->purchase_price,
                 'reference_type' => DeliveryChallan::class, 'reference_id' => $challan->id,
                 'reference_no' => $challan->challan_no, 'description' => 'Delivery challan stock reversal.',
                 'movement_units' => $line->selected_units ?? [],
             ]);
         }
+    }
+
+    private function createPendingOrder(DeliveryChallan $challan, DeliveryChallanItem $line, float $qty): void
+    {
+        $ratio = (float) $line->quantity > 0 ? $qty / (float) $line->quantity : 0;
+        $cost = round($qty * (float) ($line->item?->purchase_price ?? 0), 2);
+        $sale = round((float) $line->line_total * $ratio, 2);
+        $profit = $sale - $cost;
+
+        PendingOrder::create([
+            'company_id' => $challan->company_id,
+            'party_id' => $challan->party_id,
+            'delivery_challan_id' => $challan->id,
+            'delivery_challan_item_id' => $line->id,
+            'item_id' => $line->item_id,
+            'pending_date' => $challan->challan_date?->toDateString() ?? now()->toDateString(),
+            'quantity' => $qty,
+            'unit' => $line->unit,
+            'unit_price' => $line->unit_price,
+            'discount_type' => $line->discount_type,
+            'discount_value' => $line->discount_value,
+            'discount_amount' => round((float) $line->discount_amount * $ratio, 2),
+            'tax_percent' => $line->tax_percent,
+            'tax_amount' => round((float) $line->tax_amount * $ratio, 2),
+            'line_total' => $sale,
+            'cost_amount' => $cost,
+            'profit_amount' => $profit,
+            'profit_percent' => $cost > 0 ? round($profit / $cost * 100, 2) : 0,
+            'raw_materials' => $line->item?->bomMaterials?->map(function ($bom) use ($qty) {
+                $unitPrice = (float) ($bom->unit_price ?? $bom->rawItem?->purchase_price ?? 0);
+                $rawQty = $qty * (float) $bom->qty_per_unit;
+                return ['name' => $bom->rawItem?->name ?: 'Raw material', 'qty' => $rawQty, 'unit' => $bom->rawItem?->unit, 'unit_price' => $unitPrice, 'amount' => round($rawQty * $unitPrice, 2)];
+            })->values(),
+        ]);
     }
 
     private function nextNo(): string

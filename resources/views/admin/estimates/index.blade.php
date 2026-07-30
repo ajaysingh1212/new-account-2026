@@ -8,7 +8,7 @@
     </div>
     <div class="card-body table-responsive">
         <table id="estimatesTable" class="table table-hover">
-            <thead><tr><th>No</th><th>Date</th><th>Valid Until</th><th>Party</th><th>Created By</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead><tr><th>No</th><th>Date</th><th>Valid Until</th><th>Party</th><th>Created By</th><th>Total</th><th>Profit</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
             @foreach($estimates as $estimate)
                 @php($canManage = app(\App\Services\EntryVisibilityService::class)->canManage(auth()->user(), $estimate))
@@ -19,6 +19,11 @@
                     <td>{{ $estimate->party?->display_name ?: 'Walk-in' }}</td>
                     <td>{{ $estimate->creator?->name ?? 'System' }}<br><small class="text-muted">{{ $estimate->creator?->rolesForCompany($estimate->company_id)->pluck('name')->join(', ') }}</small></td>
                     <td>Rs {{ number_format((float) $estimate->grand_total, 2) }}</td>
+                    @php($detail = $estimateDetails[$estimate->id] ?? null)
+                    <td>
+                        Rs {{ number_format((float) data_get($detail, 'amounts.profit', 0), 2) }}
+                        <br><small class="text-muted">{{ number_format((float) data_get($detail, 'amounts.profit_percent', 0), 2) }}%</small>
+                    </td>
                     <td>
                         <span class="badge-active">{{ ucfirst($estimate->status) }}</span>
                         @if($estimate->convertedInvoice)
@@ -32,6 +37,7 @@
                         @endif
                         @if($canManage && $estimate->status !== 'converted' && auth()->user()->can('estimates.edit'))<a href="{{ route('admin.estimates.edit', $estimate) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>@endif
                         @can('estimates.print')<a href="{{ route('admin.estimates.print', $estimate) }}" class="btn btn-secondary btn-sm" target="_blank"><i class="fas fa-print"></i></a>@endcan
+                        @can('estimates.print')<a href="{{ route('admin.estimates.detail-pdf', $estimate) }}" class="btn btn-dark btn-sm" target="_blank" title="Profit & Item Details PDF"><i class="fas fa-file-pdf"></i></a>@endcan
                     </td>
                 </tr>
             @endforeach
@@ -40,4 +46,4 @@
     </div>
 </div>
 @endsection
-@push('scripts')<script>$('#estimatesTable').DataTable({pageLength:25, columnDefs:[{orderable:false, targets:7}]});</script>@endpush
+@push('scripts')<script>$('#estimatesTable').DataTable({pageLength:25, columnDefs:[{orderable:false, targets:8}]});</script>@endpush

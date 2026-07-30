@@ -1,5 +1,8 @@
 @php
     $lineData = collect($lineData ?? []);
+    $isDeliveryChallan = ($sourceType ?? '') === 'delivery_challan';
+    $sourceNo = $source->estimate_no ?? $source->challan_no ?? $source->reference_no ?? '';
+    $sourceDate = $source->estimate_date ?? $source->challan_date ?? now();
 @endphp
 @push('styles')
 <style>
@@ -54,11 +57,11 @@
             </div>
             <div class="col-md-3 form-group">
                 <label>Billing Date</label>
-                <input type="date" name="billing_date" class="form-control" value="{{ old('billing_date', now()->toDateString()) }}" required>
+                <input type="date" name="billing_date" class="form-control" value="{{ old('billing_date', $sourceDate?->toDateString() ?? now()->toDateString()) }}" required>
             </div>
             <div class="col-md-3 form-group">
                 <label>Reference</label>
-                <input name="reference_no" class="form-control" value="{{ old('reference_no', $source->estimate_no) }}">
+                <input name="reference_no" class="form-control" value="{{ old('reference_no', $sourceNo) }}">
             </div>
             <div class="col-md-4 form-group">
                 <label>Party</label>
@@ -126,12 +129,13 @@
                             </div>
                         </td>
                         <td data-label="Description"><input name="description[]" class="form-control" value="{{ old('description.' . $loop->index, $line['description'] ?? '') }}"></td>
-                        <td data-label="Qty"><input type="number" step="1" min="1" name="quantity[]" class="form-control line-qty" value="{{ old('quantity.' . $loop->index, $line['quantity'] ?? 1) }}" required></td>
+                        <td data-label="{{ $isDeliveryChallan ? 'Challan Qty' : 'Qty' }}"><input type="number" step="1" min="1" name="quantity[]" class="form-control line-qty" value="{{ old('quantity.' . $loop->index, $line['quantity'] ?? 1) }}" required {{ $isDeliveryChallan ? 'readonly' : '' }}></td>
                         <td data-label="Serials">
                             <button type="button" class="btn btn-outline-info btn-sm choose-units">
                                 <i class="fas fa-barcode mr-1"></i> Units (<span class="unit-count">0</span>)
                             </button>
                             <input type="hidden" name="selected_units[]" class="selected-units-json" value='@json($line["selected_units"] ?? [])'>
+                            @if($isDeliveryChallan)<small class="text-muted d-block">Invoice qty selected units se banegi.</small>@endif
                             <div class="selected-units mt-1"></div>
                         </td>
                         <td data-label="Unit"><input name="unit[]" class="form-control" value="{{ old('unit.' . $loop->index, $line['unit'] ?? '') }}"></td>
@@ -285,7 +289,9 @@ function recalc(){
     let subtotal = 0, tax = 0, weight = 0;
     $('#lineTable tbody tr').each(function(){
         const $row = $(this);
-        const qty = parseFloat($row.find('[name="quantity[]"]').val()) || 0;
+        const challanQty = parseFloat($row.find('[name="quantity[]"]').val()) || 0;
+        const units = rowUnits($row);
+        const qty = @json($isDeliveryChallan) ? units.length : challanQty;
         const price = parseFloat($row.find('[name="unit_price[]"]').val()) || 0;
         const discType = $row.find('[name="discount_type[]"]').val();
         const discValue = parseFloat($row.find('[name="discount_value[]"]').val()) || 0;
@@ -332,6 +338,7 @@ function addLine(data){
 
 $('#addLine').on('click', function(){ addLine(); });
 $(document).on('input change', '#lineTable input,#lineTable select,[name="discount_amount"]', recalc);
+$(document).on('serial-units:changed', recalc);
 $(document).on('click', '.remove-row', function(){ $(this).closest('tr').remove(); recalc(); });
 $(document).on('change', '.item-select', function(){
     const $row = $(this).closest('tr');
@@ -350,12 +357,14 @@ $(document).on('submit', '#convertForm', function(){
     $('#lineTable tbody tr').each(function(){
         const qty = parseInt($(this).find('[name="quantity[]"]').val()) || 0;
         const units = rowUnits($(this));
-        if (qty > 0 && units.length !== qty) {
+        if (@json($isDeliveryChallan)) {
+            if (units.length > qty) ok = false;
+        } else if (qty > 0 && units.length !== qty) {
             ok = false;
         }
     });
     if (!ok) {
-        alert('Har line ke liye quantity ke barabar serial/unit select karein.');
+        alert(@json($isDeliveryChallan ? 'Selected serial/unit challan quantity se zyada nahi ho sakte.' : 'Har line ke liye quantity ke barabar serial/unit select karein.'));
         return false;
     }
 });

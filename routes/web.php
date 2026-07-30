@@ -28,6 +28,7 @@ use App\Http\Controllers\Admin\Sales\EstimateController;
 use App\Http\Controllers\Admin\Sales\SalesInvoiceController;
 use App\Http\Controllers\Admin\Sales\SalesReturnController;
 use App\Http\Controllers\Admin\Sales\StockOutChallanController;
+use App\Http\Controllers\Admin\Sales\PendingOrderController;
 use App\Http\Controllers\Admin\SalesTargetController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -210,6 +211,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
     });
     Route::middleware('permission:estimates.view')->group(function () {
         Route::get('estimates/{estimate}/print', [EstimateController::class, 'print'])->middleware('permission:estimates.print')->name('estimates.print');
+        Route::get('estimates/{estimate}/detail-pdf', [EstimateController::class, 'detailPdf'])->middleware('permission:estimates.print')->name('estimates.detail-pdf');
         Route::get('estimates/{estimate}/convert', [EstimateController::class, 'convertForm'])->middleware('permission:estimates.convert')->name('estimates.convert-form');
         Route::post('estimates/{estimate}/convert', [EstimateController::class, 'convert'])->middleware('permission:estimates.convert')->name('estimates.convert');
         Route::patch('estimates/{estimate}/cancel', [EstimateController::class, 'cancel'])->middleware('permission:estimates.edit')->name('estimates.cancel');
@@ -219,7 +221,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('estimates', EstimateController::class)->only(['index','show']);
     });
     Route::middleware('permission:delivery_challans.view')->group(function () {
+        Route::get('pending-orders', [PendingOrderController::class, 'index'])->name('pending-orders.index');
         Route::get('delivery-challans/{deliveryChallan}/print', [DeliveryChallanController::class, 'print'])->middleware('permission:delivery_challans.print')->name('delivery-challans.print');
+        Route::get('delivery-challans/{deliveryChallan}/convert', [DeliveryChallanController::class, 'convertForm'])->middleware('permission:delivery_challans.edit')->name('delivery-challans.convert-form');
         Route::post('delivery-challans/{deliveryChallan}/convert', [DeliveryChallanController::class, 'convert'])->middleware('permission:delivery_challans.edit')->name('delivery-challans.convert');
         Route::patch('delivery-challans/{deliveryChallan}/cancel', [DeliveryChallanController::class, 'cancel'])->middleware('permission:delivery_challans.edit')->name('delivery-challans.cancel');
         Route::resource('delivery-challans', DeliveryChallanController::class)->only(['create','store'])->middleware('permission:delivery_challans.create');

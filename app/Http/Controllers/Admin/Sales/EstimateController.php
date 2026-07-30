@@ -13,20 +13,25 @@ use App\Models\SalesInvoiceItem;
 use App\Models\SubCostCenter;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
+use App\Services\SalesProfitService;
 use App\Services\SerialUnitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class EstimateController extends Controller
 {
-    public function index(EntryVisibilityService $visibility)
+    public function index(EntryVisibilityService $visibility, SalesProfitService $profits)
     {
         $estimates = $visibility->scopeForUser(
             Estimate::with(['party','convertedInvoice','creator'])->latest(),
             Estimate::class
         )->get();
 
-        return view('admin.estimates.index', compact('estimates'));
+        $estimateDetails = $estimates->mapWithKeys(fn(Estimate $estimate) => [
+            $estimate->id => $profits->estimateDetail($estimate->loadMissing('items.item.bomMaterials.rawItem')),
+        ]);
+
+        return view('admin.estimates.index', compact('estimates', 'estimateDetails'));
     }
 
     public function create()
@@ -149,6 +154,18 @@ class EstimateController extends Controller
         $estimate->load(['party','items.item']);
 
         return view('admin.estimates.print', compact('estimate'));
+    }
+
+    public function detailPdf(Estimate $estimate, EntryVisibilityService $visibility, SalesProfitService $profits)
+    {
+        $visibility->authorizeView($estimate);
+        $estimate->load(['party','items.item.bomMaterials.rawItem','company']);
+
+        return view('admin.sales.detail-pdf', [
+            'invoice' => $estimate,
+            'company' => $estimate->company,
+            'detail' => $profits->estimateDetail($estimate),
+        ]);
     }
 
     public function cancel(Estimate $estimate, EntryVisibilityService $visibility)
@@ -330,7 +347,11 @@ class EstimateController extends Controller
 
         return [
             'parties' => Party::where('company_id', $companyId)->where('status', 'active')->orderBy('display_name')->get(),
-            'items' => Item::where('company_id', $companyId)->where('status', 'active')->orderBy('name')->get(),
+            'items' => Item::where('company_id', $companyId)
+                ->where('status', 'active')
+                ->whereHas('productType', fn($q) => $q->where('nature', 'finished_goods'))
+                ->orderBy('name')
+                ->get(),
             'costCenters' => CostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
             'subCostCenters' => SubCostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
             'estimateNo' => $this->nextNo(),
@@ -358,6 +379,12 @@ class EstimateController extends Controller
             'item_id.*' => ['required','exists:items,id'],
             'quantity.*' => ['required','numeric','min:0.001'],
             'unit_price.*' => ['required','numeric','min:0'],
+            'unit.*' => ['nullable','string'],
+            'description.*' => ['nullable','string'],
+            'discount_type.*' => ['nullable','in:percent,flat'],
+            'discount_value.*' => ['nullable','numeric','min:0'],
+            'tax_mode.*' => ['nullable','in:with_gst,without_gst'],
+            'tax_percent.*' => ['nullable','numeric','min:0'],
         ]);
     }
 
@@ -365,13 +392,19 @@ class EstimateController extends Controller
     {
         $subtotal = $tax = $lineDiscount = 0;
         foreach ($request->item_id as $i => $itemId) {
-            $item = Item::findOrFail($itemId);
+            $item = Item::with('productType')->findOrFail($itemId);
             $qty = (float) $request->quantity[$i];
+            abort_if($item->productType?->nature !== 'finished_goods', 422, 'Only finished goods can be used in Estimate / Quotation.');
             $price = (float) $request->unit_price[$i];
             $base = $qty * $price;
             $discount = (($request->discount_type[$i] ?? 'percent') === 'flat') ? (float) ($request->discount_value[$i] ?? 0) : $base * (float) ($request->discount_value[$i] ?? 0) / 100;
-            $taxAmount = max(0, $base - $discount) * (float) ($request->tax_percent[$i] ?? 0) / 100;
-            $total = max(0, $base - $discount) + $taxAmount;
+            $maxDiscount = (float) ($item->max_discount_percent ?? 0);
+            abort_if($maxDiscount > 0 && $base > 0 && ($discount / $base * 100) > $maxDiscount + 0.0001, 422, "{$item->name} par max {$maxDiscount}% discount allowed hai.");
+            $taxMode = $request->tax_mode[$i] ?? 'with_gst';
+            $taxPercent = $taxMode === 'with_gst' ? (float) ($request->tax_percent[$i] ?? 18) : 0;
+            $grossAfterDiscount = max(0, $base - $discount);
+            $taxAmount = $taxPercent > 0 ? $grossAfterDiscount * $taxPercent / (100 + $taxPercent) : 0;
+            $total = $grossAfterDiscount;
 
             EstimateItem::create([
                 'estimate_id' => $estimate->id,
@@ -383,12 +416,12 @@ class EstimateController extends Controller
                 'discount_type' => $request->discount_type[$i] ?? 'percent',
                 'discount_value' => $request->discount_value[$i] ?? 0,
                 'discount_amount' => $discount,
-                'tax_percent' => $request->tax_percent[$i] ?? 0,
+                'tax_percent' => $taxPercent,
                 'tax_amount' => $taxAmount,
                 'line_total' => $total,
             ]);
 
-            $subtotal += $base;
+            $subtotal += max(0, $grossAfterDiscount - $taxAmount);
             $tax += $taxAmount;
             $lineDiscount += $discount;
         }
@@ -399,7 +432,7 @@ class EstimateController extends Controller
             'subtotal' => $subtotal,
             'discount_amount' => $lineDiscount + $overallDiscount,
             'tax_amount' => $tax,
-            'grand_total' => max(0, $subtotal - $lineDiscount - $overallDiscount + $tax),
+            'grand_total' => max(0, $subtotal + $tax - $overallDiscount),
         ];
     }
 

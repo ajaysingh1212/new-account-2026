@@ -24,6 +24,7 @@ class Estimate extends Model
     ];
 
     public function party() { return $this->belongsTo(Party::class); }
+    public function company() { return $this->belongsTo(Company::class); }
     public function costCenter() { return $this->belongsTo(CostCenter::class); }
     public function subCostCenter() { return $this->belongsTo(SubCostCenter::class); }
     public function items() { return $this->hasMany(EstimateItem::class); }

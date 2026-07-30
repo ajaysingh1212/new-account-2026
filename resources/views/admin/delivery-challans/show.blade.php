@@ -8,15 +8,12 @@
         <div>
             @if($canManage && $deliveryChallan->status !== 'cancelled')
                 @can('delivery_challans.edit')
-                    @if(!$deliveryChallan->convertedInvoice)
-                        <form method="POST" action="{{ route('admin.delivery-challans.convert', $deliveryChallan) }}" class="d-inline" onsubmit="return confirm('Convert this delivery challan to sale? Stock will not change again.');">
-                            @csrf
-                            <button class="btn btn-success btn-sm"><i class="fas fa-sync mr-1"></i> Convert to Sale</button>
-                        </form>
+                    @if(!$deliveryChallan->convertedInvoice && $deliveryChallan->status !== 'converted')
+                        <a href="{{ route('admin.delivery-challans.convert-form', $deliveryChallan) }}" class="btn btn-success btn-sm"><i class="fas fa-sync mr-1"></i> Convert to Sale</a>
                     @endif
                 @endcan
                 @can('delivery_challans.edit')
-                    @if(!$deliveryChallan->convertedInvoice)
+                    @if(!$deliveryChallan->convertedInvoice && $deliveryChallan->status !== 'converted')
                         <form method="POST" action="{{ route('admin.delivery-challans.cancel', $deliveryChallan) }}" class="d-inline">
                             @csrf
                             @method('PATCH')
@@ -25,14 +22,14 @@
                     @endif
                 @endcan
                 @can('delivery_challans.edit')
-                    @if(!$deliveryChallan->convertedInvoice)
+                    @if(!$deliveryChallan->convertedInvoice && $deliveryChallan->status !== 'converted')
                         <a href="{{ route('admin.delivery-challans.edit', $deliveryChallan) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit mr-1"></i> Edit</a>
                     @endif
                 @endcan
             @endif
             @if($canManage)
                 @can('delivery_challans.delete')
-                    @if(!$deliveryChallan->convertedInvoice)
+                    @if(!$deliveryChallan->convertedInvoice && $deliveryChallan->status !== 'converted')
                         <form method="POST" action="{{ route('admin.delivery-challans.destroy', $deliveryChallan) }}" class="d-inline">
                             @csrf
                             @method('DELETE')
