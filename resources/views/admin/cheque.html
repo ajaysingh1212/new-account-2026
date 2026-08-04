@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Meridian &amp; Vane — Cheque Voucher Template</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+SC:wght@600;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/css/bootstrap.min.css">
+
+<style>
+  :root{
+    --ink:        #16233c;
+    --ink-soft:   #2b3b58;
+    --parchment:  #afece8;
+    --parchment-2:#efe8d3;
+    --brass:      #a4772c;
+    --brass-light:#c99a4b;
+    --guilloche:  #3c6f60;
+    --void-red:   #8a2f2f;
+    --vault:      #1c140f;
+    --vault-2:    #241a12;
+    --hair:       rgba(22,35,60,0.35);
+  }
+
+  *{ box-sizing:border-box; }
+
+  body{
+    margin:0;
+    min-height:100vh;
+    background:
+      radial-gradient(circle at 12% 8%, rgba(201,154,75,0.14), transparent 45%),
+      radial-gradient(circle at 88% 92%, rgba(60,111,96,0.16), transparent 50%),
+      linear-gradient(160deg, var(--vault) 0%, var(--vault-2) 55%, #140d09 100%);
+    font-family:'Inter', sans-serif;
+    color:var(--parchment);
+    padding:48px 16px 80px;
+  }
+
+  /* faint woven texture, ambient only */
+  body::before{
+    content:"";
+    position:fixed; inset:0;
+    background-image: repeating-linear-gradient(45deg, transparent 0 26px, rgba(246,241,226,0.012) 26px 27px);
+    pointer-events:none;
+  }
+
+  .page-head{
+    max-width:720px;
+    margin:0 auto 34px;
+    display:flex;
+    align-items:flex-end;
+    justify-content:space-between;
+    gap:20px;
+    flex-wrap:wrap;
+    border-bottom:1px solid rgba(246,241,226,0.14);
+    padding-bottom:22px;
+  }
+  .eyebrow{
+    font-family:'IBM Plex Mono', monospace;
+    letter-spacing:.28em;
+    text-transform:uppercase;
+    font-size:11px;
+    color:var(--brass-light);
+    margin-bottom:8px;
+  }
+  .page-head h1{
+    font-family:'Cormorant SC', serif;
+    font-weight:700;
+    font-size:clamp(28px,4vw,42px);
+    margin:0;
+    letter-spacing:.02em;
+  }
+  .page-head p{
+    margin:8px 0 0;
+    color:rgba(246,241,226,0.65);
+    font-size:14.5px;
+    max-width:480px;
+  }
+
+  .toolbar{ display:flex; gap:10px; flex-wrap:wrap; }
+  .tbtn{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:12px;
+    letter-spacing:.06em;
+    text-transform:uppercase;
+    padding:10px 16px;
+    border-radius:2px;
+    border:1px solid rgba(246,241,226,0.28);
+    background:transparent;
+    color:var(--parchment);
+    transition:all .18s ease;
+    cursor:pointer;
+  }
+  .tbtn:hover{ background:rgba(246,241,226,0.08); border-color:var(--brass-light); color:var(--brass-light); }
+  .tbtn.primary{ background:var(--brass); border-color:var(--brass); color:#1a1305; font-weight:600; }
+  .tbtn.primary:hover{ background:var(--brass-light); color:#1a1305; }
+
+  /* ============ VOUCHER ASSEMBLY ============ */
+  /* Real personal-cheque proportions (~2.35:1) drive every internal measurement
+     below via container-query units, so the whole card scales as one piece —
+     same "shape" whether the card is 320px or 720px wide, never stretched,
+     never shrunk to an island in a big box. */
+  .assembly-wrap{
+    width:100%;
+    max-width:720px;
+    min-width:260px;
+    margin:0 auto;
+    container-type:inline-size;
+    container-name:cheque-card;
+  }
+  .assembly{
+    display:grid;
+    grid-template-columns:1fr;
+    background:transparent;
+    filter:drop-shadow(0 30px 60px rgba(0,0,0,0.45));
+  }
+
+  /* ---- CHEQUE FACE ---- */
+  .cheque{
+    background:var(--parchment);
+    color:var(--ink);
+    border-radius:10px;
+    position:relative;
+    padding:clamp(14px,3.6cqi,26px) clamp(14px,4.4cqi,32px) clamp(10px,2.8cqi,20px);
+    overflow:hidden;
+  }
+
+  /* guilloche engraved watermark, built from layered conic/radial gradients */
+  .cheque::before{
+    content:"";
+    position:absolute; inset:0;
+    opacity:0.10;
+    background-image:
+      repeating-radial-gradient(circle at 0% 50%, transparent 0 6px, var(--guilloche) 6px 7px, transparent 7px 13px),
+      repeating-radial-gradient(circle at 100% 50%, transparent 0 6px, var(--guilloche) 6px 7px, transparent 7px 13px),
+      repeating-radial-gradient(circle at 50% -20%, transparent 0 9px, var(--brass) 9px 10px, transparent 10px 19px);
+    background-size:120px 120px, 120px 120px, 240px 240px;
+    mix-blend-mode:multiply;
+    pointer-events:none;
+  }
+  .cheque::after{
+    content:"SPECIMEN";
+    position:absolute;
+    top:42%; left:50%;
+    transform:translate(-50%,-50%) rotate(-11deg);
+    font-family:'Cormorant SC', serif;
+    font-size:clamp(26px,9cqi,64px);
+    letter-spacing:.2em;
+    color:var(--void-red);
+    opacity:0.06;
+    pointer-events:none;
+    white-space:nowrap;
+  }
+
+  .bank-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:flex-start;
+    position:relative;
+    z-index:1;
+    gap:clamp(8px,2cqi,16px);
+  }
+  .bank-mark{ display:flex; gap:clamp(6px,1.7cqi,12px); align-items:center; min-width:0; }
+  .seal{
+    width:clamp(26px,6.4cqi,46px); height:clamp(26px,6.4cqi,46px);
+    border-radius:50%;
+    border:1.6px solid var(--brass);
+    display:flex; align-items:center; justify-content:center;
+    font-family:'Cormorant SC', serif;
+    font-weight:700;
+    font-size:clamp(9px,2.4cqi,17px);
+    color:var(--brass);
+    position:relative;
+    flex:none;
+  }
+  .seal::before{
+    content:"";
+    position:absolute; inset:5px;
+    border:1px solid var(--brass);
+    border-radius:50%;
+  }
+  .bank-name{
+    font-family:'Cormorant SC', serif;
+    font-weight:700;
+    font-size:clamp(13px,3.2cqi,23px);
+    line-height:1.05;
+    letter-spacing:.01em;
+    white-space:nowrap;
+  }
+  .bank-sub{
+    font-family:'IBM Plex Mono', monospace;
+    font-size:clamp(6px,1.3cqi,9.5px);
+    letter-spacing:.1em;
+    text-transform:uppercase;
+    color:var(--ink-soft);
+    margin-top:3px;
+    white-space:nowrap;
+  }
+  .cheque-no{
+    text-align:right;
+    font-family:'IBM Plex Mono', monospace;
+    flex:none;
+  }
+  .cheque-no .lbl{ font-size:clamp(6px,1.35cqi,9.5px); letter-spacing:.12em; text-transform:uppercase; color:var(--ink-soft); }
+  .cheque-no .val{ font-size:clamp(10px,2.4cqi,17px); font-weight:600; color:var(--void-red); }
+
+  .field-line{
+    position:relative;
+    z-index:1;
+    border:none;
+    border-bottom:1px solid var(--ink);
+    background:transparent;
+    font-family:'Cormorant Garamond', serif;
+    font-style:italic;
+    font-size:clamp(11px,2.4cqi,17px);
+    color:var(--ink);
+    padding:clamp(2px,0.6cqi,4px) 2px;
+    width:100%;
+    min-width:0;
+  }
+  .field-line:focus{ outline:none; border-bottom:1.5px solid var(--brass); background:rgba(164,119,44,0.05); }
+  .field-line::placeholder{ color:rgba(22,35,60,0.28); font-style:italic; }
+
+  .row-date{
+    display:flex; justify-content:flex-end; gap:clamp(6px,1.4cqi,10px); align-items:baseline;
+    margin-top:clamp(3px,0.9cqi,6px); position:relative; z-index:1;
+  }
+  .row-date label{
+    font-family:'IBM Plex Mono', monospace; font-size:clamp(6.5px,1.4cqi,10px); letter-spacing:.1em; text-transform:uppercase; color:var(--ink-soft); white-space:nowrap;
+  }
+  .row-date input{ width:clamp(88px,20.8cqi,150px); text-align:right; }
+
+  .row-pay{
+    display:flex; align-items:baseline; gap:clamp(6px,1.9cqi,14px); margin-top:clamp(10px,3cqi,22px); position:relative; z-index:1; flex-wrap:wrap;
+  }
+  .row-pay label{
+    font-family:'Cormorant Garamond', serif; font-size:clamp(10px,2.2cqi,15.5px); white-space:nowrap; color:var(--ink-soft);
+  }
+  .row-pay .field-line{ flex:1; min-width:60px; }
+
+  .amount-box{
+    display:flex; align-items:center; gap:clamp(3px,0.8cqi,6px);
+    border:1.4px solid var(--ink);
+    padding:clamp(3px,0.8cqi,6px) clamp(6px,1.4cqi,10px);
+    background:rgba(255,255,255,0.35);
+    flex:none;
+  }
+  .amount-box .cur{ font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:clamp(10px,2cqi,15px); color:var(--void-red); }
+  .amount-box input{
+    border:none; background:transparent; outline:none;
+    font-family:'IBM Plex Mono', monospace; font-weight:600; font-size:clamp(11px,2.2cqi,16px);
+    width:clamp(66px,16.4cqi,118px); text-align:right; color:var(--ink);
+  }
+
+  .row-words{
+    display:flex; align-items:baseline; gap:clamp(6px,1.9cqi,14px); margin-top:clamp(8px,2.8cqi,20px); position:relative; z-index:1;
+  }
+  .row-words label{ font-family:'Cormorant Garamond', serif; font-size:clamp(10px,2.2cqi,15.5px); color:var(--ink-soft); white-space:nowrap; }
+  .row-words .field-line{ flex:1; min-width:60px; }
+  .row-words .dollars-tag{ font-family:'IBM Plex Mono', monospace; font-size:clamp(7px,1.5cqi,11px); color:var(--ink-soft); white-space:nowrap; }
+
+  .row-bottom{
+    display:flex; justify-content:space-between; align-items:flex-end; gap:clamp(10px,3.3cqi,24px);
+    margin-top:clamp(14px,4.7cqi,34px); position:relative; z-index:1;
+  }
+  .memo-block, .sig-block{ flex:1; min-width:0; }
+  .memo-block label, .sig-block label{
+    display:block; font-family:'IBM Plex Mono', monospace; font-size:clamp(6px,1.35cqi,9.5px); letter-spacing:.12em;
+    text-transform:uppercase; color:var(--ink-soft); margin-top:4px;
+  }
+
+  .micr{
+    margin-top:clamp(10px,3cqi,22px);
+    padding-top:clamp(6px,1.9cqi,14px);
+    border-top:1px dashed rgba(22,35,60,0.25);
+    display:flex; justify-content:center; gap:clamp(4px,1.4cqi,10px);
+    font-family:'IBM Plex Mono', monospace;
+    font-size:clamp(8px,2cqi,15px);
+    letter-spacing:.1em;
+    color:var(--ink-soft);
+    position:relative; z-index:1;
+    flex-wrap:wrap;
+  }
+  .micr .glyph{ color:var(--ink); font-size:clamp(9px,2.2cqi,16px); }
+
+  @container cheque-card (max-width: 300px){
+    .row-date{ justify-content:flex-start; flex-wrap:wrap; }
+  }
+
+  .footnote{
+    max-width:720px; margin:26px auto 0;
+    font-family:'IBM Plex Mono', monospace;
+    font-size:11px; letter-spacing:.04em;
+    color:rgba(246,241,226,0.45);
+    text-align:center;
+  }
+
+  @media print{
+    body{ background:#fff !important; padding:0; }
+    body::before{ display:none; }
+    .page-head, .footnote{ display:none; }
+    .assembly{ filter:none; }
+    .assembly-wrap{ max-width:100%; }
+    .field-line, .amount-box input{ color:#16233c !important; }
+  }
+</style>
+</head>
+<body>
+
+  <div class="page-head">
+   
+    <div class="toolbar">
+      <button class="tbtn" id="sampleBtn" type="button">Fill sample</button>
+      <button class="tbtn" id="clearBtn" type="button">Clear</button>
+      <button class="tbtn primary" id="printBtn" type="button">Print</button>
+    </div>
+  </div>
+
+  <div class="assembly-wrap">
+  <div class="assembly">
+
+    <!-- CHEQUE FACE -->
+    <div class="cheque">
+      <div class="bank-row">
+        <div class="bank-mark">
+          <div class="seal">M&amp;V</div>
+          <div>
+            <div class="bank-name">Meridian &amp; Vane</div>
+            <div class="bank-sub">Trust &amp; Deposit Company</div>
+          </div>
+        </div>
+        <div class="cheque-no">
+          <div class="lbl">Voucher</div>
+          <div class="val">No. 0417</div>
+        </div>
+      </div>
+
+      <div class="row-date">
+        <label for="dateInput">Date</label>
+        <input class="field-line" id="dateInput" type="text" placeholder="DD / MM / YYYY">
+      </div>
+
+      <div class="row-pay">
+        <label>Pay to the order of</label>
+        <input class="field-line" id="payeeInput" type="text" placeholder="recipient's full name">
+        <div class="amount-box">
+          <span class="cur">₹</span>
+          <input id="amountInput" type="text" inputmode="decimal" placeholder="0.00">
+        </div>
+      </div>
+
+      <div class="row-words">
+        <label>Rupees</label>
+        <input class="field-line" id="wordsField" type="text" placeholder="amount will spell itself out here" readonly>
+        <span class="dollars-tag">only</span>
+      </div>
+
+      <div class="row-bottom">
+        <div class="memo-block">
+          <input class="field-line" id="memoInput" type="text" placeholder="reference / memo">
+          <label>Memo</label>
+        </div>
+        <div class="sig-block">
+          <input class="field-line" id="sigInput" type="text" placeholder="">
+          <label>Authorised signature</label>
+        </div>
+      </div>
+
+      <div class="micr">
+        <span class="glyph">⑈</span><span>041700417</span>
+        <span class="glyph">⑆</span><span>00 8842 19</span>
+        <span class="glyph">⑈</span><span>0417</span>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.3/js/bootstrap.bundle.min.js"></script>
+<script>
+(function(){
+  const dateInput   = document.getElementById('dateInput');
+  const payeeInput  = document.getElementById('payeeInput');
+  const amountInput = document.getElementById('amountInput');
+  const wordsField  = document.getElementById('wordsField');
+  const memoInput   = document.getElementById('memoInput');
+
+  const ones = ['','one','two','three','four','five','six','seven','eight','nine','ten',
+    'eleven','twelve','thirteen','fourteen','fifteen','sixteen','seventeen','eighteen','nineteen'];
+  const tens = ['','','twenty','thirty','forty','fifty','sixty','seventy','eighty','ninety'];
+
+  function twoDigits(n){
+    if(n < 20) return ones[n];
+    return tens[Math.floor(n/10)] + (n%10 ? '-' + ones[n%10] : '');
+  }
+  function threeDigits(n){
+    let s = '';
+    if(n >= 100){ s += ones[Math.floor(n/100)] + ' hundred'; n = n % 100; if(n) s += ' '; }
+    if(n) s += twoDigits(n);
+    return s;
+  }
+  // Indian numbering: crore / lakh / thousand / hundred
+  function numberToWords(num){
+    num = Math.floor(num);
+    if(num === 0) return 'zero';
+    let parts = [];
+    const crore = Math.floor(num / 10000000); num %= 10000000;
+    const lakh  = Math.floor(num / 100000);    num %= 100000;
+    const thou  = Math.floor(num / 1000);      num %= 1000;
+    const rest  = num;
+    if(crore) parts.push(threeDigits(crore) + ' crore');
+    if(lakh)  parts.push(threeDigits(lakh) + ' lakh');
+    if(thou)  parts.push(threeDigits(thou) + ' thousand');
+    if(rest)  parts.push(threeDigits(rest));
+    return parts.join(' ');
+  }
+  function capitalize(s){ return s.charAt(0).toUpperCase() + s.slice(1); }
+
+  function refreshWords(){
+    const raw = parseFloat(amountInput.value);
+    if(isNaN(raw) || raw <= 0){
+      wordsField.value = '';
+      return;
+    }
+    const rupees = Math.floor(raw);
+    const paise = Math.round((raw - rupees) * 100);
+    let words = capitalize(numberToWords(rupees));
+    if(paise > 0){
+      words += ' and ' + numberToWords(paise) + ' paise';
+    }
+    wordsField.value = words;
+  }
+
+  dateInput.addEventListener('input', () => {});
+  payeeInput.addEventListener('input', () => {});
+  memoInput.addEventListener('input', () => {});
+  amountInput.addEventListener('input', refreshWords);
+
+  document.getElementById('printBtn').addEventListener('click', () => window.print());
+
+  document.getElementById('sampleBtn').addEventListener('click', () => {
+    const d = new Date();
+    dateInput.value = String(d.getDate()).padStart(2,'0') + ' / ' + String(d.getMonth()+1).padStart(2,'0') + ' / ' + d.getFullYear();
+    payeeInput.value = 'Aarav Sharma';
+    amountInput.value = '18450.75';
+    memoInput.value = 'August retainer';
+    document.getElementById('sigInput').value = '';
+    refreshWords();
+  });
+
+  document.getElementById('clearBtn').addEventListener('click', () => {
+    [dateInput, payeeInput, amountInput, memoInput].forEach(el => { el.value=''; });
+    document.getElementById('sigInput').value = '';
+    wordsField.value = '';
+    refreshWords();
+  });
+})();
+</script>
+</body>
+</html>
