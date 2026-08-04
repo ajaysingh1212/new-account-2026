@@ -9,6 +9,7 @@ use App\Models\Company;
 use App\Models\Expense;
 use App\Models\Item;
 use App\Models\Party;
+use App\Models\PartyPayment;
 use App\Models\PartyPaymentAllocation;
 use App\Models\PurchaseBill;
 use App\Models\ProductionBatch;
@@ -145,13 +146,122 @@ class ReportController extends Controller
         return $this->billReport($request, $visibility, PurchaseBill::class, 'purchases', 'Purchase Report');
     }
 
+    /**
+     * Single-day "everything that happened" activity feed: every business record
+     * created that calendar day, across every module, with who did it.
+     */
     public function dayBook(Request $request, EntryVisibilityService $visibility)
     {
-        $filters = $this->filters($request);
-        $sales = $visibility->scopeForUser(SalesInvoice::whereBetween('billing_date', [$filters['from'], $filters['to']]), SalesInvoice::class)->get();
-        $purchases = $visibility->scopeForUser(PurchaseBill::whereBetween('billing_date', [$filters['from'], $filters['to']]), PurchaseBill::class)->get();
-        $bank = $visibility->scopeForUser(BankTransaction::with('bankAccount')->whereBetween('transaction_date', [$filters['from'], $filters['to']]), BankTransaction::class)->get();
-        return view('admin.reports.day-book', compact('filters','sales','purchases','bank'));
+        $date = $request->date('date')?->toDateString() ?? now()->toDateString();
+        $dayStart = Carbon::parse($date)->startOfDay();
+        $dayEnd = Carbon::parse($date)->endOfDay();
+        $between = [$dayStart, $dayEnd];
+
+        $sales = $visibility->scopeForUser(SalesInvoice::with(['party','creator'])->whereBetween('created_at', $between), SalesInvoice::class)->get();
+        $purchases = $visibility->scopeForUser(PurchaseBill::with(['party','creator'])->whereBetween('created_at', $between), PurchaseBill::class)->get();
+        $paymentsIn = $visibility->scopeForUser(PartyPayment::with(['party','creator'])->whereBetween('created_at', $between)->where('payment_type', 'payment_in'), PartyPayment::class)->get();
+        $paymentsOut = $visibility->scopeForUser(PartyPayment::with(['party','creator'])->whereBetween('created_at', $between)->where('payment_type', 'payment_out'), PartyPayment::class)->get();
+        $expenses = $visibility->scopeForUser(Expense::with(['ledger','creator'])->whereBetween('created_at', $between), Expense::class)->get();
+        $productions = $visibility->scopeForUser(ProductionBatch::with(['finishedItem','creator'])->whereBetween('created_at', $between), ProductionBatch::class)->get();
+        $newItems = $visibility->scopeForUser(Item::with('creator')->whereBetween('created_at', $between), Item::class)->get();
+        $newParties = $visibility->scopeForUser(Party::with('creator')->whereBetween('created_at', $between), Party::class)->get();
+
+        $documentRefTypes = [SalesInvoice::class, PurchaseBill::class, ProductionBatch::class];
+        $stockIn = $visibility->scopeForUser(StockMovement::with(['item','creator'])->whereBetween('created_at', $between)->where('direction', 'in')->whereNotIn('reference_type', $documentRefTypes), StockMovement::class)->get();
+        $stockOut = $visibility->scopeForUser(StockMovement::with(['item','creator'])->whereBetween('created_at', $between)->where('direction', 'out')->whereNotIn('reference_type', $documentRefTypes), StockMovement::class)->get();
+
+        $bankRefTypes = [PartyPayment::class, Expense::class];
+        $bank = $visibility->scopeForUser(BankTransaction::with(['bankAccount','creator'])->whereBetween('created_at', $between)->whereNotIn('reference_type', $bankRefTypes), BankTransaction::class)->get();
+
+        $summary = [
+            'sales' => (float) $sales->sum('grand_total'),
+            'purchase' => (float) $purchases->sum('grand_total'),
+            'payment_in' => (float) $paymentsIn->sum('total_amount'),
+            'payment_out' => (float) $paymentsOut->sum('total_amount'),
+            'expense' => (float) $expenses->sum('total_amount'),
+        ];
+        $summary['net_cash_flow'] = $summary['payment_in'] - $summary['payment_out'] - $summary['expense'];
+
+        $entries = collect()
+            ->concat($sales->map(fn(SalesInvoice $bill) => [
+                'time' => $bill->created_at, 'type' => 'sale', 'label' => 'Sale Invoice',
+                'ref' => $bill->invoice_no, 'who' => $bill->creator?->name ?: 'System',
+                'detail' => $bill->party?->display_name ?: 'Cash / Walk-in',
+                'meta' => ucfirst($bill->sale_type ?? ''),
+                'amount' => (float) $bill->grand_total, 'direction' => 'in',
+            ]))
+            ->concat($purchases->map(fn(PurchaseBill $bill) => [
+                'time' => $bill->created_at, 'type' => 'purchase', 'label' => 'Purchase Bill',
+                'ref' => $bill->invoice_no, 'who' => $bill->creator?->name ?: 'System',
+                'detail' => $bill->party?->display_name ?: '-', 'meta' => '-',
+                'amount' => (float) $bill->grand_total, 'direction' => 'out',
+            ]))
+            ->concat($paymentsIn->map(fn(PartyPayment $payment) => [
+                'time' => $payment->created_at, 'type' => 'payment_in', 'label' => 'Payment In',
+                'ref' => $payment->reference_no, 'who' => $payment->creator?->name ?: 'System',
+                'detail' => $payment->party?->display_name ?: '-',
+                'meta' => str_replace('_', ' ', ucfirst($payment->payment_mode ?? '')),
+                'amount' => (float) $payment->total_amount, 'direction' => 'in',
+            ]))
+            ->concat($paymentsOut->map(fn(PartyPayment $payment) => [
+                'time' => $payment->created_at, 'type' => 'payment_out', 'label' => 'Payment Out',
+                'ref' => $payment->reference_no, 'who' => $payment->creator?->name ?: 'System',
+                'detail' => $payment->party?->display_name ?: '-',
+                'meta' => str_replace('_', ' ', ucfirst($payment->payment_mode ?? '')),
+                'amount' => (float) $payment->total_amount, 'direction' => 'out',
+            ]))
+            ->concat($expenses->map(fn(Expense $expense) => [
+                'time' => $expense->created_at, 'type' => 'expense', 'label' => 'Expense',
+                'ref' => $expense->expense_no, 'who' => $expense->creator?->name ?: 'System',
+                'detail' => $expense->ledger?->name ?: ($expense->vendor_name ?: '-'),
+                'meta' => ucfirst($expense->status ?? ''),
+                'amount' => (float) $expense->total_amount, 'direction' => 'out',
+            ]))
+            ->concat($productions->map(fn(ProductionBatch $batch) => [
+                'time' => $batch->created_at, 'type' => 'production', 'label' => 'Production Batch',
+                'ref' => $batch->batch_no, 'who' => $batch->creator?->name ?: 'System',
+                'detail' => $batch->finishedItem?->name ?: '-',
+                'meta' => number_format((float) $batch->quantity, 2) . ' units, ' . count($batch->units_data ?? []) . ' serial/VTS registered',
+                'amount' => (float) $batch->raw_material_cost, 'direction' => 'out',
+            ]))
+            ->concat($stockIn->map(fn(StockMovement $movement) => [
+                'time' => $movement->created_at, 'type' => 'stock_in', 'label' => 'Stock In',
+                'ref' => $movement->reference_no, 'who' => $movement->creator?->name ?: 'System',
+                'detail' => $movement->item?->name ?: '-',
+                'meta' => str_replace('_', ' ', ucfirst($movement->movement_type)) . ' | ' . number_format((float) $movement->quantity, 2) . ' qty',
+                'amount' => (float) $movement->total_value, 'direction' => 'in',
+            ]))
+            ->concat($stockOut->map(fn(StockMovement $movement) => [
+                'time' => $movement->created_at, 'type' => 'stock_out', 'label' => 'Stock Out',
+                'ref' => $movement->reference_no, 'who' => $movement->creator?->name ?: 'System',
+                'detail' => $movement->item?->name ?: '-',
+                'meta' => str_replace('_', ' ', ucfirst($movement->movement_type)) . ' | ' . number_format((float) $movement->quantity, 2) . ' qty',
+                'amount' => (float) $movement->total_value, 'direction' => 'out',
+            ]))
+            ->concat($newItems->map(fn(Item $item) => [
+                'time' => $item->created_at, 'type' => 'new_item', 'label' => 'New Item',
+                'ref' => $item->sku, 'who' => $item->creator?->name ?: 'System',
+                'detail' => $item->name, 'meta' => 'Opening stock ' . number_format((float) $item->opening_stock, 2),
+                'amount' => 0.0, 'direction' => 'neutral',
+            ]))
+            ->concat($newParties->map(fn(Party $party) => [
+                'time' => $party->created_at, 'type' => 'new_party', 'label' => 'New Party',
+                'ref' => null, 'who' => $party->creator?->name ?: 'System',
+                'detail' => $party->display_name, 'meta' => ucfirst($party->party_type ?? ''),
+                'amount' => 0.0, 'direction' => 'neutral',
+            ]))
+            ->concat($bank->map(fn(BankTransaction $transaction) => [
+                'time' => $transaction->created_at, 'type' => 'bank', 'label' => 'Bank Transaction',
+                'ref' => $transaction->reference_no, 'who' => $transaction->creator?->name ?: 'System',
+                'detail' => $transaction->bankAccount?->account_name ?: '-',
+                'meta' => str_replace('_', ' ', ucfirst($transaction->transaction_type)),
+                'amount' => (float) $transaction->amount, 'direction' => $transaction->direction === 'in' ? 'in' : 'out',
+            ]))
+            ->filter(fn($row) => $row['time'])
+            ->sortByDesc('time')
+            ->values();
+
+        return view('admin.reports.day-book', compact('date', 'summary', 'entries'));
     }
 
     public function allTransactions(Request $request, EntryVisibilityService $visibility)
