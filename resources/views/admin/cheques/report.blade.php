@@ -19,6 +19,9 @@
         <div class="col-md-2 form-group"><label>To</label><input type="date" name="to_date" value="{{ $to }}" class="form-control"></div>
         <div class="col-md-3 form-group"><label>Party</label><select name="party_id" class="form-control select2"><option value="">All Parties</option>@foreach($parties as $party)<option value="{{ $party->id }}" @selected(request('party_id')==$party->id)>{{ $party->display_name }}</option>@endforeach</select></div>
         <div class="col-md-3 form-group"><label>Cheque Book</label><select name="cheque_book_id" class="form-control select2"><option value="">All Books</option>@foreach($books as $book)<option value="{{ $book->id }}" @selected(request('cheque_book_id')==$book->id)>{{ $book->book_no }} | {{ $book->bankAccount?->account_name }}</option>@endforeach</select></div>
+        <div class="col-md-2 form-group"><label>Clearance</label><select name="clearance_range" id="clearanceRange" class="form-control"><option value="">All</option><option value="this_week" @selected(request('clearance_range')==='this_week')>This Week Clearance</option><option value="this_month" @selected(request('clearance_range')==='this_month')>This Month Clearance</option><option value="next_month" @selected(request('clearance_range')==='next_month')>Next Month Clearance</option><option value="custom" @selected(request('clearance_range')==='custom')>Custom Date Clearance</option></select></div>
+        <div class="col-md-2 form-group clearance-custom" style="{{ request('clearance_range')==='custom' ? '' : 'display:none' }}"><label>Clear From</label><input type="date" name="clearance_from" value="{{ request('clearance_from', $clearanceFrom) }}" class="form-control"></div>
+        <div class="col-md-2 form-group clearance-custom" style="{{ request('clearance_range')==='custom' ? '' : 'display:none' }}"><label>Clear To</label><input type="date" name="clearance_to" value="{{ request('clearance_to', $clearanceTo) }}" class="form-control"></div>
         <div class="col-md-2 form-group"><button class="btn btn-primary btn-block"><i class="fas fa-filter mr-1"></i>Filter</button></div>
     </div>
 </form>
@@ -43,7 +46,7 @@
 <div class="report-card mb-4">
     <div class="table-responsive">
         <table class="table table-hover mb-0">
-            <thead><tr><th>Cheque</th><th>Party</th><th>Book / Bank</th><th>Issue Date</th><th>Amount</th><th>Paid</th><th>Due</th><th>Age</th><th>Clearance</th><th>Status</th></tr></thead>
+            <thead><tr><th>Cheque</th><th>Party</th><th>Book / Bank</th><th>Issue Date</th><th>Amount</th><th>Settled Bills</th><th>Due</th><th>Age</th><th>Clearance</th><th>Status</th></tr></thead>
             <tbody>
             @forelse($rows as $row)
                 @php $leaf = $row['leaf']; $expired = $row['days_left'] !== null && $row['days_left'] < 0 && $row['due'] > 0; @endphp
@@ -53,10 +56,20 @@
                     <td>{{ $leaf->chequeBook?->book_no }}<br><small>{{ $leaf->bankAccount?->account_name }} | {{ $leaf->bankAccount?->account_number }} | {{ $leaf->bankAccount?->ifsc_code }}</small></td>
                     <td>{{ $leaf->cheque_date?->format('d M Y') }}</td>
                     <td>Rs {{ number_format((float)$leaf->amount,2) }}</td>
-                    <td>Rs {{ number_format($row['paid'],2) }}</td>
+                    <td>
+                        <b>Rs {{ number_format($row['paid'],2) }}</b>
+                        @if($leaf->payment?->allocations?->isNotEmpty())
+                            <div class="small text-muted mt-1">
+                                @foreach($leaf->payment->allocations as $allocation)
+                                    <div>{{ $allocation->bill_no }}: Rs {{ number_format((float) $allocation->amount,2) }}</div>
+                                @endforeach
+                                <div>Settlement: {{ $leaf->payment->payment_date?->format('d M Y') }}</div>
+                            </div>
+                        @endif
+                    </td>
                     <td><b class="{{ $row['due'] > 0 ? 'text-danger' : 'text-success' }}">Rs {{ number_format($row['due'],2) }}</b></td>
                     <td>{{ $row['age'] }} days</td>
-                    <td>{{ $leaf->validity_months }} month<br><small>{{ $leaf->clearance_due_date?->format('d M Y') }} | {{ $row['days_left'] === null ? '-' : ($row['days_left'].' days left') }}</small></td>
+                    <td>{{ $leaf->validity_months }} month<br><small>{{ $leaf->clearance_due_date?->format('d M Y') }} | {{ $leaf->clearance_due_date?->format('l') }} | {{ $row['days_left'] === null ? '-' : ($row['days_left'].' days left') }}</small></td>
                     <td><span class="status-pill {{ $expired ? 'expired' : ($row['due'] > 0 ? 'pending' : '') }}">{{ $expired ? 'Expired' : ucfirst(str_replace('_',' ',$leaf->status)) }}</span></td>
                 </tr>
             @empty
@@ -73,4 +86,11 @@
     @include('admin.cheques.partials.cheque-preview', ['leaf' => $rows->first()['leaf'], 'bank' => $rows->first()['leaf']->bankAccount])
 </div>
 @endif
+@push('scripts')
+<script>
+$('#clearanceRange').on('change', function(){
+    $('.clearance-custom').toggle(this.value === 'custom');
+});
+</script>
+@endpush
 @endsection

@@ -20,6 +20,7 @@ class ChequeLeaf extends Model
     ];
 
     public function chequeBook() { return $this->belongsTo(ChequeBook::class); }
+    public function company() { return $this->belongsTo(Company::class); }
     public function bankAccount() { return $this->belongsTo(BankAccount::class); }
     public function party() { return $this->belongsTo(Party::class); }
     public function payment() { return $this->belongsTo(PartyPayment::class, 'party_payment_id'); }

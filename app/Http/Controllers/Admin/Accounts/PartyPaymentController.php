@@ -250,7 +250,7 @@ class PartyPaymentController extends Controller
         $bankAccountId = $data['bank_account_id'] ?? null;
         if (($data['payment_type'] ?? null) === 'payment_out' && ($data['payment_mode'] ?? null) === 'Cheque' && !empty($data['cheque_leaf_id'])) {
             $chequeLeaf = ChequeLeaf::where('company_id', $companyId)->lockForUpdate()->findOrFail($data['cheque_leaf_id']);
-            abort_if($chequeLeaf->party_id !== $party->id, 422, 'Selected cheque isi party ke liye issue hona chahiye.');
+            abort_if($chequeLeaf->party_id && $chequeLeaf->party_id !== $party->id, 422, 'Selected cheque kisi dusri party ke naam par already issue hai.');
             abort_if(!$chequeLeaf->is_valid && $chequeLeaf->party_payment_id !== $payment?->id, 422, 'Selected cheque already used, cancelled, paid, ya expired hai.');
             $bankAccountId = $chequeLeaf->bank_account_id;
             $data['bank_account_id'] = $bankAccountId;
@@ -355,6 +355,7 @@ class PartyPaymentController extends Controller
         $bankBalance = $isIn
             ? (float) $account->current_balance + (float) $payment->total_amount
             : (float) $account->current_balance - (float) $payment->total_amount;
+        abort_if(!$isIn && $bankBalance < 0, 422, 'Insufficient balance. Selected cheque bank account me itna balance nahi hai.');
 
         $chequeDescription = $chequeLeaf
             ? "Cheque {$chequeLeaf->cheque_no} issued. Clear date {$chequeLeaf->clearance_due_date?->format('d M Y')}."
@@ -416,6 +417,8 @@ class PartyPaymentController extends Controller
 
         if ($chequeLeaf) {
             $chequeLeaf->update([
+                'party_id' => $party->id,
+                'payee_name' => $chequeLeaf->payee_name ?: $party->display_name,
                 'party_payment_id' => $payment->id,
                 'status' => 'payment_posted',
                 'payment_done' => true,

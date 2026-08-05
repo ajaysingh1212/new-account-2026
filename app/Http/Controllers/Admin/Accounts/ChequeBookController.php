@@ -7,6 +7,8 @@ use App\Models\BankAccount;
 use App\Models\ChequeBook;
 use App\Models\ChequeLeaf;
 use App\Models\Party;
+use App\Models\PurchaseBill;
+use App\Models\SalesInvoice;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -57,7 +59,6 @@ class ChequeBookController extends Controller
     {
         return view('admin.cheques.leaf-form', [
             'books' => $this->books(),
-            'parties' => Party::where('company_id', auth()->user()->current_company_id)->where('status', 'active')->orderBy('display_name')->get(),
         ]);
     }
 
@@ -89,7 +90,6 @@ class ChequeBookController extends Controller
         $companyId = auth()->user()->current_company_id;
         $data = $request->validate([
             'cheque_book_id' => ['required', Rule::exists('cheque_books', 'id')->where('company_id', $companyId)],
-            'party_id' => ['required', Rule::exists('parties', 'id')->where('company_id', $companyId)],
             'cheque_date' => ['required','date'],
             'amount' => ['required','numeric','min:0.01'],
             'payee_name' => ['nullable','string','max:255'],
@@ -132,14 +132,14 @@ class ChequeBookController extends Controller
             ->where('payment_done', false)
             ->whereDate('clearance_due_date', '>=', now()->toDateString())
             ->when($bankAccountId, fn($q) => $q->where('bank_account_id', $bankAccountId))
-            ->when($partyId, fn($q) => $q->where('party_id', $partyId))
+            ->when($partyId, fn($q) => $q->where(fn($inner) => $inner->whereNull('party_id')->orWhere('party_id', $partyId)))
             ->when($amount > 0, fn($q) => $q->where('amount', round($amount, 2)))
             ->orderBy('clearance_due_date')
             ->get();
 
         return response()->json($leaves->map(fn(ChequeLeaf $leaf) => [
             'id' => $leaf->id,
-            'text' => "{$leaf->cheque_no} | {$leaf->party?->display_name} | Rs ".number_format((float) $leaf->amount, 2)." | {$leaf->clearance_due_date?->format('d M Y')}",
+            'text' => "{$leaf->cheque_no} | ".($leaf->party?->display_name ?: 'Open Cheque')." | Rs ".number_format((float) $leaf->amount, 2)." | {$leaf->clearance_due_date?->format('d M Y')}",
             'bank_account_id' => $leaf->bank_account_id,
             'amount' => (float) $leaf->amount,
             'book_no' => $leaf->chequeBook?->book_no,
@@ -157,16 +157,21 @@ class ChequeBookController extends Controller
             'to_date' => ['nullable','date','after_or_equal:from_date'],
             'party_id' => ['nullable', Rule::exists('parties', 'id')->where('company_id', $companyId)],
             'cheque_book_id' => ['nullable', Rule::exists('cheque_books', 'id')->where('company_id', $companyId)],
+            'clearance_range' => ['nullable', Rule::in(['this_week','this_month','next_month','custom'])],
+            'clearance_from' => ['nullable','date'],
+            'clearance_to' => ['nullable','date','after_or_equal:clearance_from'],
         ]);
 
         $from = $filters['from_date'] ?? now()->startOfMonth()->toDateString();
         $to = $filters['to_date'] ?? now()->toDateString();
+        [$clearanceFrom, $clearanceTo] = $this->clearanceRange($filters);
 
         $leaves = ChequeLeaf::with(['chequeBook','bankAccount','party','payment.allocations'])
             ->where('company_id', $companyId)
             ->whereBetween('cheque_date', [$from, $to])
             ->when($filters['party_id'] ?? null, fn($q, $id) => $q->where('party_id', $id))
             ->when($filters['cheque_book_id'] ?? null, fn($q, $id) => $q->where('cheque_book_id', $id))
+            ->when($clearanceFrom && $clearanceTo, fn($q) => $q->whereBetween('clearance_due_date', [$clearanceFrom, $clearanceTo]))
             ->orderBy('clearance_due_date')
             ->get();
 
@@ -191,12 +196,33 @@ class ChequeBookController extends Controller
             'parties' => Party::where('company_id', $companyId)->where('status', 'active')->orderBy('display_name')->get(),
             'from' => $from,
             'to' => $to,
+            'clearanceFrom' => $clearanceFrom,
+            'clearanceTo' => $clearanceTo,
             'totals' => [
                 'amount' => $rows->sum(fn($row) => (float) $row['leaf']->amount),
                 'paid' => $rows->sum('paid'),
                 'due' => $rows->sum('due'),
                 'pending' => $rows->where('due', '>', 0)->count(),
             ],
+        ]);
+    }
+
+    public function details(ChequeLeaf $chequeLeaf)
+    {
+        $this->authorizeCompany($chequeLeaf->company_id);
+
+        return response()->json($this->settlementPayload($chequeLeaf));
+    }
+
+    public function print(ChequeLeaf $chequeLeaf)
+    {
+        $this->authorizeCompany($chequeLeaf->company_id);
+        $payload = $this->settlementPayload($chequeLeaf);
+
+        return view('admin.cheques.print', [
+            'leaf' => $chequeLeaf->load(['chequeBook','bankAccount','party','payment.allocations','company']),
+            'payload' => $payload,
+            'company' => $chequeLeaf->company,
         ]);
     }
 
@@ -220,6 +246,113 @@ class ChequeBookController extends Controller
     private function nextChequeNo(ChequeBook $book): string
     {
         return $book->book_no.'-'.str_pad((string) $book->next_leaf_no, 4, '0', STR_PAD_LEFT);
+    }
+
+    private function settlementPayload(ChequeLeaf $leaf): array
+    {
+        $leaf->loadMissing(['chequeBook','bankAccount','party','payment.allocations']);
+        $today = now()->startOfDay();
+        $clearance = $leaf->clearance_due_date?->copy()->startOfDay();
+        $allocations = $leaf->payment?->allocations ?? collect();
+
+        return [
+            'cheque' => [
+                'id' => $leaf->id,
+                'cheque_no' => $leaf->cheque_no,
+                'book_no' => $leaf->chequeBook?->book_no,
+                'amount' => (float) $leaf->amount,
+                'amount_words' => $leaf->amount_words,
+                'payee_name' => $leaf->payee_name ?: $leaf->party?->display_name,
+                'memo' => $leaf->memo,
+                'issue_date' => $leaf->cheque_date?->format('d M Y'),
+                'clearance_date' => $leaf->clearance_due_date?->format('d M Y'),
+                'clearance_day' => $leaf->clearance_due_date?->format('l'),
+                'days_left' => $clearance ? $today->diffInDays($clearance, false) : null,
+                'age' => $leaf->cheque_date ? $leaf->cheque_date->diffInDays($today, false) : 0,
+                'validity_months' => $leaf->validity_months,
+                'status' => ucfirst(str_replace('_', ' ', $leaf->status)),
+                'settlement_date' => $leaf->payment?->payment_date?->format('d M Y'),
+            ],
+            'bank' => [
+                'name' => $leaf->bankAccount?->bank_name ?: $leaf->bankAccount?->account_name,
+                'account_name' => $leaf->bankAccount?->account_name,
+                'account_number' => $leaf->bankAccount?->account_number,
+                'ifsc_code' => $leaf->bankAccount?->ifsc_code,
+                'branch_name' => $leaf->bankAccount?->branch_name,
+            ],
+            'party' => [
+                'name' => $leaf->party?->display_name,
+                'legal_name' => $leaf->party?->legal_name,
+                'phone' => $leaf->party?->phone,
+                'email' => $leaf->party?->email,
+                'gstin' => $leaf->party?->gstin,
+                'pan' => $leaf->party?->pan_number,
+                'billing_address' => $leaf->party?->billing_address,
+                'shipping_address' => $leaf->party?->shipping_address,
+                'city' => $leaf->party?->city,
+                'state' => $leaf->party?->state,
+            ],
+            'totals' => [
+                'settled' => (float) $allocations->sum('amount'),
+                'due' => max(0, (float) $leaf->amount - (float) $allocations->sum('amount')),
+            ],
+            'bills' => $allocations->map(fn($allocation) => $this->billPayload($allocation))->values(),
+            'print_url' => route('admin.cheques.print', $leaf),
+        ];
+    }
+
+    private function billPayload($allocation): array
+    {
+        $model = in_array($allocation->bill_model, [SalesInvoice::class, PurchaseBill::class], true)
+            ? $allocation->bill_model
+            : null;
+        $bill = $model ? $model::with(['party','items.item'])->find($allocation->bill_id) : null;
+
+        return [
+            'bill_no' => $allocation->bill_no,
+            'bill_type' => ucfirst($allocation->bill_type),
+            'bill_date' => $allocation->bill_date?->format('d M Y'),
+            'bill_total' => (float) $allocation->bill_total,
+            'settled_amount' => (float) $allocation->amount,
+            'invoice' => $bill ? [
+                'invoice_no' => $bill->invoice_no,
+                'billing_date' => $bill->billing_date?->format('d M Y'),
+                'reference_no' => $bill->reference_no ?? null,
+                'subtotal' => (float) ($bill->subtotal ?? 0),
+                'discount_amount' => (float) ($bill->discount_amount ?? 0),
+                'tax_amount' => (float) ($bill->tax_amount ?? 0),
+                'grand_total' => (float) ($bill->grand_total ?? 0),
+                'billing_address' => $bill->billing_address ?? null,
+                'shipping_address' => $bill->shipping_address ?? null,
+            ] : null,
+            'items' => $bill?->items?->map(fn($line) => [
+                'name' => $line->item?->name ?: 'Item',
+                'description' => $line->description,
+                'quantity' => (float) $line->quantity,
+                'unit' => $line->unit,
+                'rate' => (float) $line->unit_price,
+                'discount_type' => $line->discount_type,
+                'discount_value' => (float) ($line->discount_value ?? 0),
+                'discount_amount' => (float) ($line->discount_amount ?? 0),
+                'tax_percent' => (float) ($line->tax_percent ?? 0),
+                'tax_amount' => (float) ($line->tax_amount ?? 0),
+                'line_total' => (float) $line->line_total,
+            ])->values() ?? collect(),
+        ];
+    }
+
+    private function clearanceRange(array $filters): array
+    {
+        $range = $filters['clearance_range'] ?? null;
+        $today = now();
+
+        return match ($range) {
+            'this_week' => [$today->copy()->startOfWeek()->toDateString(), $today->copy()->endOfWeek()->toDateString()],
+            'this_month' => [$today->copy()->startOfMonth()->toDateString(), $today->copy()->endOfMonth()->toDateString()],
+            'next_month' => [$today->copy()->addMonthNoOverflow()->startOfMonth()->toDateString(), $today->copy()->addMonthNoOverflow()->endOfMonth()->toDateString()],
+            'custom' => [$filters['clearance_from'] ?? null, $filters['clearance_to'] ?? null],
+            default => [null, null],
+        };
     }
 
     private function authorizeCompany(int $companyId): void
