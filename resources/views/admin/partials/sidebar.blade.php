@@ -164,6 +164,17 @@
                 @if($canAnyBanking)
                     <li class="nav-header">BANKING & COSTING</li>
                     @can('banking.view')<li class="nav-item"><a href="{{ route('admin.bank-accounts.index') }}" class="nav-link {{ request()->routeIs('admin.bank-accounts*') ? 'active' : '' }}"><i class="nav-icon fas fa-university" style="color:#06B6D4"></i><p>Bank Accounts</p></a></li>@endcan
+                    @can('banking.view')
+                    <li class="nav-item has-treeview {{ request()->routeIs('admin.cheques*') ? 'menu-open' : '' }}">
+                        <a href="#" class="nav-link {{ request()->routeIs('admin.cheques*') ? 'active' : '' }}"><i class="nav-icon fas fa-money-check-alt" style="color:#22C55E"></i><p>Cheque Book <i class="right fas fa-angle-left"></i></p></a>
+                        <ul class="nav nav-treeview">
+                            <li class="nav-item"><a href="{{ route('admin.cheques.index') }}" class="nav-link {{ request()->routeIs('admin.cheques.index') ? 'active' : '' }}"><i class="fas fa-list nav-icon"></i><p>Cheque Book</p></a></li>
+                            <li class="nav-item"><a href="{{ route('admin.cheques.books.create') }}" class="nav-link {{ request()->routeIs('admin.cheques.books.create') ? 'active' : '' }}"><i class="fas fa-book nav-icon"></i><p>Create Book</p></a></li>
+                            <li class="nav-item"><a href="{{ route('admin.cheques.leaves.create') }}" class="nav-link {{ request()->routeIs('admin.cheques.leaves.create') ? 'active' : '' }}"><i class="fas fa-pen nav-icon"></i><p>Issue Cheque</p></a></li>
+                            <li class="nav-item"><a href="{{ route('admin.cheques.report') }}" class="nav-link {{ request()->routeIs('admin.cheques.report') ? 'active' : '' }}"><i class="fas fa-chart-line nav-icon"></i><p>Cheque Report</p></a></li>
+                        </ul>
+                    </li>
+                    @endcan
                     @can('banking.view')<li class="nav-item"><a href="{{ route('admin.bank-transactions.index') }}" class="nav-link {{ request()->routeIs('admin.bank-transactions*') ? 'active' : '' }}"><i class="nav-icon fas fa-exchange-alt"></i><p>Bank Transactions</p></a></li>@endcan
                     @can('banking.view')<li class="nav-item"><a href="{{ route('admin.bank-reports.statement') }}" class="nav-link {{ request()->routeIs('admin.bank-reports*') ? 'active' : '' }}"><i class="nav-icon fas fa-chart-line"></i><p>Bank Report</p></a></li>@endcan
                     @can('cost_centers.view')<li class="nav-item"><a href="{{ route('admin.cost-centers.index') }}" class="nav-link {{ request()->routeIs('admin.cost-centers*') ? 'active' : '' }}"><i class="nav-icon fas fa-sitemap" style="color:#EC4899"></i><p>Cost Centers</p></a></li>@endcan

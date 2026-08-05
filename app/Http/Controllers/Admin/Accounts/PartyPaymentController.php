@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
 use App\Models\AuditLog;
+use App\Models\ChequeLeaf;
 use App\Models\EntryVisibility;
 use App\Models\Party;
 use App\Models\PartyAdvance;
@@ -200,6 +201,7 @@ class PartyPaymentController extends Controller
             'amount' => ['nullable','numeric','min:0'],
             'discount_amount' => ['nullable','numeric','min:0'],
             'payment_mode' => ['nullable','string','max:40'],
+            'cheque_leaf_id' => ['nullable', Rule::exists('cheque_leaves', 'id')->where('company_id', $companyId)],
             'description' => ['nullable','string'],
             'attachment' => ['nullable','file','max:4096'],
             'allocations' => ['nullable','array'],
@@ -215,13 +217,19 @@ class PartyPaymentController extends Controller
 
         $data['discount_amount'] = (float) ($data['discount_amount'] ?? 0);
         $data['total_amount'] = max(0, (float) $data['amount'] - $data['discount_amount']);
+        if (($data['payment_mode'] ?? null) !== 'Cheque') {
+            $data['cheque_leaf_id'] = null;
+        }
         $data['attachment'] = $request->hasFile('attachment')
             ? $request->file('attachment')->store('payment-attachments', 'public')
             : ($payment?->attachment ?: ($data['existing_attachment'] ?? null));
 
         $adjustmentOnly = $this->isAdjustmentOnly($data);
         if (!$adjustmentOnly) {
-            abort_if(empty($data['bank_account_id']), 422, 'Bank/Cash account select karein.');
+            $isChequePaymentOut = ($data['payment_type'] ?? null) === 'payment_out'
+                && ($data['payment_mode'] ?? null) === 'Cheque'
+                && !empty($data['cheque_leaf_id']);
+            abort_if(empty($data['bank_account_id']) && !$isChequePaymentOut, 422, 'Bank/Cash account select karein.');
             abort_if((float) ($data['amount'] ?? 0) <= 0, 422, 'Payment amount enter karein.');
         }
 
@@ -238,7 +246,16 @@ class PartyPaymentController extends Controller
             return null;
         }
 
-        $account = BankAccount::where('company_id', $companyId)->lockForUpdate()->findOrFail($data['bank_account_id']);
+        $chequeLeaf = null;
+        $bankAccountId = $data['bank_account_id'] ?? null;
+        if (($data['payment_type'] ?? null) === 'payment_out' && ($data['payment_mode'] ?? null) === 'Cheque' && !empty($data['cheque_leaf_id'])) {
+            $chequeLeaf = ChequeLeaf::where('company_id', $companyId)->lockForUpdate()->findOrFail($data['cheque_leaf_id']);
+            abort_if($chequeLeaf->party_id !== $party->id, 422, 'Selected cheque isi party ke liye issue hona chahiye.');
+            abort_if(!$chequeLeaf->is_valid && $chequeLeaf->party_payment_id !== $payment?->id, 422, 'Selected cheque already used, cancelled, paid, ya expired hai.');
+            $bankAccountId = $chequeLeaf->bank_account_id;
+            $data['bank_account_id'] = $bankAccountId;
+        }
+        $account = BankAccount::where('company_id', $companyId)->lockForUpdate()->findOrFail($bankAccountId);
 
         $allocations = collect($data['allocations'] ?? [])
             ->filter(fn($row) => (float) ($row['amount'] ?? 0) > 0)
@@ -319,6 +336,18 @@ class PartyPaymentController extends Controller
             abort_if(abs($allocatedTotal - (float) $payment->amount) > 0.01, 422, 'Invoice allocation total must match payment amount.');
         }
 
+        if ($payment->payment_type === 'payment_out' && ($data['payment_mode'] ?? null) === 'Cheque') {
+            abort_if(empty($data['cheque_leaf_id']), 422, 'Payment out ke liye cheque select karein.');
+            abort_if($chequeLeaf->bank_account_id !== $account->id, 422, 'Selected cheque ka bank account payment bank se match nahi karta.');
+            abort_if(abs((float) $chequeLeaf->amount - (float) $payment->amount) > 0.01, 422, 'Payment out amount selected cheque amount ke barabar hona chahiye.');
+            $payment->update([
+                'reference_no' => $payment->reference_no ?: $chequeLeaf->cheque_no,
+                'bank_account_id' => $chequeLeaf->bank_account_id,
+                'cheque_leaf_id' => $chequeLeaf->id,
+            ]);
+            $payment->refresh();
+        }
+
         $isIn = $payment->payment_type === 'payment_in';
         $partyDebit = $isIn ? 0 : $payment->total_amount;
         $partyCredit = $isIn ? $payment->total_amount : 0;
@@ -327,11 +356,14 @@ class PartyPaymentController extends Controller
             ? (float) $account->current_balance + (float) $payment->total_amount
             : (float) $account->current_balance - (float) $payment->total_amount;
 
-        $ledgerDescription = $payment->description ?: ($isOpeningSettlement
+        $chequeDescription = $chequeLeaf
+            ? "Cheque {$chequeLeaf->cheque_no} issued. Clear date {$chequeLeaf->clearance_due_date?->format('d M Y')}."
+            : null;
+        $ledgerDescription = $payment->description ?: ($chequeDescription ?: ($isOpeningSettlement
             ? ($isIn ? 'Payment received against opening balance.' : 'Payment paid against opening balance.')
             : ($isAdvanceSettlement
                 ? ($isIn ? 'Advance payment received from party.' : 'Advance payment paid to party.')
-                : ($isIn ? 'Payment received from party.' : 'Payment paid to party.')));
+                : ($isIn ? 'Payment received from party.' : 'Payment paid to party.'))));
 
         $accounting->postPartyLedger($party, [
             'entry_date' => $payment->payment_date,
@@ -358,9 +390,9 @@ class PartyPaymentController extends Controller
             'reference_id' => $payment->id,
             'reference_no' => $payment->reference_no,
             'payment_mode' => $payment->payment_mode,
-            'description' => $payment->description ?: ($isAdvanceSettlement
+            'description' => $payment->description ?: ($chequeDescription ?: ($isAdvanceSettlement
                 ? 'Advance payment.'
-                : ($isOpeningSettlement ? 'Against party opening balance.' : null)),
+                : ($isOpeningSettlement ? 'Against party opening balance.' : null))),
             'attachment' => $payment->attachment,
             'created_by' => auth()->id(),
         ]);
@@ -380,6 +412,14 @@ class PartyPaymentController extends Controller
 
         if ($isAdvanceSettlement) {
             $advanceService->createAdvanceFromPayment($payment);
+        }
+
+        if ($chequeLeaf) {
+            $chequeLeaf->update([
+                'party_payment_id' => $payment->id,
+                'status' => 'payment_posted',
+                'payment_done' => true,
+            ]);
         }
 
         return $payment;
@@ -476,6 +516,11 @@ class PartyPaymentController extends Controller
         }
 
         PartyPaymentAllocation::where('party_payment_id', $payment->id)->delete();
+        ChequeLeaf::where('party_payment_id', $payment->id)->update([
+            'party_payment_id' => null,
+            'status' => 'issued',
+            'payment_done' => false,
+        ]);
 
         if (!$keepPaymentRecord) {
             $payment->fill([
@@ -495,6 +540,13 @@ class PartyPaymentController extends Controller
             'payment' => $payment?->load('allocations'),
             'parties' => Party::where('company_id', $companyId)->where('status', 'active')->orderBy('display_name')->get(),
             'accounts' => BankAccount::where('company_id', $companyId)->where('status', 'active')->orderBy('account_name')->get(),
+            'chequeLeaves' => ChequeLeaf::with(['chequeBook','bankAccount','party'])
+                ->where('company_id', $companyId)
+                ->where('status', 'issued')
+                ->where('payment_done', false)
+                ->whereDate('clearance_due_date', '>=', now()->toDateString())
+                ->orderBy('clearance_due_date')
+                ->get(),
         ];
     }
 

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Admin;
 use App\Http\Controllers\Admin\Accounts\BankAccountController;
 use App\Http\Controllers\Admin\Accounts\BankTransactionController;
+use App\Http\Controllers\Admin\Accounts\ChequeBookController;
 use App\Http\Controllers\Admin\Accounts\CostCenterController;
 use App\Http\Controllers\Admin\Accounts\PartyController;
 use App\Http\Controllers\Admin\Accounts\PartyAdvanceController;
@@ -69,6 +70,14 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('sub-cost-centers', SubCostCenterController::class)->only(['create','store','edit','update','destroy'])->middleware('permission:cost_centers.manage');
     });
     Route::middleware('permission:banking.view')->group(function () {
+        Route::get('cheques/books/create', [ChequeBookController::class, 'createBook'])->name('cheques.books.create');
+        Route::post('cheques/books', [ChequeBookController::class, 'storeBook'])->middleware('permission:banking.manage')->name('cheques.books.store');
+        Route::get('cheques/books/{chequeBook}/info', [ChequeBookController::class, 'bookInfo'])->name('cheques.books.info');
+        Route::get('cheques/leaves/create', [ChequeBookController::class, 'createLeaf'])->name('cheques.leaves.create');
+        Route::post('cheques/leaves', [ChequeBookController::class, 'storeLeaf'])->middleware('permission:banking.manage')->name('cheques.leaves.store');
+        Route::get('cheques/available-leaves', [ChequeBookController::class, 'availableLeaves'])->name('cheques.available-leaves');
+        Route::get('cheques/report', [ChequeBookController::class, 'report'])->name('cheques.report');
+        Route::get('cheques', [ChequeBookController::class, 'index'])->name('cheques.index');
         Route::resource('bank-accounts', BankAccountController::class)->only(['create','store','edit','update','destroy'])->middleware('permission:banking.manage');
         Route::resource('bank-accounts', BankAccountController::class)->only(['index','show']);
         Route::resource('bank-transactions', BankTransactionController::class)->only(['create','store'])->middleware('permission:banking.manage');

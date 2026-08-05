@@ -44,9 +44,26 @@
             <div class="row">
                 <div class="col-md-3 form-group"><label>Amount *</label><input type="number" step="0.01" min="0.01" name="amount" id="payAmount" class="form-control" readonly required value="{{ old('amount', isset($payment) ? number_format((float) $payment->amount, 2, '.', '') : '') }}"></div>
                 <div class="col-md-3 form-group"><label>Discount</label><input type="number" step="0.01" min="0" name="discount_amount" id="payDiscount" class="form-control" value="{{ old('discount_amount', isset($payment) ? number_format((float) $payment->discount_amount, 2, '.', '') : 0) }}"></div>
-                <div class="col-md-3 form-group"><label>Payment Mode</label><select name="payment_mode" class="form-control">@foreach(['UPI','NEFT','RTGS','IMPS','Cash','Cheque','Card','Other'] as $mode)<option @selected(old('payment_mode', $payment->payment_mode ?? '') === $mode)>{{ $mode }}</option>@endforeach</select></div>
+                <div class="col-md-3 form-group"><label>Payment Mode</label><select name="payment_mode" id="paymentModeSelect" class="form-control">@foreach(['UPI','NEFT','RTGS','IMPS','Cash','Cheque','Card','Other'] as $mode)<option @selected(old('payment_mode', $payment->payment_mode ?? '') === $mode)>{{ $mode }}</option>@endforeach</select></div>
                 <div class="col-md-3"><div class="live-total"><div style="font-size:12px;color:#7a7194;">Net bank settlement</div><div class="amount" id="payTotal">Rs 0.00</div></div></div>
             </div>
+            @if($type === 'payment_out')
+            <div id="chequePaymentBox" class="opening-action" style="display:block">
+                <div class="row align-items-end">
+                    <div class="col-md-7 form-group mb-md-0">
+                        <label>Pay By Issued Cheque</label>
+                        <select name="cheque_leaf_id" id="chequeLeafSelect" class="form-control select2">
+                            <option value="">Select party first</option>
+                        </select>
+                    </div>
+                    <div class="col-md-5">
+                        <div class="small text-muted" id="chequePaymentInfo">Party select karne ke baad us party ke unused valid cheques yahan dikhenge.</div>
+                        <button type="button" id="downloadSelectedCheque" class="btn btn-outline-success btn-sm mt-2" style="display:none"><i class="fas fa-download mr-1"></i>Download Cheque Image</button>
+                    </div>
+                </div>
+                <div class="mt-3" id="paymentChequePreview" style="display:none">@include('admin.cheques.partials.cheque-preview')</div>
+            </div>
+            @endif
 
             <div class="mb-3">
                 <button type="button" id="openAdjustmentModal" class="btn btn-outline-warning btn-sm" style="display:none"><i class="fas fa-pen-alt mr-1"></i> Receivable ko kam / zyada karein</button>
@@ -188,16 +205,68 @@
     }
 @endphp
 <script>
-let openBills = [], openingBalance = null, availableAdvances = [], selectedPartyText = '', adjustmentHistory = [];
+let openBills = [], openingBalance = null, availableAdvances = [], selectedPartyText = '', adjustmentHistory = [], loadingCheques = false;
 const existingPayment = @json($existingPaymentPayload);
 function fmt(n){return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function renderTotal(){
     let total=0;
-    if($('#settlementSource').val()==='opening_balance' || $('#settlementSource').val()==='advance') total=parseFloat(($('#settlementSource').val()==='advance' ? $('#advanceAmount').val() : $('#openingBalanceAmount').val())||0);
+    if('{{ $type }}' === 'payment_out' && $('#paymentModeSelect').val()==='Cheque' && $('#chequeLeafSelect').val()) total=Number($('#chequeLeafSelect option:selected').data('amount')||0);
+    else if($('#settlementSource').val()==='opening_balance' || $('#settlementSource').val()==='advance') total=parseFloat(($('#settlementSource').val()==='advance' ? $('#advanceAmount').val() : $('#openingBalanceAmount').val())||0);
     else $('.bill-check:checked').each(function(){total+=parseFloat($(this).closest('.bill-row').find('.allocation-input').val()||0)});
     $('#payAmount').val(total ? total.toFixed(2) : '');
     $('#payTotal').text(fmt(Math.max(0,total-parseFloat($('#payDiscount').val()||0))));
     syncBankRequirement();
+}
+function renderChequeBox(){
+    const useCheque = '{{ $type }}' === 'payment_out';
+    $('#chequePaymentBox').toggle(useCheque);
+    $('#chequeLeafSelect').prop('required', $('#paymentModeSelect').val()==='Cheque');
+    if(useCheque) fetchPartyCheques();
+}
+async function fetchPartyCheques(){
+    if('{{ $type }}' !== 'payment_out') return;
+    const partyId=$('#partySelect').val();
+    const oldValue=$('#chequeLeafSelect').val();
+    $('#chequeLeafSelect').html(`<option value="">${partyId ? 'Loading cheques...' : 'Select party first'}</option>`).trigger('change.select2');
+    $('#chequePaymentInfo').text(partyId ? 'Unused valid cheques loading...' : 'Party select karne ke baad us party ke unused valid cheques yahan dikhenge.');
+    if(!partyId) return;
+    loadingCheques = true;
+    const res=await fetch(`{{ route('admin.cheques.available-leaves') }}?party_id=${partyId}`,{headers:{Accept:'application/json'}});
+    const leaves=res.ok?await res.json():[];
+    const options=['<option value="">Select unused valid cheque</option>'].concat(leaves.map(leaf=>`<option value="${leaf.id}" data-party="${leaf.party_id}" data-bank="${leaf.bank_account_id}" data-amount="${leaf.amount}" data-book="${leaf.book_no||''}" data-clearance="${leaf.clearance_due_date||''}">${leaf.text}</option>`));
+    $('#chequeLeafSelect').html(options.join(''));
+    if(oldValue && leaves.some(leaf=>String(leaf.id)===String(oldValue))) $('#chequeLeafSelect').val(oldValue);
+    $('#chequeLeafSelect').trigger('change.select2');
+    $('#chequePaymentInfo').text(leaves.length ? `${leaves.length} unused valid cheque available for selected party.` : 'Is party ke liye koi unused valid cheque nahi mila.');
+    loadingCheques = false;
+}
+function applyChequeSelection(){
+    if(loadingCheques) return;
+    const opt = $('#chequeLeafSelect option:selected');
+    if(!opt.val())return;
+    const party=String(opt.data('party')||''), bank=String(opt.data('bank')||''), amount=Number(opt.data('amount')||0);
+    $('#paymentModeSelect').val('Cheque').trigger('change.select2');
+    if(bank) $('#bankAccountSelect').val(bank).trigger('change.select2');
+    let remaining=amount;
+    $('.bill-row').each(function(){
+        const row=$(this), due=Number(row.data('due')||0), use=Math.min(due, remaining);
+        const checked=use>0;
+        row.find('.bill-check').prop('checked',checked);
+        row.toggleClass('active',checked);
+        row.find('.pay-box').toggle(checked);
+        row.find('input[name]').prop('disabled',!checked);
+        row.find('.allocation-input').val(checked ? use.toFixed(2) : '');
+        remaining = Math.max(0, remaining - use);
+    });
+    $('#chequePaymentInfo').html(`<b>Cheque amount:</b> ${fmt(amount)} | <b>Book:</b> ${opt.data('book')||'-'} | <b>Clearance:</b> ${opt.data('clearance')||'-'}`);
+    $('#paymentChequePreview,#downloadSelectedCheque').show();
+    $('.cheque-preview .cheque-no .val').text(opt.text().split('|')[0].trim());
+    $('.cheque-preview .bank-sub').first().text(`A/C ${$('#bankAccountSelect option:selected').text().trim() || '-'} | Clear ${opt.data('clearance')||'-'}`);
+    $('.row-pay .line').text($('#partySelect option:selected').text().split('|')[0].trim() || '-');
+    $('.amount-box').text(fmt(amount));
+    $('.row-words .line').text('Rupees '+amount.toFixed(2)+' only');
+    $('.memo-block .line').text('Payment Out');
+    renderTotal();
 }
 function renderOpeningAction(){const usable=openingBalance&&openingBalance.available&&Number(openingBalance.remaining)>0;$('#openingAction').toggle(!!usable);if(usable)$('#openingActionAmount').text(fmt(openingBalance.remaining))}
 function renderAdvanceAction(){
@@ -257,7 +326,7 @@ async function fetchBills(){
     if(!partyId){openBills=[];openingBalance=null;availableAdvances=[];adjustmentHistory=[];selectedPartyText='';renderBills();renderOpeningAction();renderAdvanceAction();renderAdjustmentButton();return}
     $('#billList').html('<div class="text-muted p-3">Loading bills...</div>');
     const res=await fetch(`{{ route('admin.party-payments.open-bills') }}?party_id=${partyId}&payment_type={{ $type }}`,{headers:{Accept:'application/json'}});
-    const payload=res.ok?await res.json():{bills:[],opening_balance:null,available_advances:[],adjustment_history:[]};openBills=payload.bills||[];openingBalance=payload.opening_balance||null;availableAdvances=payload.available_advances||[];adjustmentHistory=payload.adjustment_history||[];selectedPartyText=$('#partySelect option:selected').text().trim();renderBills();renderOpeningAction();renderAdvanceAction();renderAdjustmentButton();
+    const payload=res.ok?await res.json():{bills:[],opening_balance:null,available_advances:[],adjustment_history:[]};openBills=payload.bills||[];openingBalance=payload.opening_balance||null;availableAdvances=payload.available_advances||[];adjustmentHistory=payload.adjustment_history||[];selectedPartyText=$('#partySelect option:selected').text().trim();renderBills();renderOpeningAction();renderAdvanceAction();renderAdjustmentButton();fetchPartyCheques();
     if(existingPayment && String(existingPayment.id) !== ''){
         if(existingPayment.settlement_source==='opening_balance' && existingPayment.opening_amount){
             $('#settlementSource').val('opening_balance');
@@ -280,6 +349,25 @@ async function fetchBills(){
     }
 }
 $('#partySelect').on('change',fetchBills);
+$('#paymentModeSelect').on('change',renderChequeBox);
+$('#chequeLeafSelect').on('change',applyChequeSelection);
+$('#downloadSelectedCheque').on('click',function(){
+    const node=document.querySelector('#paymentChequePreview .cheque-preview');
+    if(!node){return}
+    const rect=node.getBoundingClientRect();
+    const clone=node.cloneNode(true);
+    clone.setAttribute('xmlns','http://www.w3.org/1999/xhtml');
+    const data='<svg xmlns="http://www.w3.org/2000/svg" width="'+rect.width+'" height="'+rect.height+'"><foreignObject width="100%" height="100%">'+new XMLSerializer().serializeToString(clone)+'</foreignObject></svg>';
+    const img=new Image();
+    img.onload=function(){
+        const canvas=document.createElement('canvas');
+        canvas.width=Math.ceil(rect.width*2);canvas.height=Math.ceil(rect.height*2);
+        const ctx=canvas.getContext('2d');ctx.scale(2,2);ctx.drawImage(img,0,0);
+        const a=document.createElement('a');a.download=($('#chequeLeafSelect option:selected').text().split('|')[0].trim()||'cheque')+'.png';a.href=canvas.toDataURL('image/png');a.click();
+        URL.revokeObjectURL(img.src);
+    };
+    img.src=URL.createObjectURL(new Blob([data],{type:'image/svg+xml;charset=utf-8'}));
+});
 $('#openOpeningModal').on('click',function(){
     if(!openingBalance||!openingBalance.available)return;
     $('#openingOriginal').text(fmt(openingBalance.total));$('#openingPaid').text(fmt(openingBalance.paid));$('#openingRemaining').text(fmt(openingBalance.remaining));$('#openingBalanceDate').text(openingBalance.date||'-');$('#openingModalAmount').val(Number(openingBalance.remaining).toFixed(2)).attr('max',openingBalance.remaining);
@@ -358,6 +446,6 @@ $(document).on('change','.bill-check',function(){
     const row=$(this).closest('.bill-row'),due=parseFloat(row.data('due')||0);row.toggleClass('active',this.checked);row.find('.pay-box').toggle(this.checked);row.find('input[name]').prop('disabled',!this.checked);if(this.checked&&!row.find('.allocation-input').val())row.find('.allocation-input').val(due.toFixed(2));if(!this.checked)row.find('.allocation-input').val('');renderTotal();
 });
 $(document).on('input','.allocation-input,#payDiscount',function(){const row=$(this).closest('.bill-row');if(row.length&&parseFloat(this.value||0)>parseFloat(row.data('due')||0)){alert('Aap bill due amount se jyada payment nahi kar sakte.');this.value=parseFloat(row.data('due')||0).toFixed(2)}renderTotal()});
-renderTotal();renderAdjustmentButton();syncBankRequirement();if($('#partySelect').val())fetchBills();
+renderChequeBox();renderTotal();renderAdjustmentButton();syncBankRequirement();if($('#partySelect').val())fetchBills();if($('#chequeLeafSelect').val())applyChequeSelection();
 </script>
 @endpush

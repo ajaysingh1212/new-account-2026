@@ -50,7 +50,7 @@
     if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase','value'=>'Rs '.number_format($stats['purchases'] ?? 0,2),'icon'=>'fa-shopping-cart','accent'=>'#ec4899','modal'=>'purchaseSegmentModal'];
     if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase Due','value'=>'Rs '.number_format($stats['purchase_due'] ?? 0,2),'icon'=>'fa-file-circle-exclamation','accent'=>'#f59e0b','target'=>'purchaseDueBox'];
     if ($user->can('reports.transaction')) $cards[] = ['label'=>'Service Amount','value'=>'Rs '.number_format($stats['service_amount'] ?? 0,2),'icon'=>'fa-concierge-bell','accent'=>'#0ea5e9','modal'=>'serviceModal'];
-    if ($user->can('items.view')) $cards[] = ['label'=>'Items','value'=>$stats['items'] ?? 0,'icon'=>'fa-box','accent'=>'#f59e0b'];
+    if ($user->can('banking.view')) $cards[] = ['label'=>'Cheque Clearing','html'=>'Rs '.number_format($stats['cheque_paid'] ?? 0,2).'<br><small style="color:#64748b;font-weight:800">Upcoming clear Rs '.number_format($stats['cheque_clearing_due'] ?? 0,2).'</small>','icon'=>'fa-money-check-alt','accent'=>'#16a34a','url'=>route('admin.cheques.report', ['from_date' => $from, 'to_date' => $to])];
     if ($user->can('stocks.view')) $cards[] = ['label'=>'Low Stock','value'=>$stats['low_stock'] ?? 0,'icon'=>'fa-exclamation-triangle','accent'=>'#ef4444'];
     if ($user->can('banking.view')) $cards[] = ['label'=>'Bank Balance','value'=>'Rs '.number_format($stats['bank_balance'] ?? 0,2),'icon'=>'fa-university','accent'=>'#06b6d4'];
     if ($user->can('estimates.view')) $cards[] = ['label'=>'Estimates','value'=>$stats['estimates'] ?? 0,'icon'=>'fa-file-contract','accent'=>'#4338ca'];
@@ -101,7 +101,7 @@
 <div class="row">
     @forelse($cards as $card)
         <div class="col-6 col-xl-3 mb-4">
-            <div class="metric-card" style="--accent:{{ $card['accent'] }};cursor:{{ isset($card['modal']) ? 'pointer' : 'default' }}" @if(isset($card['modal'])) data-toggle="modal" data-target="#{{ $card['modal'] }}" @endif>
+            <div class="metric-card" style="--accent:{{ $card['accent'] }};cursor:{{ isset($card['modal']) || isset($card['url']) ? 'pointer' : 'default' }}" @if(isset($card['modal'])) data-toggle="modal" data-target="#{{ $card['modal'] }}" @endif @if(isset($card['url'])) onclick="window.location='{{ $card['url'] }}'" @endif>
                 <div class="metric-icon"><i class="fas {{ $card['icon'] }}"></i></div>
                 <div class="metric-value">@if(isset($card['html'])) {!! $card['html'] !!} @else {{ $card['value'] }} @endif</div>
                 <div class="metric-label">{{ $card['label'] }}</div>

@@ -8,7 +8,7 @@ class PartyPayment extends Model
 {
     protected $fillable = [
         'company_id','party_id','bank_account_id','payment_date','payment_type','reference_no',
-        'amount','discount_amount','total_amount','payment_mode','description','attachment','created_by',
+        'amount','discount_amount','total_amount','payment_mode','description','attachment','cheque_leaf_id','created_by',
     ];
 
     protected $casts = [
@@ -23,4 +23,5 @@ class PartyPayment extends Model
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
     public function allocations() { return $this->hasMany(PartyPaymentAllocation::class); }
     public function advance() { return $this->hasOne(PartyAdvance::class, 'party_payment_id'); }
+    public function chequeLeaf() { return $this->belongsTo(ChequeLeaf::class); }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\BankAccount;
+use App\Models\ChequeLeaf;
 use App\Models\Company;
 use App\Models\CostCenter;
 use App\Models\DeliveryChallan;
@@ -115,6 +116,14 @@ class DashboardController extends Controller
         );
         $serviceRows = $this->serviceRows($companyId, $visibility, $user, $from, $to);
         $stats['service_amount'] = (float) $serviceRows->sum('amount');
+        $chequePaymentQuery = $this->scope(ChequeLeaf::query(), $companyId)
+            ->where('payment_done', true)
+            ->whereBetween('cheque_date', [$from, $to]);
+        $stats['cheque_paid'] = (float) $chequePaymentQuery->sum('amount');
+        $stats['cheque_clearing_due'] = (float) $this->scope(ChequeLeaf::query(), $companyId)
+            ->where('status', 'payment_posted')
+            ->whereDate('clearance_due_date', '>=', now()->toDateString())
+            ->sum('amount');
         $serviceTotals = [
             'amount' => (float) $serviceRows->sum('amount'),
             'count' => (int) $serviceRows->count(),
