@@ -148,17 +148,9 @@ class PurchaseBillController extends Controller
                 $this->reversePurchaseLedger($purchase, $accounting);
             }
 
-            if ($repostStock) {
-                $this->reversePurchaseStock($purchase, $accounting);
-            }
-
             $attachment = $purchase->attachment;
             if ($request->hasFile('attachment')) {
                 $attachment = $request->file('attachment')->store('purchase-attachments', 'public');
-            }
-
-            if ($repostStock) {
-                $purchase->items()->delete();
             }
 
             $purchase->update(array_merge($data, [
@@ -167,7 +159,7 @@ class PurchaseBillController extends Controller
             ]));
 
             if ($repostStock) {
-                $totals = $this->storeLines($request, $purchase, $accounting, 'purchase');
+                $totals = $this->replaceLinesWithStockDeltas($request, $purchase, $accounting);
                 $purchase->update($totals);
             }
 
@@ -291,6 +283,95 @@ class PurchaseBillController extends Controller
     private function storeLines(Request $request, PurchaseBill $bill, AccountingService $accounting, string $mode): array
     {
         $subtotal = $tax = $lineDiscount = 0;
+        foreach ($this->purchaseLineRows($request, $bill) as $row) {
+            PurchaseBillItem::create($row['attributes']);
+            $accounting->moveStock($row['item'], [
+                'party_id' => $bill->party_id,
+                'movement_date' => $bill->billing_date,
+                'movement_type' => 'purchase',
+                'direction' => 'in',
+                'quantity' => $row['quantity'],
+                'unit_price' => $row['unit_price'],
+                'total_value' => $row['line_total'],
+                'reference_type' => PurchaseBill::class,
+                'reference_id' => $bill->id,
+                'reference_no' => $bill->invoice_no,
+                'description' => 'Purchase stock in.',
+                'movement_units' => $row['attributes']['selected_units'],
+            ]);
+            $subtotal += $row['base'];
+            $tax += $row['tax_amount'];
+            $lineDiscount += $row['discount_amount'];
+        }
+        $overallDiscount = (float) ($request->discount_amount ?? 0);
+        return [
+            'subtotal' => $subtotal,
+            'discount_amount' => $lineDiscount + $overallDiscount,
+            'tax_amount' => $tax,
+            'grand_total' => max(0, $subtotal - $lineDiscount - $overallDiscount + $tax),
+        ];
+    }
+
+    private function replaceLinesWithStockDeltas(Request $request, PurchaseBill $bill, AccountingService $accounting): array
+    {
+        $oldQtyByItem = $bill->items
+            ->groupBy('item_id')
+            ->map(fn($lines) => (float) $lines->sum('quantity'))
+            ->all();
+        $newRows = $this->purchaseLineRows($request, $bill);
+        $newQtyByItem = collect($newRows)
+            ->groupBy('item_id')
+            ->map(fn($rows) => (float) collect($rows)->sum('quantity'))
+            ->all();
+
+        foreach (array_unique(array_merge(array_keys($oldQtyByItem), array_keys($newQtyByItem))) as $itemId) {
+            $delta = round((float) ($newQtyByItem[$itemId] ?? 0) - (float) ($oldQtyByItem[$itemId] ?? 0), 3);
+            if (abs($delta) < 0.0005) {
+                continue;
+            }
+
+            $item = Item::findOrFail($itemId);
+            $matchingRows = collect($newRows)->where('item_id', (int) $itemId);
+            $unitPrice = (float) ($matchingRows->last()['unit_price'] ?? $bill->items->firstWhere('item_id', (int) $itemId)?->unit_price ?? 0);
+
+            $accounting->moveStock($item, [
+                'party_id' => $bill->party_id,
+                'movement_date' => $bill->billing_date,
+                'movement_type' => $delta > 0 ? 'purchase_update_delta' : 'purchase_update_reversal_delta',
+                'direction' => $delta > 0 ? 'in' : 'out',
+                'quantity' => abs($delta),
+                'unit_price' => $unitPrice,
+                'total_value' => abs($delta) * $unitPrice,
+                'reference_type' => PurchaseBill::class,
+                'reference_id' => $bill->id,
+                'reference_no' => $bill->invoice_no,
+                'description' => 'Purchase stock delta from bill update.',
+                'movement_units' => [],
+            ]);
+        }
+
+        $bill->items()->delete();
+
+        $subtotal = $tax = $lineDiscount = 0;
+        foreach ($newRows as $row) {
+            PurchaseBillItem::create($row['attributes']);
+            $subtotal += $row['base'];
+            $tax += $row['tax_amount'];
+            $lineDiscount += $row['discount_amount'];
+        }
+
+        $overallDiscount = (float) ($request->discount_amount ?? 0);
+        return [
+            'subtotal' => $subtotal,
+            'discount_amount' => $lineDiscount + $overallDiscount,
+            'tax_amount' => $tax,
+            'grand_total' => max(0, $subtotal - $lineDiscount - $overallDiscount + $tax),
+        ];
+    }
+
+    private function purchaseLineRows(Request $request, PurchaseBill $bill): array
+    {
+        $rows = [];
         foreach ($request->item_id as $i => $itemId) {
             $item = Item::with('productType')->findOrFail($itemId);
             abort_if($item->productType?->nature === 'finished_goods', 422, 'Finished goods cannot be purchased. Use Production / CRM Assembly.');
@@ -308,46 +389,34 @@ class PurchaseBillController extends Controller
                 $price
             );
 
-            PurchaseBillItem::create([
-                'purchase_bill_id' => $bill->id,
-                'item_id' => $item->id,
-                'description' => $request->description[$i] ?? $item->description,
+            $rows[] = [
+                'item' => $item,
+                'item_id' => (int) $item->id,
                 'quantity' => $qty,
-                'unit' => $request->unit[$i] ?? $item->unit,
                 'unit_price' => $price,
-                'discount_type' => $request->discount_type[$i] ?? 'percent',
-                'discount_value' => $request->discount_value[$i] ?? 0,
+                'base' => $base,
                 'discount_amount' => $discount,
-                'tax_percent' => $request->tax_percent[$i] ?? 0,
                 'tax_amount' => $taxAmount,
                 'line_total' => $total,
-                'selected_units' => $selectedUnits,
-            ]);
-            $accounting->moveStock($item, [
-                'party_id' => $bill->party_id,
-                'movement_date' => $bill->billing_date,
-                'movement_type' => 'purchase',
-                'direction' => 'in',
-                'quantity' => $qty,
-                'unit_price' => $price,
-                'total_value' => $total,
-                'reference_type' => PurchaseBill::class,
-                'reference_id' => $bill->id,
-                'reference_no' => $bill->invoice_no,
-                'description' => 'Purchase stock in.',
-                'movement_units' => $selectedUnits,
-            ]);
-            $subtotal += $base;
-            $tax += $taxAmount;
-            $lineDiscount += $discount;
+                'attributes' => [
+                    'purchase_bill_id' => $bill->id,
+                    'item_id' => $item->id,
+                    'description' => $request->description[$i] ?? $item->description,
+                    'quantity' => $qty,
+                    'unit' => $request->unit[$i] ?? $item->unit,
+                    'unit_price' => $price,
+                    'discount_type' => $request->discount_type[$i] ?? 'percent',
+                    'discount_value' => $request->discount_value[$i] ?? 0,
+                    'discount_amount' => $discount,
+                    'tax_percent' => $request->tax_percent[$i] ?? 0,
+                    'tax_amount' => $taxAmount,
+                    'line_total' => $total,
+                    'selected_units' => $selectedUnits,
+                ],
+            ];
         }
-        $overallDiscount = (float) ($request->discount_amount ?? 0);
-        return [
-            'subtotal' => $subtotal,
-            'discount_amount' => $lineDiscount + $overallDiscount,
-            'tax_amount' => $tax,
-            'grand_total' => max(0, $subtotal - $lineDiscount - $overallDiscount + $tax),
-        ];
+
+        return $rows;
     }
 
     private function reversePurchasePosting(PurchaseBill $bill, AccountingService $accounting): void

@@ -21,6 +21,7 @@ use App\Models\SalesInvoice;
 use App\Models\SalesInvoiceItem;
 use App\Models\SalesReturn;
 use App\Models\SalesReturnItem;
+use App\Models\StockMovement;
 use App\Models\SubCostCenter;
 use App\Models\TermsTemplate;
 use App\Models\User;
@@ -181,6 +182,13 @@ class SalesInvoiceController extends Controller
 
             $linesChanged = $this->lineSignature($sale->items->toArray()) !== $this->requestLineSignature($request);
             $headerChanged = $this->salesHeaderChanged($sale, $data);
+            $oldInterCompanyTransfer = (bool) $sale->inter_company_transfer;
+            $oldTargetIds = array_map('intval', $sale->inter_company_target_company_ids ?? []);
+            sort($oldTargetIds);
+            $newInterCompanyTransfer = $request->boolean('inter_company_transfer');
+            $newTargetIds = $newInterCompanyTransfer ? $this->validatedTargetCompanyIds($request, $sale->company_id) : [];
+            sort($newTargetIds);
+            $interCompanyChanged = $oldInterCompanyTransfer !== $newInterCompanyTransfer || $oldTargetIds !== $newTargetIds;
             $repostStock = $linesChanged;
             $repostLedger = $linesChanged || $headerChanged;
 
@@ -205,8 +213,8 @@ class SalesInvoiceController extends Controller
             $sale->update(array_merge($data, [
                 'invoice_no' => $data['invoice_no'] ?: $sale->invoice_no,
                 'attachment' => $attachment,
-                'inter_company_transfer' => $request->boolean('inter_company_transfer'),
-                'inter_company_target_company_ids' => $request->boolean('inter_company_transfer') ? $this->validatedTargetCompanyIds($request, $sale->company_id) : null,
+                'inter_company_transfer' => $newInterCompanyTransfer,
+                'inter_company_target_company_ids' => $newInterCompanyTransfer ? $newTargetIds : null,
             ]));
 
             if ($repostStock) {
@@ -242,12 +250,14 @@ class SalesInvoiceController extends Controller
             }
 
             $visibility->syncFromRequest($request, $sale);
-            if ($repostStock) {
+            if ($repostStock || $interCompanyChanged) {
                 if ($sale->inter_company_transfer) {
                     $this->createInterCompanyPurchases($sale->fresh(['items.item', 'party']), $accounting, $request);
                 } else {
                     $this->removeInterCompanyPurchases($sale, $accounting);
                 }
+            } elseif ($sale->inter_company_transfer) {
+                $this->syncExistingInterCompanyPurchaseVisibility($sale, $request);
             }
             $this->logUpdate($sale, $oldValues, $sale->fresh('items')->toArray());
         });
@@ -932,6 +942,27 @@ class SalesInvoiceController extends Controller
     private function syncPurchaseVisibility(Request $request, PurchaseBill $purchase, int $targetCompanyId): void
     {
         $this->syncInterCompanyVisibilityForEntry($request, $purchase, $targetCompanyId);
+    }
+
+    private function syncExistingInterCompanyPurchaseVisibility(SalesInvoice $invoice, Request $request): void
+    {
+        PurchaseBill::with(['items.item'])
+            ->where('source_sales_invoice_id', $invoice->id)
+            ->get()
+            ->each(function (PurchaseBill $purchase) use ($request) {
+                $this->syncPurchaseVisibility($request, $purchase, $purchase->company_id);
+
+                foreach ($purchase->items as $line) {
+                    if ($line->item) {
+                        $this->syncInterCompanyVisibilityForEntry($request, $line->item, $purchase->company_id);
+                    }
+                }
+
+                StockMovement::where('reference_type', PurchaseBill::class)
+                    ->where('reference_id', $purchase->id)
+                    ->get()
+                    ->each(fn(StockMovement $movement) => $this->syncInterCompanyVisibilityForEntry($request, $movement, $purchase->company_id));
+            });
     }
 
     private function syncInterCompanyVisibilityForEntry(Request $request, $entry, int $targetCompanyId): void

@@ -596,24 +596,26 @@ function addLine(data = {}) {
         dropdownAutoWidth: true
     });
 
-    ['description','quantity','unit','unit_price','discount_type','discount_value','tax_mode','tax_percent'].forEach(k => {
-        $row.find(`[name="${k}[]"]`).val(data[k] ?? $row.find(`[name="${k}[]"]`).val());
-    });
-
     if(data.item_id){
         $row.find('[name="item_id[]"]').val(data.item_id).trigger('change');
     }
+
+    ['description','quantity','unit','unit_price','discount_type','discount_value','tax_mode','tax_percent'].forEach(k => {
+        $row.find(`[name="${k}[]"]`).val(data[k] ?? $row.find(`[name="${k}[]"]`).val());
+    });
 
     syncTaxMode($row);
 
     setRowSelected($row, data.selected_units || []);
 
     if(data.item_id){
-        autoSelectUnits($row);
+        if(!data.selected_units || !data.selected_units.length){
+            autoSelectUnits($row);
+        }
 
         const hasDisc = data.discount_value !== undefined && parseFloat(data.discount_value) !== 0;
 
-        enforceMaxDisc($row, !hasDisc);
+        enforceMaxDisc($row, !hasDisc && data.unit_price === undefined);
     }
 
     calc();
