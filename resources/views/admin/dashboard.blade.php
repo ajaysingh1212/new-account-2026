@@ -55,7 +55,8 @@
     if ($user->can('banking.view')) $cards[] = ['label'=>'Completed Cheques','value'=>'Rs '.number_format($stats['cheque_completed'] ?? 0,2),'icon'=>'fa-check-double','accent'=>'#0f766e','modal'=>'completedChequeModal'];
     if ($user->can('stocks.view')) $cards[] = ['label'=>'Low Stock','value'=>$stats['low_stock'] ?? 0,'icon'=>'fa-exclamation-triangle','accent'=>'#ef4444'];
     if ($user->can('banking.view')) $cards[] = ['label'=>'Bank Balance','value'=>'Rs '.number_format($stats['bank_balance'] ?? 0,2),'icon'=>'fa-university','accent'=>'#06b6d4'];
-    if ($user->can('estimates.view')) $cards[] = ['label'=>'Estimates','value'=>$stats['estimates'] ?? 0,'icon'=>'fa-file-contract','accent'=>'#4338ca'];
+    if ($user->can('estimates.view')) $cards[] = ['label'=>'Estimates','value'=>$stats['estimates'] ?? 0,'icon'=>'fa-file-contract','accent'=>'#4338ca','modal'=>'estimateSegmentModal'];
+    if ($user->can('delivery_challans.view')) $cards[] = ['label'=>'Pending Sales','value'=>'Rs '.number_format($stats['pending_sales'] ?? 0,2),'icon'=>'fa-hourglass-half','accent'=>'#f97316','url'=>route('admin.pending-orders.index', ['from_date' => $from, 'to_date' => $to])];
     if ($user->can('delivery_challans.view')) $cards[] = ['label'=>'Challans','value'=>$stats['challans'] ?? 0,'icon'=>'fa-truck','accent'=>'#0f766e'];
     if ($user->can('expenses.view')) $cards[] = ['label'=>'Pending Expenses','value'=>$stats['pending_expenses'] ?? 0,'icon'=>'fa-clipboard-check','accent'=>'#10b981'];
     if ($user->can('reports.transaction')) $cards[] = ['label'=>'Total Profit (on Cost)','html'=>'Rs '.number_format($stats['total_profit'] ?? 0,2).'<br><small style="color:#64748b;font-weight:800">On Sale '.number_format($stats['total_profit_percent_on_sale'] ?? 0,2).'% | On Cost '.number_format($stats['total_profit_percent'] ?? 0,2).'%</small>','icon'=>'fa-chart-line','accent'=>'#0f766e','modal'=>'profitSegmentModal'];
@@ -425,6 +426,13 @@
     'title' => 'Product Category Wise Purchase',
     'amountLabel' => 'Purchase',
     'segments' => $purchaseSegments,
+])
+
+@include('admin.partials.dashboard-segment-modal', [
+    'modalId' => 'estimateSegmentModal',
+    'title' => 'Product Category Wise Estimate',
+    'amountLabel' => 'Estimate',
+    'segments' => $estimateSegments,
 ])
 
 @include('admin.partials.dashboard-segment-modal', [

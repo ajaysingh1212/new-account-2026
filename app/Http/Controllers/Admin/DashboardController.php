@@ -9,10 +9,12 @@ use App\Models\Company;
 use App\Models\CostCenter;
 use App\Models\DeliveryChallan;
 use App\Models\Estimate;
+use App\Models\EstimateItem;
 use App\Models\Expense;
 use App\Models\Item;
 use App\Models\Party;
 use App\Models\PartyPaymentAllocation;
+use App\Models\PendingOrder;
 use App\Models\ProductCategory;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseBillItem;
@@ -114,6 +116,9 @@ class DashboardController extends Controller
             (float) $stats['total_profit'],
             (float) $profitRows->sum('sale')
         );
+        $stats['pending_sales'] = (float) $this->scope(PendingOrder::query(), $companyId)
+            ->whereBetween('pending_date', [$from, $to])
+            ->sum('line_total');
         $serviceRows = $this->serviceRows($companyId, $visibility, $user, $from, $to);
         $stats['service_amount'] = (float) $serviceRows->sum('amount');
         $chequePaymentQuery = $this->scope(ChequeLeaf::query(), $companyId)
@@ -188,6 +193,13 @@ class DashboardController extends Controller
             $this->tradeSegments(SalesInvoiceItem::class, 'salesInvoice', SalesInvoice::class, 'billing_date', $companyId, $visibility, $user, $from, $to, 'sale'),
             (float) ($stats['sales'] ?? 0)
         );
+        $estimateSegments = $this->normalizeSegmentTotal(
+            $this->tradeSegments(EstimateItem::class, 'estimate', Estimate::class, 'estimate_date', $companyId, $visibility, $user, $from, $to, 'estimate'),
+            (float) ($user->isSuperAdmin()
+                ? $this->scope(Estimate::query(), $companyId)
+                : $visibility->scopeForUser(Estimate::query(), Estimate::class)
+            )->whereBetween('estimate_date', [$from, $to])->sum('grand_total')
+        );
         $purchaseSegments = $this->normalizeSegmentTotal(
             $this->tradeSegments(PurchaseBillItem::class, 'purchaseBill', PurchaseBill::class, 'billing_date', $companyId, $visibility, $user, $from, $to, 'purchase'),
             (float) ($stats['purchases'] ?? 0)
@@ -207,7 +219,7 @@ class DashboardController extends Controller
         ];
         $quickActions = $this->quickActions($user);
 
-        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals','chequeRows','completedChequeRows'));
+        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','estimateSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals','chequeRows','completedChequeRows'));
     }
 
     private function dateRange(Request $request): array
@@ -457,7 +469,13 @@ class DashboardController extends Controller
             $query->whereHas($invoiceRelation, fn($q) => $this->scope($q, $companyId));
         } else {
             $visibleIds = $visibility->scopeForUser($invoiceModel::query(), $invoiceModel)->pluck('id');
-            $foreignKey = $lineModel === SalesInvoiceItem::class ? 'sales_invoice_id' : 'purchase_bill_id';
+            $foreignKey = match ($lineModel) {
+                SalesInvoiceItem::class => 'sales_invoice_id',
+                PurchaseBillItem::class => 'purchase_bill_id',
+                EstimateItem::class => 'estimate_id',
+                default => null,
+            };
+            abort_unless($foreignKey, 500, 'Unsupported dashboard segment line model.');
             $query->whereIn($foreignKey, $visibleIds);
         }
 
@@ -516,7 +534,7 @@ class DashboardController extends Controller
             $row['qty'] += (float) $line->quantity;
             $row['amount'] += $amount;
             $row['items']->push([
-                'invoice' => $bill?->invoice_no,
+                'invoice' => $bill?->invoice_no ?? $bill?->estimate_no ?? $bill?->challan_no,
                 'date' => $bill?->{$dateColumn}?->format('d M Y'),
                 'party' => $bill?->party?->display_name ?: 'Cash / Walk-in',
                 'party_id' => $bill?->party_id,
