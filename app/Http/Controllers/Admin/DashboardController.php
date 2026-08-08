@@ -118,49 +118,66 @@ class DashboardController extends Controller
         $stats['service_amount'] = (float) $serviceRows->sum('amount');
         $chequePaymentQuery = $this->scope(ChequeLeaf::query(), $companyId)
             ->where('payment_done', true)
+            ->where('status', '!=', 'completed')
             ->whereBetween('cheque_date', [$from, $to]);
         $stats['cheque_paid'] = (float) $chequePaymentQuery->sum('amount');
+        $stats['cheque_completed'] = (float) $this->scope(ChequeLeaf::query(), $companyId)
+            ->where('status', 'completed')
+            ->whereBetween('cheque_date', [$from, $to])
+            ->sum('amount');
         $stats['cheque_clearing_due'] = (float) $this->scope(ChequeLeaf::query(), $companyId)
             ->where('status', 'payment_posted')
             ->whereDate('clearance_due_date', '>=', now()->toDateString())
             ->sum('amount');
         $today = now()->startOfDay();
+        $mapChequeRow = function (ChequeLeaf $leaf) use ($today) {
+            $settled = (float) ($leaf->payment?->allocations?->sum('amount') ?? 0);
+            $clearance = $leaf->clearance_due_date?->copy()->startOfDay();
+
+            return [
+                'id' => $leaf->id,
+                'cheque_no' => $leaf->cheque_no,
+                'party' => $leaf->party?->display_name ?: 'Not settled yet',
+                'book' => $leaf->chequeBook?->book_no,
+                'bank' => $leaf->bankAccount?->account_name,
+                'account_number' => $leaf->bankAccount?->account_number,
+                'ifsc_code' => $leaf->bankAccount?->ifsc_code,
+                'bank_name' => $leaf->bankAccount?->bank_name,
+                'amount' => (float) $leaf->amount,
+                'settled' => $settled,
+                'due' => max(0, (float) $leaf->amount - $settled),
+                'age' => $leaf->cheque_date ? $leaf->cheque_date->diffInDays($today, false) : 0,
+                'issue_date' => $leaf->cheque_date?->format('d M Y'),
+                'clearance_date' => $leaf->clearance_due_date?->format('d M Y'),
+                'clearance_day' => $leaf->clearance_due_date?->format('l'),
+                'days_left' => $clearance ? $today->diffInDays($clearance, false) : null,
+                'validity' => $leaf->validity_months,
+                'status_raw' => $leaf->status,
+                'status' => ucfirst(str_replace('_', ' ', $leaf->status)),
+                'bills' => $leaf->payment?->allocations?->map(fn($allocation) => [
+                    'bill' => $allocation->bill_no,
+                    'amount' => (float) $allocation->amount,
+                ])->values() ?? collect(),
+                'details_url' => route('admin.cheques.details', $leaf),
+                'print_url' => route('admin.cheques.print', $leaf),
+                'status_url' => route('admin.cheques.status', $leaf),
+            ];
+        };
         $chequeRows = $this->scope(ChequeLeaf::with(['chequeBook','bankAccount','party','payment.allocations']), $companyId)
             ->whereBetween('cheque_date', [$from, $to])
+            ->where('status', '!=', 'completed')
             ->orderBy('clearance_due_date')
             ->take(50)
             ->get()
-            ->map(function (ChequeLeaf $leaf) use ($today) {
-                $settled = (float) ($leaf->payment?->allocations?->sum('amount') ?? 0);
-                $clearance = $leaf->clearance_due_date?->copy()->startOfDay();
-
-                return [
-                    'id' => $leaf->id,
-                    'cheque_no' => $leaf->cheque_no,
-                    'party' => $leaf->party?->display_name ?: 'Not settled yet',
-                    'book' => $leaf->chequeBook?->book_no,
-                    'bank' => $leaf->bankAccount?->account_name,
-                    'account_number' => $leaf->bankAccount?->account_number,
-                    'ifsc_code' => $leaf->bankAccount?->ifsc_code,
-                    'bank_name' => $leaf->bankAccount?->bank_name,
-                    'amount' => (float) $leaf->amount,
-                    'settled' => $settled,
-                    'due' => max(0, (float) $leaf->amount - $settled),
-                    'age' => $leaf->cheque_date ? $leaf->cheque_date->diffInDays($today, false) : 0,
-                    'issue_date' => $leaf->cheque_date?->format('d M Y'),
-                    'clearance_date' => $leaf->clearance_due_date?->format('d M Y'),
-                    'clearance_day' => $leaf->clearance_due_date?->format('l'),
-                    'days_left' => $clearance ? $today->diffInDays($clearance, false) : null,
-                    'validity' => $leaf->validity_months,
-                    'status' => ucfirst(str_replace('_', ' ', $leaf->status)),
-                    'bills' => $leaf->payment?->allocations?->map(fn($allocation) => [
-                        'bill' => $allocation->bill_no,
-                        'amount' => (float) $allocation->amount,
-                    ])->values() ?? collect(),
-                    'details_url' => route('admin.cheques.details', $leaf),
-                    'print_url' => route('admin.cheques.print', $leaf),
-                ];
-            })
+            ->map($mapChequeRow)
+            ->values();
+        $completedChequeRows = $this->scope(ChequeLeaf::with(['chequeBook','bankAccount','party','payment.allocations']), $companyId)
+            ->whereBetween('cheque_date', [$from, $to])
+            ->where('status', 'completed')
+            ->latest('updated_at')
+            ->take(50)
+            ->get()
+            ->map($mapChequeRow)
             ->values();
         $serviceTotals = [
             'amount' => (float) $serviceRows->sum('amount'),
@@ -190,7 +207,7 @@ class DashboardController extends Controller
         ];
         $quickActions = $this->quickActions($user);
 
-        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals','chequeRows'));
+        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals','chequeRows','completedChequeRows'));
     }
 
     private function dateRange(Request $request): array

@@ -214,6 +214,22 @@ class ChequeBookController extends Controller
         return response()->json($this->settlementPayload($chequeLeaf));
     }
 
+    public function updateStatus(Request $request, ChequeLeaf $chequeLeaf)
+    {
+        $this->authorizeCompany($chequeLeaf->company_id);
+
+        $data = $request->validate([
+            'status' => ['required', Rule::in(['issued', 'payment_posted', 'completed'])],
+        ]);
+
+        $chequeLeaf->update([
+            'status' => $data['status'],
+            'payment_done' => $data['status'] !== 'issued',
+        ]);
+
+        return back()->with('success', 'Cheque status updated successfully.');
+    }
+
     public function print(ChequeLeaf $chequeLeaf)
     {
         $this->authorizeCompany($chequeLeaf->company_id);
@@ -271,6 +287,7 @@ class ChequeBookController extends Controller
                 'age' => $leaf->cheque_date ? $leaf->cheque_date->diffInDays($today, false) : 0,
                 'validity_months' => $leaf->validity_months,
                 'status' => ucfirst(str_replace('_', ' ', $leaf->status)),
+                'is_completed' => $leaf->status === 'completed',
                 'settlement_date' => $leaf->payment?->payment_date?->format('d M Y'),
             ],
             'bank' => [

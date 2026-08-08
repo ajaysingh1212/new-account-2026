@@ -70,7 +70,9 @@
                     <td><b class="{{ $row['due'] > 0 ? 'text-danger' : 'text-success' }}">Rs {{ number_format($row['due'],2) }}</b></td>
                     <td>{{ $row['age'] }} days</td>
                     <td>{{ $leaf->validity_months }} month<br><small>{{ $leaf->clearance_due_date?->format('d M Y') }} | {{ $leaf->clearance_due_date?->format('l') }} | {{ $row['days_left'] === null ? '-' : ($row['days_left'].' days left') }}</small></td>
-                    <td><span class="status-pill {{ $expired ? 'expired' : ($row['due'] > 0 ? 'pending' : '') }}">{{ $expired ? 'Expired' : ucfirst(str_replace('_',' ',$leaf->status)) }}</span></td>
+                    <td>
+                        <span class="status-pill {{ $leaf->status === 'completed' ? '' : ($expired ? 'expired' : ($row['due'] > 0 ? 'pending' : '')) }}">{{ $leaf->status === 'completed' ? 'Completed' : ($expired ? 'Expired' : ucfirst(str_replace('_',' ',$leaf->status))) }}</span>
+                    </td>
                 </tr>
             @empty
                 <tr><td colspan="10" class="text-center text-muted py-4">No cheques found.</td></tr>

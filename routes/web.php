@@ -77,6 +77,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::post('cheques/leaves', [ChequeBookController::class, 'storeLeaf'])->middleware('permission:banking.manage')->name('cheques.leaves.store');
         Route::get('cheques/available-leaves', [ChequeBookController::class, 'availableLeaves'])->name('cheques.available-leaves');
         Route::get('cheques/report', [ChequeBookController::class, 'report'])->name('cheques.report');
+        Route::post('cheques/{chequeLeaf}/status', [ChequeBookController::class, 'updateStatus'])->middleware('permission:banking.manage')->name('cheques.status');
         Route::get('cheques/{chequeLeaf}/details', [ChequeBookController::class, 'details'])->name('cheques.details');
         Route::get('cheques/{chequeLeaf}/print', [ChequeBookController::class, 'print'])->name('cheques.print');
         Route::get('cheques', [ChequeBookController::class, 'index'])->name('cheques.index');
