@@ -49,6 +49,7 @@ class DashboardController extends Controller
                 'sales' => $this->scope(SalesInvoice::query(), $companyId)->whereBetween('billing_date', [$from, $to])->sum('grand_total'),
                 'purchases' => $this->scope(PurchaseBill::query(), $companyId)->whereBetween('billing_date', [$from, $to])->sum('grand_total'),
                 'estimates' => $this->scope(Estimate::query(), $companyId)->whereBetween('estimate_date', [$from, $to])->count(),
+                'estimate_amount' => $this->scope(Estimate::query(), $companyId)->whereBetween('estimate_date', [$from, $to])->sum('grand_total'),
                 'challans' => $this->scope(DeliveryChallan::query(), $companyId)->whereBetween('challan_date', [$from, $to])->count(),
                 'pending_expenses' => $this->scope(Expense::query(), $companyId)->where('status', 'pending_approval')->count(),
             ];
@@ -78,6 +79,7 @@ class DashboardController extends Controller
                 'items' => (clone $itemQuery)->count(),
                 'low_stock' => (clone $itemQuery)->whereNotNull('low_stock_qty')->whereColumn('current_stock', '<=', 'low_stock_qty')->count(),
                 'estimates' => $visibility->scopeForUser(Estimate::query(), Estimate::class)->whereBetween('estimate_date', [$from, $to])->count(),
+                'estimate_amount' => $visibility->scopeForUser(Estimate::query(), Estimate::class)->whereBetween('estimate_date', [$from, $to])->sum('grand_total'),
                 'challans' => $visibility->scopeForUser(DeliveryChallan::query(), DeliveryChallan::class)->whereBetween('challan_date', [$from, $to])->count(),
                 'pending_expenses' => $visibility->scopeForUser(Expense::query(), Expense::class)->where('status', 'pending_approval')->count(),
             ];
@@ -195,10 +197,7 @@ class DashboardController extends Controller
         );
         $estimateSegments = $this->normalizeSegmentTotal(
             $this->tradeSegments(EstimateItem::class, 'estimate', Estimate::class, 'estimate_date', $companyId, $visibility, $user, $from, $to, 'estimate'),
-            (float) ($user->isSuperAdmin()
-                ? $this->scope(Estimate::query(), $companyId)
-                : $visibility->scopeForUser(Estimate::query(), Estimate::class)
-            )->whereBetween('estimate_date', [$from, $to])->sum('grand_total')
+            (float) ($stats['estimate_amount'] ?? 0)
         );
         $purchaseSegments = $this->normalizeSegmentTotal(
             $this->tradeSegments(PurchaseBillItem::class, 'purchaseBill', PurchaseBill::class, 'billing_date', $companyId, $visibility, $user, $from, $to, 'purchase'),
