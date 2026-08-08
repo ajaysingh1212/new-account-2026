@@ -477,7 +477,7 @@
                                     @can('banking.manage')
                                     <form method="POST" action="{{ $row['status_url'] }}" class="d-inline-flex align-items-center mb-1">
                                         @csrf
-                                        <select name="status" class="form-control form-control-sm mr-1 p-2" style="width:132px">
+                                        <select name="status" class="form-control  mr-1 p-2" style="width:140px">
                                             <option value="issued" @selected($row['status_raw'] === 'issued')>Issued</option>
                                             <option value="payment_posted" @selected($row['status_raw'] === 'payment_posted')>Payment Posted</option>
                                             <option value="completed" @selected($row['status_raw'] === 'completed')>Completed</option>
