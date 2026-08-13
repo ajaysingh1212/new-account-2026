@@ -5,8 +5,10 @@ namespace App\Services;
 use App\Models\DeliveryChallanItem;
 use App\Models\Item;
 use App\Models\ProductionBatch;
+use App\Models\PurchaseBill;
 use App\Models\PurchaseBillItem;
 use App\Models\PurchaseReturn;
+use App\Models\SalesInvoice;
 use App\Models\SalesInvoiceItem;
 use App\Models\SalesReturn;
 use App\Models\SalesReturnItem;
@@ -211,12 +213,47 @@ class SerialUnitService
                 ->all();
         }
 
+        if ($movement->reference_type === PurchaseBill::class && $movement->reference_id) {
+            $purchase = PurchaseBill::with('items')->find($movement->reference_id);
+
+            return collect($purchase?->items ?? [])
+                ->flatMap(fn($line) => (int) $line->item_id === (int) $movement->item_id ? ($line->selected_units ?? []) : [])
+                ->filter(fn($unit) => is_array($unit))
+                ->values()
+                ->all();
+        }
+
+        if ($movement->reference_type === SalesInvoice::class && $movement->reference_id) {
+            $invoice = SalesInvoice::with('items')->find($movement->reference_id);
+
+            return collect($invoice?->items ?? [])
+                ->flatMap(fn($line) => (int) $line->item_id === (int) $movement->item_id ? ($line->selected_units ?? []) : [])
+                ->filter(fn($unit) => is_array($unit))
+                ->values()
+                ->all();
+        }
+
+        if ($movement->reference_type === ProductionBatch::class && $movement->reference_id) {
+            $batch = ProductionBatch::find($movement->reference_id);
+
+            return collect($batch?->units_data ?? [])
+                ->filter(fn($unit) => is_array($unit) && empty($unit['reverted_at']))
+                ->map(fn($unit, $index) => array_merge($unit, [
+                    'key' => $unit['key'] ?? $batch->id . '-' . $index,
+                    'item_id' => $batch->finished_item_id,
+                    'production_batch_no' => $unit['production_batch_no'] ?? $batch->batch_no,
+                    'production_date' => $batch->production_date?->format('Y-m-d'),
+                ]))
+                ->values()
+                ->all();
+        }
+
         return [];
     }
 
     public function unitIdentity(array $unit): ?string
     {
-        foreach (['key', 'serial_no', 'vts_sim', 'sku'] as $field) {
+        foreach (['key', 'serial_no', 'vts_sim', 'buyer_code', 'sku'] as $field) {
             if (!empty($unit[$field])) {
                 return $field . ':' . (string) $unit[$field];
             }

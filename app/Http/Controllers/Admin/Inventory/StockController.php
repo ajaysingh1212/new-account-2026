@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin\Inventory;
 use App\Http\Controllers\Controller;
 use App\Models\Item;
 use App\Models\ProductType;
+use App\Models\PurchaseBillItem;
 use App\Models\PurchaseEstimateItem;
 use App\Models\Replacement;
 use App\Models\StockAdjustment;
@@ -43,6 +44,7 @@ class StockController extends Controller
         )->get();
 
         $serialsByItem = $this->currentSerialsByItem();
+        $serialItemIds = $this->serialTrackedItemIds($companyId);
         if ($serialSearch !== '') {
             $term = mb_strtolower($serialSearch);
             $items = $items->filter(function (Item $item) use ($serialsByItem, $term) {
@@ -62,7 +64,10 @@ class StockController extends Controller
             })->values();
         }
 
-        $items->each(function ($item) {
+        $items->each(function ($item) use ($serialsByItem, $serialItemIds) {
+            if ($serialItemIds->contains((int) $item->id)) {
+                $item->current_stock = count($serialsByItem[$item->id] ?? []);
+            }
             $item->calculated_stock_value = (float) $item->current_stock * (float) $item->purchase_price;
             $item->calculated_avg_rate = (float) $item->purchase_price;
         });
@@ -244,6 +249,22 @@ class StockController extends Controller
     private function currentSerialsByItem(): array
     {
         return app(SerialUnitService::class)->currentStockUnitsByItem(auth()->user()->current_company_id);
+    }
+
+    private function serialTrackedItemIds(int $companyId)
+    {
+        return PurchaseBillItem::whereHas('purchaseBill', fn($query) => $query->where('company_id', $companyId))
+            ->get()
+            ->filter(fn($line) => collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit) && !empty($unit['key']))->isNotEmpty())
+            ->pluck('item_id')
+            ->merge(
+                StockMovement::where('company_id', $companyId)
+                    ->get()
+                    ->filter(fn($movement) => collect($movement->movement_units ?? [])->filter(fn($unit) => is_array($unit) && !empty($unit['key']))->isNotEmpty())
+                    ->pluck('item_id')
+            )
+            ->unique()
+            ->values();
     }
 
     private function movementDateRange(Request $request): array
