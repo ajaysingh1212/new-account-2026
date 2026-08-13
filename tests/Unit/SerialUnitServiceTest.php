@@ -42,7 +42,7 @@ class SerialUnitServiceTest extends TestCase
     }
 
     #[Test]
-    public function it_preserves_original_purchase_unit_keys_for_stock_balances(): void
+    public function it_uses_stable_unit_keys_for_stock_balances(): void
     {
         $user = User::factory()->create(['user_type' => 'super_admin']);
         $company = Company::create(['name' => 'Target Company', 'created_by' => $user->id]);
@@ -104,7 +104,7 @@ class SerialUnitServiceTest extends TestCase
             'unit_price' => 100,
             'total_value' => 100,
             'stock_after' => 0,
-            'movement_units' => [['key' => 'PBI-1-0', 'serial_no' => 'SER-1']],
+            'movement_units' => [['key' => '1-0', 'serial_no' => 'SER-1']],
         ]);
 
         $this->assertSame([], app(SerialUnitService::class)->currentStockUnitsByItem($company->id));
@@ -155,5 +155,65 @@ class SerialUnitServiceTest extends TestCase
         }
 
         $this->assertSame([], app(SerialUnitService::class)->currentStockUnitsByItem($company->id));
+    }
+
+    #[Test]
+    public function it_tracks_duplicate_visible_serial_numbers_as_distinct_physical_units_by_key(): void
+    {
+        $user = User::factory()->create(['user_type' => 'super_admin']);
+        $company = Company::create(['name' => 'Duplicate Serial Company', 'created_by' => $user->id]);
+        $type = ProductType::create([
+            'company_id' => $company->id,
+            'code' => 'FG',
+            'name' => 'Finished Goods',
+            'nature' => 'finished_goods',
+        ]);
+        $item = Item::create([
+            'company_id' => $company->id,
+            'product_type_id' => $type->id,
+            'item_code' => 'GPS-DUP',
+            'name' => 'GPS Duplicate Serial',
+            'unit' => 'PCS',
+            'purchase_price' => 100,
+            'track_stock' => true,
+            'status' => 'active',
+        ]);
+
+        $units = [
+            ['key' => 'PUR-A-1', 'serial_no' => 'BC-AUTO-001'],
+            ['key' => 'PUR-B-1', 'serial_no' => 'BC-AUTO-001'],
+        ];
+
+        foreach ($units as $index => $unit) {
+            StockMovement::create([
+                'company_id' => $company->id,
+                'item_id' => $item->id,
+                'movement_date' => '2026-08-01',
+                'movement_type' => 'purchase',
+                'direction' => 'in',
+                'quantity' => 1,
+                'unit_price' => 100,
+                'total_value' => 100,
+                'stock_after' => $index + 1,
+                'movement_units' => [$unit],
+            ]);
+        }
+
+        StockMovement::create([
+            'company_id' => $company->id,
+            'item_id' => $item->id,
+            'movement_date' => '2026-08-02',
+            'movement_type' => 'sale',
+            'direction' => 'out',
+            'quantity' => 1,
+            'unit_price' => 100,
+            'total_value' => 100,
+            'stock_after' => 1,
+            'movement_units' => [$units[0]],
+        ]);
+
+        $available = app(SerialUnitService::class)->currentStockUnitsByItem($company->id, $item->id);
+
+        $this->assertSame(['PUR-B-1'], collect($available[$item->id] ?? [])->pluck('key')->all());
     }
 }

@@ -8,27 +8,33 @@ use App\Models\ProductType;
 use App\Models\User;
 use App\Services\AccountingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class StockFloorZeroTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_stock_never_goes_below_zero_and_recovery_starts_from_zero(): void
+    public function test_stock_out_cannot_make_stock_negative_and_recovery_starts_from_zero(): void
     {
         [$user, $item] = $this->context();
 
         $this->actingAs($user);
 
-        app(AccountingService::class)->moveStock($item, [
-            'movement_date' => '2026-07-16',
-            'movement_type' => 'sale',
-            'direction' => 'out',
-            'quantity' => 5,
-            'unit_price' => 10,
-            'total_value' => 50,
-            'reference_no' => 'NEG-TEST-1',
-        ]);
+        try {
+            app(AccountingService::class)->moveStock($item, [
+                'movement_date' => '2026-07-16',
+                'movement_type' => 'sale',
+                'direction' => 'out',
+                'quantity' => 5,
+                'unit_price' => 10,
+                'total_value' => 50,
+                'reference_no' => 'NEG-TEST-1',
+            ]);
+            $this->fail('Expected insufficient stock validation exception.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('quantity', $exception->errors());
+        }
 
         $this->assertSame(0.0, (float) $item->fresh()->current_stock);
 

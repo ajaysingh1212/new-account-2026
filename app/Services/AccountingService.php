@@ -7,6 +7,7 @@ use App\Models\Party;
 use App\Models\PartyLedger;
 use App\Models\StockMovement;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class AccountingService
 {
@@ -22,9 +23,14 @@ class AccountingService
             $value = (float) ($data['total_value'] ?? ($qty * (float) ($data['unit_price'] ?? 0)));
             $direction = $data['direction'] === 'out' ? 'out' : 'in';
             $baseStock = max(0, (float) $lockedItem->current_stock);
+            if ($direction === 'out' && $qty > $baseStock) {
+                throw ValidationException::withMessages([
+                    'quantity' => "Insufficient stock for {$lockedItem->name}. Available {$baseStock}, requested {$qty}.",
+                ]);
+            }
             $newStock = $direction === 'in'
                 ? $baseStock + $qty
-                : max(0, $baseStock - $qty);
+                : $baseStock - $qty;
             $newValue = $direction === 'in'
                 ? (float) $lockedItem->stock_value + $value
                 : max(0, (float) $lockedItem->stock_value - $value);

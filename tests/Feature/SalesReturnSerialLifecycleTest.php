@@ -10,6 +10,7 @@ use App\Models\SalesInvoice;
 use App\Models\SalesInvoiceItem;
 use App\Models\SalesReturn;
 use App\Models\SalesReturnItem;
+use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\SerialUnitService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -64,6 +65,21 @@ class SalesReturnSerialLifecycleTest extends TestCase
             'line_total' => 200,
             'selected_units' => [],
         ]);
+        StockMovement::create([
+            'company_id' => $company->id,
+            'item_id' => $item->id,
+            'movement_date' => '2026-06-19',
+            'movement_type' => 'sales_return',
+            'direction' => 'in',
+            'quantity' => 2,
+            'unit_price' => 50,
+            'total_value' => 100,
+            'stock_after' => 2,
+            'reference_type' => SalesReturn::class,
+            'reference_id' => $return->id,
+            'reference_no' => $return->return_no,
+            'movement_units' => [],
+        ]);
 
         $this->assertCount(5, app(SerialUnitService::class)->activeSoldKeys($company->id));
 
@@ -74,6 +90,11 @@ class SalesReturnSerialLifecycleTest extends TestCase
         ])->assertRedirect(route('admin.sales-returns.show', $return));
 
         $this->assertSame(['1-0', '1-1'], collect($returnLine->fresh()->selected_units)->pluck('key')->all());
+        $this->assertSame(
+            ['1-0', '1-1'],
+            collect(StockMovement::where('reference_type', SalesReturn::class)->where('reference_id', $return->id)->first()->movement_units)->pluck('key')->all()
+        );
+        $this->assertSame(['1-0', '1-1'], collect(app(SerialUnitService::class)->currentStockUnitsByItem($company->id, $item->id)[$item->id])->pluck('key')->all());
         $this->assertSame(['1-2', '1-3', '1-4'], app(SerialUnitService::class)->activeSoldKeys($company->id));
     }
 

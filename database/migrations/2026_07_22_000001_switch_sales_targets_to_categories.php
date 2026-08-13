@@ -14,7 +14,13 @@ return new class extends Migration {
             });
         }
 
-        DB::statement('UPDATE sales_target_items sti INNER JOIN product_types pt ON pt.id = sti.product_type_id SET sti.product_category_id = pt.product_category_id WHERE sti.product_category_id IS NULL');
+        if (Schema::hasColumn('sales_target_items', 'product_type_id')) {
+            DB::table('sales_target_items')
+                ->whereNull('product_category_id')
+                ->update([
+                    'product_category_id' => DB::raw('(SELECT product_category_id FROM product_types WHERE product_types.id = sales_target_items.product_type_id)'),
+                ]);
+        }
 
         if (Schema::hasColumn('sales_target_items', 'product_type_id')) {
             $foreignKeys = collect(Schema::getForeignKeys('sales_target_items'));

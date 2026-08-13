@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SalesInvoice;
 use App\Models\SalesReturn;
 use App\Models\SalesReturnItem;
+use App\Models\StockMovement;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
 use App\Services\SerialUnitService;
@@ -255,6 +256,12 @@ class SalesReturnController extends Controller
                 }
 
                 $returnLine->update(['selected_units' => $selectedUnits->all()]);
+                StockMovement::where('reference_type', SalesReturn::class)
+                    ->where('reference_id', $sales_return->id)
+                    ->where('item_id', $returnLine->item_id)
+                    ->where('movement_type', 'sales_return')
+                    ->get()
+                    ->each(fn(StockMovement $movement) => $movement->update(['movement_units' => $selectedUnits->all()]));
             }
         });
 

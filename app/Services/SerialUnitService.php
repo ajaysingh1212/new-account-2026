@@ -216,7 +216,7 @@ class SerialUnitService
 
     public function unitIdentity(array $unit): ?string
     {
-        foreach (['serial_no', 'vts_sim', 'key', 'sku'] as $field) {
+        foreach (['key', 'serial_no', 'vts_sim', 'sku'] as $field) {
             if (!empty($unit[$field])) {
                 return $field . ':' . (string) $unit[$field];
             }

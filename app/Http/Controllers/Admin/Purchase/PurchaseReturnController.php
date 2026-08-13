@@ -46,6 +46,9 @@ class PurchaseReturnController extends Controller
         $visibility->authorizeView($bill);
 
         $lines = $bill->items->map(function ($line) use ($bill) {
+            $availableUnits = $this->availableUnitsForPurchaseLine($line);
+            $hasSerials = collect($line->selected_units ?? [])->filter(fn($unit) => !empty($unit['key']))->isNotEmpty();
+
             return [
                 'id' => $line->id,
                 'item_id' => $line->item_id,
@@ -56,9 +59,9 @@ class PurchaseReturnController extends Controller
                 'tax_percent' => (float) $line->tax_percent,
                 'line_total' => (float) $line->line_total,
                 'tax_amount' => (float) $line->tax_amount,
-                'current_stock' => $this->currentStock($line->item_id, $bill->company_id),
+                'current_stock' => $hasSerials ? count($availableUnits) : $this->currentStock($line->item_id, $bill->company_id),
                 'purchased_units' => collect($line->selected_units ?? [])->values()->all(),
-                'available_units' => $this->availableUnitsForPurchaseLine($line),
+                'available_units' => $availableUnits,
             ];
         })->values();
 
@@ -189,6 +192,15 @@ class PurchaseReturnController extends Controller
                 continue;
             }
 
+            $availableQty = collect($line->selected_units ?? [])->filter(fn($unit) => !empty($unit['key']))->isNotEmpty()
+                ? count($this->availableUnitsForPurchaseLine($line, $return->id))
+                : $this->currentStock($line->item_id, $bill->company_id);
+            if ($qty > $availableQty) {
+                throw ValidationException::withMessages([
+                    "quantity.{$i}" => "Return quantity cannot exceed current stock for {$line->item?->name}.",
+                ]);
+            }
+
             $selectedUnits = $this->selectedReturnUnits($request, $line, $return, $qty, $i);
             $ratio = (float) $line->quantity > 0 ? $qty / (float) $line->quantity : 0;
             $taxAmount = (float) $line->tax_amount * $ratio;
@@ -257,7 +269,7 @@ class PurchaseReturnController extends Controller
             ->filter()
             ->values();
 
-        if ($selectedUnits->isEmpty()) {
+        if ($selectedUnits->isEmpty() && $availableUnits->count() >= (int) $qty) {
             $selectedUnits = $availableUnits->values()->take((int) $qty);
         }
 
@@ -417,10 +429,10 @@ class PurchaseReturnController extends Controller
 
     private function currentStock(int $itemId, ?int $companyId = null): float
     {
-        return (float) StockMovement::where('item_id', $itemId)
+        return max(0, (float) StockMovement::where('item_id', $itemId)
             ->where('company_id', $companyId ?: auth()->user()->current_company_id)
             ->selectRaw("SUM(CASE WHEN direction='in' THEN quantity ELSE -quantity END) as net")
-            ->value('net');
+            ->value('net'));
     }
 
     private function nextNo(): string
