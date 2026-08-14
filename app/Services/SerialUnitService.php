@@ -26,8 +26,9 @@ class SerialUnitService
                 }
             })
             ->get()
-            ->flatMap(fn($line) => collect($line->selected_units ?? [])->pluck('key'))
-            ->filter()
+            ->flatMap(function ($line) {
+                return collect($line->selected_units ?? [])->map(fn($unit) => $this->scopeUnitKey((int) ($line->item_id ?? 0), $unit))->filter();
+            })
             ->countBy();
 
         $returnedCounts = SalesReturnItem::whereHas(
@@ -42,8 +43,9 @@ class SerialUnitService
                 )
             )
             ->get()
-            ->flatMap(fn($line) => collect($line->selected_units ?? [])->pluck('key'))
-            ->filter()
+            ->flatMap(function ($line) {
+                return collect($line->selected_units ?? [])->map(fn($unit) => $this->scopeUnitKey((int) ($line->item_id ?? 0), $unit))->filter();
+            })
             ->countBy();
 
         $salesKeys = $soldCounts
@@ -68,6 +70,22 @@ class SerialUnitService
         return array_values(array_unique(array_merge($salesKeys, $challanKeys, $stockOutKeys)));
     }
 
+    private function scopeUnitKey(int $itemId, array|string|null $unit): ?string
+    {
+        $rawKey = is_array($unit)
+            ? ($unit['key'] ?? $unit['serial_no'] ?? $unit['vts_sim'] ?? $unit['buyer_code'] ?? $unit['sku'] ?? $unit['batch_no'] ?? $unit['production_batch_no'] ?? null)
+            : $unit;
+
+        if ($rawKey === null || $rawKey === '') {
+            return null;
+        }
+
+        $rawKey = (string) $rawKey;
+        $scopeKey = (string) $itemId . ':' . $rawKey;
+
+        return str_starts_with($rawKey, (string) $itemId . ':') ? $rawKey : $scopeKey;
+    }
+
     public function unitPool(int $companyId, ?string $excludeType = null, ?int $excludeId = null): array
     {
         $usedKeys = $this->allocatedKeys($companyId, $excludeType, $excludeId);
@@ -77,12 +95,14 @@ class SerialUnitService
             ->flatMap(fn(ProductionBatch $batch) => collect($batch->units_data ?? [])->map(function ($unit, $index) use ($batch, $usedKeys) {
                 if (!is_array($unit) || !empty($unit['reverted_at'])) return null;
                 $key = $batch->id.'-'.$index;
+                $scopeKey = $this->scopeUnitKey((int) $batch->finished_item_id, ['key' => $key] + $unit);
                 return array_merge($unit, [
                     'key' => $key, 'item_id' => $batch->finished_item_id,
                     'item_name' => $batch->finishedItem?->name,
                     'production_batch_no' => $batch->batch_no,
                     'production_date' => $batch->production_date?->format('Y-m-d'),
-                    'sold' => in_array($key, $usedKeys, true),
+                    'scope_key' => $scopeKey,
+                    'sold' => in_array($scopeKey, $usedKeys, true),
                 ]);
             }))->filter()->groupBy('item_id')->map(fn($rows) => $rows->values()->all())->all();
 
@@ -92,11 +112,13 @@ class SerialUnitService
             ->get()->each(function (PurchaseBillItem $line) use (&$produced, $usedKeys) {
                 foreach (($line->selected_units ?? []) as $index => $unit) {
                     $key = $unit['key'] ?? 'PBI-'.$line->id.'-'.$index;
+                    $scopeKey = $this->scopeUnitKey((int) $line->item_id, ['key' => $key] + $unit);
                     $produced[$line->item_id][] = array_merge($unit, [
                         'key' => $key, 'item_id' => $line->item_id, 'item_name' => $line->item?->name,
                         'production_batch_no' => $unit['production_batch_no'] ?? $line->purchaseBill?->invoice_no,
                         'production_date' => $line->purchaseBill?->billing_date?->format('Y-m-d'),
-                        'sold' => in_array($key, $usedKeys, true),
+                        'scope_key' => $scopeKey,
+                        'sold' => in_array($scopeKey, $usedKeys, true),
                     ]);
                 }
             });
@@ -109,10 +131,14 @@ class SerialUnitService
         $available = collect($pool)->where('sold', false)
             ->when($requiresGps, fn($rows) => $rows->filter(fn($unit) => !empty($unit['vts_sim'])))
             ->values();
-        $requestedKeys = collect($requested)->pluck('key')->filter()->all();
-        $selected = $available->filter(fn($unit) => in_array($unit['key'] ?? null, $requestedKeys, true))->take($quantity);
+        $requestedKeys = collect($requested)
+            ->map(fn($unit) => $unit['scope_key'] ?? $this->scopeUnitKey((int) ($unit['item_id'] ?? 0), $unit))
+            ->filter()
+            ->all();
+        $selected = $available->filter(fn($unit) => in_array($unit['scope_key'] ?? $this->scopeUnitKey((int) ($unit['item_id'] ?? 0), $unit), $requestedKeys, true))->take($quantity);
         if ($selected->count() < $quantity) {
-            $selected = $selected->concat($available->whereNotIn('key', $selected->pluck('key'))->take($quantity - $selected->count()));
+            $selectedKeys = $selected->pluck('scope_key')->map(fn($k) => $k ?? $this->scopeUnitKey((int) ($selected->first()['item_id'] ?? 0), $selected->first()))->all();
+            $selected = $selected->concat($available->reject(fn($unit) => in_array($unit['scope_key'] ?? $this->scopeUnitKey((int) ($unit['item_id'] ?? 0), $unit), $selectedKeys, true))->take($quantity - $selected->count()));
         }
         return $selected->take($quantity)->values()->all();
     }
@@ -141,18 +167,19 @@ class SerialUnitService
                 }
 
                 $delta = $movement->direction === 'in' ? 1 : -1;
+                $currentItemId = (int) $movement->item_id;
                 foreach ($units as $unit) {
                     if (!is_array($unit)) {
                         continue;
                     }
 
-                    $identity = $this->unitIdentity($unit);
+                    $unit['item_id'] = $currentItemId;
+                    $identity = $this->unitIdentity($unit, $currentItemId);
                     if (!$identity) {
                         continue;
                     }
 
-                    $itemId = (int) $movement->item_id;
-                    $balances[$itemId][$identity] ??= [
+                    $balances[$currentItemId][$identity] ??= [
                         'balance' => 0,
                         'last_direction' => null,
                         'last_movement_at' => null,
@@ -160,19 +187,19 @@ class SerialUnitService
                         'unit' => $unit,
                         'last_movement' => null,
                     ];
-                    $balances[$itemId][$identity]['balance'] += $delta;
-                    $balances[$itemId][$identity]['last_direction'] = $movement->direction;
-                    $balances[$itemId][$identity]['last_movement_at'] = $movement->movement_date?->format('Y-m-d');
-                    $balances[$itemId][$identity]['last_movement_id'] = $movement->id;
-                    $balances[$itemId][$identity]['unit'] = array_merge($unit, [
-                        'item_id' => $itemId,
+                    $balances[$currentItemId][$identity]['balance'] += $delta;
+                    $balances[$currentItemId][$identity]['last_direction'] = $movement->direction;
+                    $balances[$currentItemId][$identity]['last_movement_at'] = $movement->movement_date?->format('Y-m-d');
+                    $balances[$currentItemId][$identity]['last_movement_id'] = $movement->id;
+                    $balances[$currentItemId][$identity]['unit'] = array_merge($unit, [
+                        'item_id' => $currentItemId,
                         'item_name' => $movement->item?->name,
                         'last_movement_type' => $movement->movement_type,
                         'last_movement_date' => $movement->movement_date?->format('Y-m-d'),
                         'last_reference_no' => $movement->reference_no,
                         'last_party' => $movement->party?->display_name,
                     ]);
-                    $balances[$itemId][$identity]['last_movement'] = $movement;
+                    $balances[$currentItemId][$identity]['last_movement'] = $movement;
                 }
             });
 
@@ -251,11 +278,14 @@ class SerialUnitService
         return [];
     }
 
-    public function unitIdentity(array $unit): ?string
+    public function unitIdentity(array $unit, ?int $itemId = null): ?string
     {
+        $itemId = $itemId ?? (!empty($unit['item_id']) ? (int) $unit['item_id'] : null);
+
         foreach (['key', 'serial_no', 'vts_sim', 'buyer_code', 'sku'] as $field) {
             if (!empty($unit[$field])) {
-                return $field . ':' . (string) $unit[$field];
+                $scope = $itemId !== null ? (string) $itemId : 'global';
+                return 'item:' . $scope . ':' . $field . ':' . (string) $unit[$field];
             }
         }
 

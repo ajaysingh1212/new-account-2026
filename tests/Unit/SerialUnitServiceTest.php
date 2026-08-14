@@ -216,4 +216,75 @@ class SerialUnitServiceTest extends TestCase
 
         $this->assertSame(['PUR-B-1'], collect($available[$item->id] ?? [])->pluck('key')->all());
     }
+
+    #[Test]
+    public function it_keeps_stock_units_distinct_across_different_items_with_same_serial_key(): void
+    {
+        $user = User::factory()->create(['user_type' => 'super_admin']);
+        $company = Company::create(['name' => 'Item Scope Company', 'created_by' => $user->id]);
+        $type = ProductType::create([
+            'company_id' => $company->id,
+            'code' => 'FG',
+            'name' => 'Finished Goods',
+            'nature' => 'finished_goods',
+        ]);
+
+        $itemA = Item::create([
+            'company_id' => $company->id,
+            'product_type_id' => $type->id,
+            'item_code' => 'ITEM-A',
+            'name' => 'Item A',
+            'unit' => 'PCS',
+            'purchase_price' => 100,
+            'track_stock' => true,
+            'status' => 'active',
+        ]);
+
+        $itemB = Item::create([
+            'company_id' => $company->id,
+            'product_type_id' => $type->id,
+            'item_code' => 'ITEM-B',
+            'name' => 'Item B',
+            'unit' => 'PCS',
+            'purchase_price' => 100,
+            'track_stock' => true,
+            'status' => 'active',
+        ]);
+
+        $sharedUnit = ['key' => '1-0', 'serial_no' => 'SER-123', 'vts_sim' => 'SIM-123'];
+
+        StockMovement::create([
+            'company_id' => $company->id,
+            'item_id' => $itemA->id,
+            'movement_date' => '2026-08-01',
+            'movement_type' => 'purchase',
+            'direction' => 'in',
+            'quantity' => 1,
+            'unit_price' => 100,
+            'total_value' => 100,
+            'stock_after' => 1,
+            'movement_units' => [$sharedUnit],
+        ]);
+
+        StockMovement::create([
+            'company_id' => $company->id,
+            'item_id' => $itemB->id,
+            'movement_date' => '2026-08-02',
+            'movement_type' => 'purchase',
+            'direction' => 'in',
+            'quantity' => 1,
+            'unit_price' => 100,
+            'total_value' => 100,
+            'stock_after' => 1,
+            'movement_units' => [$sharedUnit],
+        ]);
+
+        $stockA = app(SerialUnitService::class)->currentStockUnitsByItem($company->id, $itemA->id);
+        $stockB = app(SerialUnitService::class)->currentStockUnitsByItem($company->id, $itemB->id);
+
+        $this->assertSame(['1-0'], collect($stockA[$itemA->id] ?? [])->pluck('key')->all());
+        $this->assertSame(['1-0'], collect($stockB[$itemB->id] ?? [])->pluck('key')->all());
+        $this->assertArrayHasKey($itemA->id, $stockA);
+        $this->assertArrayHasKey($itemB->id, $stockB);
+    }
 }
