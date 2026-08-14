@@ -56,6 +56,57 @@ class ProductionBatchStockMovementTest extends TestCase
         ]);
     }
 
+    public function test_metadata_only_update_with_same_quantity_does_not_trigger_stock_validation(): void
+    {
+        [$user, $raw, $finished] = $this->productionContext();
+
+        $batch = ProductionBatch::create([
+            'company_id' => $user->current_company_id,
+            'finished_item_id' => $finished->id,
+            'batch_no' => 'PB-TEST-002',
+            'production_date' => '2026-07-16',
+            'quantity' => 2,
+            'raw_material_cost' => 40,
+            'cost_per_unit' => 20,
+            'status' => 'posted',
+            'units_data' => [
+                ['serial_no' => 'SER-OLD-1', 'buyer_code' => 'BC-1', 'vts_sim' => 'VTS-OLD-1'],
+                ['serial_no' => 'SER-OLD-2', 'buyer_code' => 'BC-2', 'vts_sim' => 'VTS-OLD-2'],
+            ],
+            'created_by' => $user->id,
+        ]);
+
+        $finished->update(['current_stock' => 1, 'stock_value' => 20]);
+
+        $this->actingAs($user);
+
+        $request = new \Illuminate\Http\Request([
+            'batch_no' => 'PB-TEST-002',
+            'production_date' => '2026-07-16',
+            'quantity' => 2,
+            'notes' => 'Updated serial metadata only',
+            'finished_item_sku' => 'SKU-NEW',
+            'unit_serial' => ['SER-NEW-1', 'SER-NEW-2'],
+            'unit_vts_sim' => ['VTS-NEW-1', 'VTS-NEW-2'],
+        ]);
+
+        $response = app(\App\Http\Controllers\Admin\Production\ProductionBatchController::class)
+            ->update(
+                $request,
+                $batch,
+                app(\App\Services\AccountingService::class),
+                app(\App\Services\EntryVisibilityService::class),
+                app(\App\Services\CrmIdentifierPropagationService::class)
+            );
+
+        $this->assertNotNull($response);
+        $batch->refresh();
+        $this->assertSame('SKU-NEW', $finished->fresh()->sku);
+        $this->assertSame('SER-NEW-1', $batch->units_data[0]['serial_no']);
+        $this->assertSame('VTS-NEW-1', $batch->units_data[0]['vts_sim']);
+        $this->assertSame(1.0, (float) $finished->fresh()->current_stock);
+    }
+
     private function productionContext(): array
     {
         $user = User::factory()->create(['user_type' => 'super_admin']);

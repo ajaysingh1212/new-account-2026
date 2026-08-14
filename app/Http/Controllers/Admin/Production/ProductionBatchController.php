@@ -267,72 +267,87 @@ class ProductionBatchController extends Controller
 
             abort_if($soldKeys->count() > (int) $data['quantity'], 422, 'Quantity cannot be less than already sold units.');
 
-            $this->reverseProductionPosting($productionBatch, $accounting);
-
             $finished = Item::with('bomMaterials.rawItem')->lockForUpdate()->findOrFail($productionBatch->finished_item_id);
             $this->ensureTrackStock($finished);
             $qty = (float) $data['quantity'];
-            $rawCost = 0;
+            $newSku = $data['finished_item_sku'] ?? null;
             $requiresGps = $this->isGpsItem($finished);
-
-            foreach ($finished->bomMaterials as $bom) {
-                $raw = Item::lockForUpdate()->findOrFail($bom->raw_item_id);
-                $need = (float) $bom->qty_per_unit * $qty;
-                $unitCost = $this->bomUnitCost($bom, $raw);
-                $value = $need * $unitCost;
-                $rawCost += $value;
-
-                if (($bom->line_type ?? 'raw_material') === 'service' || $raw->item_type === 'service') {
-                    continue;
-                }
-
-                abort_if((float) $raw->current_stock < $need, 422, "Insufficient stock for raw material: {$raw->name} (need {$need}, have {$raw->current_stock})");
-                $accounting->moveStock($raw, [
-                    'movement_date' => $data['production_date'],
-                    'movement_type' => 'production_consumption',
-                    'direction' => 'out',
-                    'quantity' => $need,
-                    'unit_price' => $unitCost,
-                    'total_value' => $value,
-                    'reference_type' => ProductionBatch::class,
-                    'reference_id' => $productionBatch->id,
-                    'reference_no' => $data['batch_no'],
-                    'description' => "Consumed for updated production of {$finished->name}",
-                ]);
-            }
-
             $unitsData = $this->unitsFromRequest($request, (int) $qty, $requiresGps);
-
             $this->assertUnitIdentifiersAvailable($unitsData, $productionBatch->company_id, $productionBatch->id);
 
-            $productionBatch->update([
-                'batch_no' => $data['batch_no'],
-                'production_date' => $data['production_date'],
-                'quantity' => $qty,
-                'raw_material_cost' => $rawCost,
-                'cost_per_unit' => $qty > 0 ? $rawCost / $qty : 0,
-                'notes' => $data['notes'] ?? null,
-                'units_data' => $unitsData,
-            ]);
-            $newSku = $data['finished_item_sku'] ?? null;
-            if ((string) $finished->sku !== (string) $newSku) {
-                $finished->update(['sku' => $newSku]);
-            }
+            $quantityChanged = (float) $productionBatch->quantity !== $qty;
 
-            $accounting->moveStock($finished, [
-                'movement_date' => $productionBatch->production_date,
-                'movement_type' => 'production_output',
-                'direction' => 'in',
-                'quantity' => $qty,
-                'unit_price' => $productionBatch->cost_per_unit,
-                'total_value' => $rawCost,
-                'reference_type' => ProductionBatch::class,
-                'reference_id' => $productionBatch->id,
-                'reference_no' => $productionBatch->batch_no,
-                'movement_units' => $this->productionMovementUnits($productionBatch, $unitsData),
-                'force' => true,
-                'description' => "Finished goods updated - {$productionBatch->batch_no}",
-            ]);
+            if ($quantityChanged) {
+                $this->reverseProductionPosting($productionBatch, $accounting);
+
+                $rawCost = 0;
+                foreach ($finished->bomMaterials as $bom) {
+                    $raw = Item::lockForUpdate()->findOrFail($bom->raw_item_id);
+                    $need = (float) $bom->qty_per_unit * $qty;
+                    $unitCost = $this->bomUnitCost($bom, $raw);
+                    $value = $need * $unitCost;
+                    $rawCost += $value;
+
+                    if (($bom->line_type ?? 'raw_material') === 'service' || $raw->item_type === 'service') {
+                        continue;
+                    }
+
+                    abort_if((float) $raw->current_stock < $need, 422, "Insufficient stock for raw material: {$raw->name} (need {$need}, have {$raw->current_stock})");
+                    $accounting->moveStock($raw, [
+                        'movement_date' => $data['production_date'],
+                        'movement_type' => 'production_consumption',
+                        'direction' => 'out',
+                        'quantity' => $need,
+                        'unit_price' => $unitCost,
+                        'total_value' => $value,
+                        'reference_type' => ProductionBatch::class,
+                        'reference_id' => $productionBatch->id,
+                        'reference_no' => $data['batch_no'],
+                        'description' => "Consumed for updated production of {$finished->name}",
+                    ]);
+                }
+
+                $productionBatch->update([
+                    'batch_no' => $data['batch_no'],
+                    'production_date' => $data['production_date'],
+                    'quantity' => $qty,
+                    'raw_material_cost' => $rawCost,
+                    'cost_per_unit' => $qty > 0 ? $rawCost / $qty : 0,
+                    'notes' => $data['notes'] ?? null,
+                    'units_data' => $unitsData,
+                ]);
+
+                if ((string) $finished->sku !== (string) $newSku) {
+                    $finished->update(['sku' => $newSku]);
+                }
+
+                $accounting->moveStock($finished, [
+                    'movement_date' => $productionBatch->production_date,
+                    'movement_type' => 'production_output',
+                    'direction' => 'in',
+                    'quantity' => $qty,
+                    'unit_price' => $productionBatch->cost_per_unit,
+                    'total_value' => $rawCost,
+                    'reference_type' => ProductionBatch::class,
+                    'reference_id' => $productionBatch->id,
+                    'reference_no' => $productionBatch->batch_no,
+                    'movement_units' => $this->productionMovementUnits($productionBatch, $unitsData),
+                    'force' => true,
+                    'description' => "Finished goods updated - {$productionBatch->batch_no}",
+                ]);
+            } else {
+                $productionBatch->update([
+                    'batch_no' => $data['batch_no'],
+                    'production_date' => $data['production_date'],
+                    'quantity' => $qty,
+                    'notes' => $data['notes'] ?? null,
+                    'units_data' => $unitsData,
+                ]);
+
+                if ((string) $finished->sku !== (string) $newSku) {
+                    $finished->update(['sku' => $newSku]);
+                }
+            }
 
             $propagation->propagate(
                 $productionBatch,
@@ -668,8 +683,12 @@ class ProductionBatchController extends Controller
             ->all();
     }
 
-    private function soldUnitKeys(int $companyId): array
+    private function soldUnitKeys(?int $companyId): array
     {
+        if ($companyId === null) {
+            return [];
+        }
+
         return app(SerialUnitService::class)->activeSoldKeys($companyId);
     }
 
