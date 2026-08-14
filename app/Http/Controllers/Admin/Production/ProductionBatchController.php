@@ -45,7 +45,7 @@ class ProductionBatchController extends Controller
             ->orderBy('name')
             ->get();
 
-       
+
 
         // Build a rich JSON structure for the frontend wizard
         $itemsData = $finishedItems->keyBy('id')->map(fn($item) => [
