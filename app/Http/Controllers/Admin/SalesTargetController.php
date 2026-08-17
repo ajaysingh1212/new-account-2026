@@ -19,11 +19,11 @@ class SalesTargetController extends Controller
     public function index(EntryVisibilityService $visibility)
     {
         $targets = $visibility->scopeForUser(SalesTarget::with(['party','items.productCategory'])->latest(), SalesTarget::class)->get();
-        
+
         // Get all active parties with their sales data
         $parties = $visibility->scopeForUser(Party::orderBy('display_name'), Party::class)->get();
         $sales = $visibility->scopeForUser(SalesInvoice::with(['party','items.item.productCategory'])->where('status', 'posted')->latest(), SalesInvoice::class)->get();
-        
+
         // Calculate party-wise totals
         $partyStats = [];
         foreach ($parties as $party) {
@@ -35,7 +35,7 @@ class SalesTargetController extends Controller
                 'invoice_count' => $partySales->count()
             ];
         }
-        
+
         return view('admin.sales-targets.index', compact('targets', 'partyStats'));
     }
 

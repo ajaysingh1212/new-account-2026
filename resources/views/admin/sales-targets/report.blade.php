@@ -534,7 +534,7 @@ $(function () {
     $('#stxPartyProgressModal').on('show.bs.modal', function () {
         const groupedByParty = {};
         const colors = ['#7C3AED','#0ea5e9','#f59e0b','#10b981','#ef4444','#ec4899','#2563eb'];
-        
+
         allRows.forEach((row, idx) => {
             if (!groupedByParty[row.party]) {
                 groupedByParty[row.party] = { party_id: row.party_id, color: colors[idx % colors.length], categories: [] };
@@ -544,7 +544,7 @@ $(function () {
 
         const parties = Object.keys(groupedByParty).sort();
         let html = '<div class="stx-party-list">';
-        
+
         parties.forEach((partyName, partyIdx) => {
             const partyData = groupedByParty[partyName];
             const categories = partyData.categories;
