@@ -119,21 +119,30 @@
 .stx-progress-track{height:10px;border-radius:6px;background:#f1f5f9;overflow:hidden}
 .stx-progress-fill{display:block;height:100%;border-radius:6px;width:0;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
 
-/* ===== PARTY-WISE PROGRESS MODAL STYLES ===== */
-.stx-party-list{display:flex;flex-direction:column;gap:12px}
-.stx-party-card{background:#f8fafc;padding:16px;border-radius:12px;transition:all .3s ease}
-.stx-party-card:hover{box-shadow:0 8px 24px rgba(15,23,42,.12);transform:translateY(-2px)}
-.stx-party-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #f1f5f9}
-.stx-party-title{display:flex;align-items:center;gap:12px}
-.stx-party-badge{padding:4px 10px;border-radius:999px;font-weight:800;font-size:12px}
-.stx-party-body{display:flex;flex-direction:column;gap:12px}
-.stx-party-category{background:#fff;padding:12px;border-radius:8px;border:1px solid #f1f5f9}
-.stx-cat-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
-.stx-cat-name{display:inline-block;padding-left:10px;font-weight:700;color:var(--stx-ink);font-size:13px;text-transform:uppercase;letter-spacing:.03em}
-.stx-cat-achievement{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:800}
-.stx-cat-progress{height:6px;background:#f1f5f9;border-radius:4px;overflow:hidden;margin-bottom:6px}
-.stx-cat-bar{height:100%;display:block}
-.stx-cat-details{display:flex;justify-content:space-between;padding:0 2px;gap:12px}
+/* ===== Party-wise progress modal (creative redesign) ===== */
+#stxModalCategoryFilter{border-radius:12px;border:1.5px solid #e5e7eb;padding:9px 12px}
+.stx-modal-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.stx-modal-toolbar .stx-input-label{margin-bottom:6px}
+.stx-modal-summary{display:flex;gap:10px;flex-wrap:wrap}
+.stx-modal-summary .stx-chip{background:#f1f5f9;border-radius:10px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--stx-muted)}
+.stx-modal-summary .stx-chip b{color:var(--stx-ink);font-family:'Outfit',sans-serif;font-size:14px}
+.stx-party-list{display:flex;flex-direction:column;gap:14px}
+.stx-party-card{background:#f8fafc;border-radius:16px;padding:18px 20px;box-shadow:0 6px 18px rgba(15,23,42,.06);
+    animation:stxFadeIn .35s ease both}
+.stx-party-header{margin-bottom:12px}
+.stx-party-title{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.stx-party-badge{border-radius:999px;padding:5px 14px;font-weight:800;font-size:13px}
+.stx-party-body-row{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+.stx-party-pie-col{flex:0 0 96px;display:flex;align-items:center;justify-content:center;
+    filter:drop-shadow(0 8px 14px rgba(124,58,237,.22))}
+.stx-party-body{flex:1;min-width:230px;display:flex;flex-direction:column;gap:10px}
+.stx-party-category{background:#fff;border-radius:12px;padding:11px 14px;box-shadow:0 2px 8px rgba(15,23,42,.05)}
+.stx-cat-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.stx-cat-name{font-weight:700;font-size:13px;padding-left:9px}
+.stx-cat-achievement{border-radius:999px;padding:3px 10px;font-weight:800;font-size:11px}
+.stx-cat-progress{height:6px;border-radius:4px;background:#f1f5f9;overflow:hidden;margin-bottom:7px}
+.stx-cat-bar{display:block;height:100%;border-radius:4px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
+.stx-cat-details{display:flex;justify-content:space-between}
 .stx-cat-details small{color:var(--stx-muted);font-size:11px}
 </style>
 
@@ -401,6 +410,18 @@
                     <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                 </div>
                 <div class="modal-body">
+                    <div class="stx-modal-toolbar">
+                        <div>
+                            <div class="stx-input-label">📦 Product Category Filter</div>
+                            <select id="stxModalCategoryFilter" class="form-control">
+                                <option value="">Sabhi Categories</option>
+                                @foreach($categories as $category)
+                                    <option value="{{ $category->id }}">{{ $category->name }}</option>
+                                @endforeach
+                            </select>
+                        </div>
+                        <div class="stx-modal-summary" id="stxModalSummary"></div>
+                    </div>
                     <div id="stxPartyProgressContent" style="max-height:600px;overflow-y:auto">
                         <div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="sr-only">Loading...</span></div></div>
                     </div>
@@ -417,7 +438,7 @@
 $(function () {
     const c = @json($charts);
     const allRows = @json($rows);
-    const palette = ['#7C3AED','#0ea5e9','#f59e0b','#10b981','#ef4444','#ec4899','#2563eb'];
+    const palette = ['#7C3AED','#0ea5e9','#f59e0b','#10b981','#ef4444','#ec4899','#2563eb','#06b6d4'];
     const paletteLight = ['#a78bfa','#7dd3fc','#fcd34d','#6ee7b7','#fca5a5','#f9a8d4','#93c5fd'];
     const paletteDark  = ['#5b21b6','#0369a1','#b45309','#047857','#b91c1c','#be185d','#1d4ed8'];
     const common = { responsive:true, maintainAspectRatio:false, animation:{ duration:1400, easing:'easeOutQuart' },
@@ -530,27 +551,56 @@ $(function () {
         }
     });
 
-    // ===== PARTY-WISE PROGRESS MODAL =====
-    $('#stxPartyProgressModal').on('show.bs.modal', function () {
-        const groupedByParty = {};
-        const colors = ['#7C3AED','#0ea5e9','#f59e0b','#10b981','#ef4444','#ec4899','#2563eb'];
+    // ===== PARTY-WISE PROGRESS MODAL (with per-party pie chart + category filter) =====
+    let stxPartyCharts = [];
+    function stxDestroyPartyCharts() {
+        stxPartyCharts.forEach(ch => { try { ch.destroy(); } catch (e) {} });
+        stxPartyCharts = [];
+    }
 
-        allRows.forEach((row, idx) => {
+    function stxBuildPartyReport(categoryFilter) {
+        stxDestroyPartyCharts();
+        const groupedByParty = {};
+
+        const filteredRows = categoryFilter
+            ? allRows.filter(r => String(r.category_id) === String(categoryFilter))
+            : allRows;
+
+        filteredRows.forEach((row) => {
             if (!groupedByParty[row.party]) {
-                groupedByParty[row.party] = { party_id: row.party_id, color: colors[idx % colors.length], categories: [] };
+                groupedByParty[row.party] = {
+                    party_id: row.party_id,
+                    color: palette[Object.keys(groupedByParty).length % palette.length],
+                    categories: []
+                };
             }
             groupedByParty[row.party].categories.push(row);
         });
 
         const parties = Object.keys(groupedByParty).sort();
-        let html = '<div class="stx-party-list">';
 
+        // Toolbar summary
+        const totalTargetAll = filteredRows.reduce((s, r) => s + (parseFloat(r.target) || 0), 0);
+        const totalActualAll = filteredRows.reduce((s, r) => s + (parseFloat(r.actual) || 0), 0);
+        const overallAch = totalTargetAll > 0 ? (totalActualAll / totalTargetAll) * 100 : 0;
+        $('#stxModalSummary').html(`
+            <span class="stx-chip">Parties: <b>${parties.length}</b></span>
+            <span class="stx-chip">Avg Achievement: <b>${overallAch.toFixed(1)}%</b></span>
+        `);
+
+        if (!parties.length) {
+            $('#stxPartyProgressContent').html('<div class="stx-empty"><span class="stx-empty-emoji">🔍</span><h5>Is category ke liye koi data nahi mila</h5><p class="mb-0">Filter change karke phir try karein.</p></div>');
+            return;
+        }
+
+        let html = '<div class="stx-party-list">';
         parties.forEach((partyName, partyIdx) => {
             const partyData = groupedByParty[partyName];
             const categories = partyData.categories;
-            const partyTarget = categories.reduce((sum, c) => sum + c.target, 0);
-            const partyActual = categories.reduce((sum, c) => sum + c.actual, 0);
+            const partyTarget = categories.reduce((sum, cat) => sum + cat.target, 0);
+            const partyActual = categories.reduce((sum, cat) => sum + cat.actual, 0);
             const partyAchievement = partyTarget > 0 ? (partyActual / partyTarget) * 100 : 0;
+            const chartId = 'stxPartyPie' + partyIdx;
 
             html += `<div class="stx-party-card" style="border-left:4px solid ${partyData.color}">
                 <div class="stx-party-header">
@@ -561,13 +611,15 @@ $(function () {
                         </span>
                     </div>
                 </div>
-                <div class="stx-party-body">`;
+                <div class="stx-party-body-row">
+                    <div class="stx-party-pie-col"><canvas id="${chartId}" width="96" height="96"></canvas></div>
+                    <div class="stx-party-body">`;
 
             categories.forEach((cat, catIdx) => {
                 const catAch = cat.target > 0 ? (cat.actual / cat.target) * 100 : 0;
                 html += `<div class="stx-party-category">
                     <div class="stx-cat-row">
-                        <span class="stx-cat-name" style="border-left:3px solid ${colors[catIdx % colors.length]}">${cat.category}</span>
+                        <span class="stx-cat-name" style="border-left:3px solid ${palette[catIdx % palette.length]}">${cat.category}</span>
                         <span class="stx-cat-achievement" style="background:${catAch >= 100 ? '#dcfce7' : '#fef3c7'};color:${catAch >= 100 ? '#15803d' : '#b45309'}">
                             ${catAch.toFixed(1)}%
                         </span>
@@ -582,11 +634,60 @@ $(function () {
                 </div>`;
             });
 
-            html += `</div></div>`;
+            html += `</div></div></div>`;
         });
-
         html += '</div>';
         $('#stxPartyProgressContent').html(html);
+
+        // Render one creative doughnut chart per party (category-wise actuals)
+        parties.forEach((partyName, partyIdx) => {
+            const categories = groupedByParty[partyName].categories;
+            const canvas = document.getElementById('stxPartyPie' + partyIdx);
+            if (!canvas) return;
+            const values = categories.map(cat => (parseFloat(cat.actual) || 0));
+            const hasData = values.some(v => v > 0);
+            const ch = new Chart(canvas, {
+                type: 'doughnut',
+                data: {
+                    labels: categories.map(cat => cat.category),
+                    datasets: [{
+                        data: hasData ? values : categories.map(() => 1),
+                        backgroundColor: categories.map((_, i) => palette[i % palette.length]),
+                        borderWidth: 2,
+                        borderColor: '#fff',
+                        hoverOffset: 8
+                    }]
+                },
+                options: {
+                    responsive: false,
+                    maintainAspectRatio: false,
+                    cutout: '58%',
+                    animation: { duration: 800, easing: 'easeOutQuart' },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function (ctx) {
+                                    const cat = categories[ctx.dataIndex];
+                                    return cat.category + ': ' + Number(cat.actual).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+            stxPartyCharts.push(ch);
+        });
+    }
+
+    $('#stxPartyProgressModal').on('show.bs.modal', function () {
+        stxBuildPartyReport($('#stxModalCategoryFilter').val());
+    });
+    $('#stxPartyProgressModal').on('hidden.bs.modal', function () {
+        stxDestroyPartyCharts();
+    });
+    $(document).on('change', '#stxModalCategoryFilter', function () {
+        stxBuildPartyReport($(this).val());
     });
 });
 </script>
