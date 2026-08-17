@@ -23,6 +23,16 @@
 .sgi-filterbar .form-control{border-radius:12px;border:1.5px solid #e5e7eb}
 .sgi-filterbar .form-control:focus{border-color:var(--sgi-violet);box-shadow:0 0 0 3px rgba(124,58,237,.12)}
 #sgi-wrap .card.shadow-sm{border-radius:18px}
+.target-categories-container{padding:8px 0}
+.categories-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:10px}
+.category-card{background:#f8fafc;padding:10px 12px;border-radius:8px;box-shadow:0 2px 4px rgba(15,23,42,.08);transition:all .2s ease}
+.category-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(15,23,42,.12)}
+.category-name{font-size:11px;color:var(--sgi-muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px}
+.category-value{display:flex;align-items:center;gap:4px}
+.category-type{font-size:10px;color:var(--sgi-muted);background:#e5e7eb;padding:2px 6px;border-radius:3px}
+.category-totals{display:flex;gap:8px;flex-wrap:wrap;padding-top:8px;border-top:1px solid #e5e7eb}
+.total-badge{display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;padding:6px 10px;border-radius:6px;font-size:12px;color:var(--sgi-ink)}
+.total-badge strong{font-weight:700;color:var(--sgi-violet)}
 </style>
 <div id="sgi-wrap">
 
@@ -96,12 +106,36 @@
                             $amtSum = $target->items->where('target_type','amount')->sum('target_value');
                             $pctSum = $target->items->where('target_type','percent')->sum('target_value');
                             $qtySum = $target->items->where('target_type','quantity')->sum('target_value');
+                            $itemCount = $target->items->count();
                         @endphp
                         <tr data-party="{{ $target->party?->display_name ?? 'Cash / Walk-in' }}" data-amount="{{ $amtSum }}" data-percent="{{ $pctSum }}" data-qty="{{ $qtySum }}">
                             <td><strong>{{ $target->party?->display_name ?? 'Cash / Walk-in' }}</strong></td>
                             <td>{{ ucfirst(str_replace('_',' ',$target->period_type)) }}</td>
                             <td>{{ $target->starts_on->format('d M Y') }}<br>to {{ $target->ends_on->format('d M Y') }}</td>
-                            <td>@foreach($target->items as $item)<span class="badge badge-light mr-1 mb-1">{{ $item->productCategory?->name }}: {{ number_format($item->target_value,2) }} {{ $item->target_type }}</span>@endforeach</td>
+                            <td>
+                                <div class="target-categories-container">
+                                    <div class="categories-grid">
+                                        @foreach($target->items as $item)
+                                        @php
+                                            $colors = ['#7C3AED', '#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#2563eb', '#06b6d4'];
+                                            $color = $colors[$loop->index % count($colors)];
+                                        @endphp
+                                        <div class="category-card" style="border-left: 4px solid {{ $color }}">
+                                            <div class="category-name">{{ $item->productCategory?->name ?? '-' }}</div>
+                                            <div class="category-value">
+                                                <strong style="font-size:18px;color:{{ $color }}">{{ number_format($item->target_value,0) }}</strong>
+                                                <span class="category-type">{{ $item->target_type }}</span>
+                                            </div>
+                                        </div>
+                                        @endforeach
+                                    </div>
+                                    <div class="category-totals">
+                                        @if($amtSum > 0)<div class="total-badge">💰 <strong>₹{{ number_format($amtSum,0) }}</strong></div>@endif
+                                        @if($pctSum > 0)<div class="total-badge">📈 <strong>{{ number_format($pctSum,0) }}%</strong></div>@endif
+                                        @if($qtySum > 0)<div class="total-badge">📦 <strong>{{ number_format($qtySum,0) }}</strong></div>@endif
+                                    </div>
+                                </div>
+                            </td>
                             <td><span class="badge badge-{{ $target->status === 'active' ? 'success' : 'secondary' }}">{{ ucfirst($target->status) }}</span></td>
                             <td class="text-nowrap">
                                 @can('sales_targets.edit')<a href="{{ route('admin.sales-targets.edit',$target) }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></a>@endcan

@@ -118,6 +118,23 @@
 
 .stx-progress-track{height:10px;border-radius:6px;background:#f1f5f9;overflow:hidden}
 .stx-progress-fill{display:block;height:100%;border-radius:6px;width:0;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
+
+/* ===== PARTY-WISE PROGRESS MODAL STYLES ===== */
+.stx-party-list{display:flex;flex-direction:column;gap:12px}
+.stx-party-card{background:#f8fafc;padding:16px;border-radius:12px;transition:all .3s ease}
+.stx-party-card:hover{box-shadow:0 8px 24px rgba(15,23,42,.12);transform:translateY(-2px)}
+.stx-party-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;padding-bottom:10px;border-bottom:2px solid #f1f5f9}
+.stx-party-title{display:flex;align-items:center;gap:12px}
+.stx-party-badge{padding:4px 10px;border-radius:999px;font-weight:800;font-size:12px}
+.stx-party-body{display:flex;flex-direction:column;gap:12px}
+.stx-party-category{background:#fff;padding:12px;border-radius:8px;border:1px solid #f1f5f9}
+.stx-cat-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+.stx-cat-name{display:inline-block;padding-left:10px;font-weight:700;color:var(--stx-ink);font-size:13px;text-transform:uppercase;letter-spacing:.03em}
+.stx-cat-achievement{padding:3px 8px;border-radius:4px;font-size:11px;font-weight:800}
+.stx-cat-progress{height:6px;background:#f1f5f9;border-radius:4px;overflow:hidden;margin-bottom:6px}
+.stx-cat-bar{height:100%;display:block}
+.stx-cat-details{display:flex;justify-content:space-between;padding:0 2px;gap:12px}
+.stx-cat-details small{color:var(--stx-muted);font-size:11px}
 </style>
 
 <div id="stx-wrap">
@@ -332,7 +349,10 @@
     {{-- ===================== CATEGORY-WISE PROGRESS ===================== --}}
     <div class="card stx-chart-card mt-3">
         <div class="card-header bg-white border-0 pt-3 pb-2">
-            <h5 class="mb-0">🎯 @if($selectedPartyName) {{ $selectedPartyName }} ka Category-wise Progress @else Overall Category-wise Progress (Sabhi Parties) @endif</h5>
+            <h5 class="mb-0" @if(!$selectedPartyName) style="cursor:pointer;color:var(--stx-violet)" data-toggle="modal" data-target="#stxPartyProgressModal" title="Click to see party-wise details" @endif>
+                🎯 @if($selectedPartyName) {{ $selectedPartyName }} ka Category-wise Progress @else Overall Category-wise Progress (Sabhi Parties) @endif
+                @if(!$selectedPartyName)<i class="fas fa-external-link-alt ml-2" style="font-size:12px;opacity:.7"></i>@endif
+            </h5>
             <small class="text-muted">Target vs Actual, selected date range ke liye</small>
         </div>
         <div class="card-body">
@@ -371,6 +391,23 @@
             @endif
         </div>
     </div>
+
+    {{-- ===================== PARTY-WISE PROGRESS MODAL ===================== --}}
+    <div class="modal fade" id="stxPartyProgressModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content" style="border-radius:var(--stx-card-radius);border:0;box-shadow:0 24px 60px rgba(99,102,241,.28)">
+                <div class="modal-header" style="border-bottom:1px solid #f1f5f9;background:linear-gradient(135deg,var(--stx-violet) 0%,var(--stx-indigo) 100%);color:#fff;border-radius:var(--stx-card-radius) var(--stx-card-radius) 0 0">
+                    <h5 class="modal-title" style="font-weight:800"><i class="fas fa-users mr-2"></i> Party-wise Target Progress</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div id="stxPartyProgressContent" style="max-height:600px;overflow-y:auto">
+                        <div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="sr-only">Loading...</span></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 @endsection
 
@@ -379,6 +416,7 @@
 <script>
 $(function () {
     const c = @json($charts);
+    const allRows = @json($rows);
     const palette = ['#7C3AED','#0ea5e9','#f59e0b','#10b981','#ef4444','#ec4899','#2563eb'];
     const paletteLight = ['#a78bfa','#7dd3fc','#fcd34d','#6ee7b7','#fca5a5','#f9a8d4','#93c5fd'];
     const paletteDark  = ['#5b21b6','#0369a1','#b45309','#047857','#b91c1c','#be185d','#1d4ed8'];
@@ -490,6 +528,65 @@ $(function () {
             Swal.fire({ toast:true, position:'top-end', showConfirmButton:false, timer:1600,
                 icon:'info', title:'PDF naye tab mein khul rahi hai...' });
         }
+    });
+
+    // ===== PARTY-WISE PROGRESS MODAL =====
+    $('#stxPartyProgressModal').on('show.bs.modal', function () {
+        const groupedByParty = {};
+        const colors = ['#7C3AED','#0ea5e9','#f59e0b','#10b981','#ef4444','#ec4899','#2563eb'];
+        
+        allRows.forEach((row, idx) => {
+            if (!groupedByParty[row.party]) {
+                groupedByParty[row.party] = { party_id: row.party_id, color: colors[idx % colors.length], categories: [] };
+            }
+            groupedByParty[row.party].categories.push(row);
+        });
+
+        const parties = Object.keys(groupedByParty).sort();
+        let html = '<div class="stx-party-list">';
+        
+        parties.forEach((partyName, partyIdx) => {
+            const partyData = groupedByParty[partyName];
+            const categories = partyData.categories;
+            const partyTarget = categories.reduce((sum, c) => sum + c.target, 0);
+            const partyActual = categories.reduce((sum, c) => sum + c.actual, 0);
+            const partyAchievement = partyTarget > 0 ? (partyActual / partyTarget) * 100 : 0;
+
+            html += `<div class="stx-party-card" style="border-left:4px solid ${partyData.color}">
+                <div class="stx-party-header">
+                    <div class="stx-party-title">
+                        <strong style="color:${partyData.color};font-size:16px">${partyName}</strong>
+                        <span class="stx-party-badge" style="background:${partyData.color}22;color:${partyData.color}">
+                            ${partyAchievement.toFixed(1)}%
+                        </span>
+                    </div>
+                </div>
+                <div class="stx-party-body">`;
+
+            categories.forEach((cat, catIdx) => {
+                const catAch = cat.target > 0 ? (cat.actual / cat.target) * 100 : 0;
+                html += `<div class="stx-party-category">
+                    <div class="stx-cat-row">
+                        <span class="stx-cat-name" style="border-left:3px solid ${colors[catIdx % colors.length]}">${cat.category}</span>
+                        <span class="stx-cat-achievement" style="background:${catAch >= 100 ? '#dcfce7' : '#fef3c7'};color:${catAch >= 100 ? '#15803d' : '#b45309'}">
+                            ${catAch.toFixed(1)}%
+                        </span>
+                    </div>
+                    <div class="stx-cat-progress">
+                        <div class="stx-cat-bar" style="background:${catAch >= 100 ? 'linear-gradient(90deg,#10b981,#5eead4)' : 'linear-gradient(90deg,#7C3AED,#6366F1)'};width:${Math.min(catAch, 100)}%"></div>
+                    </div>
+                    <div class="stx-cat-details">
+                        <small>Target: ${cat.target.toFixed(2)}</small>
+                        <small>Actual: ${cat.actual.toFixed(2)}</small>
+                    </div>
+                </div>`;
+            });
+
+            html += `</div></div>`;
+        });
+
+        html += '</div>';
+        $('#stxPartyProgressContent').html(html);
     });
 });
 </script>
