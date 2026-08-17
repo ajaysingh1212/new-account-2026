@@ -23,16 +23,25 @@
 .sgi-filterbar .form-control{border-radius:12px;border:1.5px solid #e5e7eb}
 .sgi-filterbar .form-control:focus{border-color:var(--sgi-violet);box-shadow:0 0 0 3px rgba(124,58,237,.12)}
 #sgi-wrap .card.shadow-sm{border-radius:18px}
-.target-categories-container{padding:8px 0}
-.categories-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:10px}
-.category-card{background:#f8fafc;padding:10px 12px;border-radius:8px;box-shadow:0 2px 4px rgba(15,23,42,.08);transition:all .2s ease}
-.category-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(15,23,42,.12)}
-.category-name{font-size:11px;color:var(--sgi-muted);font-weight:600;text-transform:uppercase;letter-spacing:.03em;margin-bottom:6px}
-.category-value{display:flex;align-items:center;gap:4px}
-.category-type{font-size:10px;color:var(--sgi-muted);background:#e5e7eb;padding:2px 6px;border-radius:3px}
-.category-totals{display:flex;gap:8px;flex-wrap:wrap;padding-top:8px;border-top:1px solid #e5e7eb}
-.total-badge{display:inline-flex;align-items:center;gap:6px;background:#f1f5f9;padding:6px 10px;border-radius:6px;font-size:12px;color:var(--sgi-ink)}
-.total-badge strong{font-weight:700;color:var(--sgi-violet)}
+
+/* ===== Redesigned Product Categories & Goals column ===== */
+.sgi-goal-block{display:flex;gap:14px;align-items:flex-start;min-width:270px}
+.sgi-goal-visual{flex:0 0 64px;display:flex;align-items:center;justify-content:center;position:relative}
+.sgi-goal-visual canvas{filter:drop-shadow(0 6px 10px rgba(124,58,237,.22))}
+.sgi-goal-details{flex:1;min-width:0}
+.sgi-goal-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.sgi-goal-chip{display:inline-flex;align-items:center;gap:6px;background:#f8fafc;border:1px solid #e5e7eb;border-radius:999px;
+    padding:5px 10px 5px 8px;font-size:11px;font-weight:600;color:var(--sgi-muted);transition:.2s}
+.sgi-goal-chip:hover{border-color:var(--sgi-violet);transform:translateY(-1px)}
+.sgi-goal-chip b{color:var(--sgi-ink);font-size:13px;font-weight:800}
+.sgi-goal-chip small{color:var(--sgi-muted);text-transform:uppercase;font-size:9px;background:#e5e7eb;padding:1px 5px;border-radius:3px}
+.sgi-goal-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.sgi-goal-totals{display:flex;gap:10px;flex-wrap:wrap;padding-top:9px;border-top:1px dashed #e5e7eb}
+.sgi-total-pill{display:inline-flex;align-items:baseline;gap:3px;border-radius:10px;padding:6px 14px;font-weight:700;font-size:12px}
+.sgi-total-pill span{font-family:'Outfit',sans-serif;font-weight:800;font-size:20px}
+.sgi-total-amt{background:#ede9fe;color:var(--sgi-violet)}
+.sgi-total-pct{background:#dbeafe;color:#2563eb}
+.sgi-total-qty{background:#d1fae5;color:var(--sgi-mint)}
 </style>
 <div id="sgi-wrap">
 
@@ -106,35 +115,44 @@
                             $amtSum = $target->items->where('target_type','amount')->sum('target_value');
                             $pctSum = $target->items->where('target_type','percent')->sum('target_value');
                             $qtySum = $target->items->where('target_type','quantity')->sum('target_value');
-                            $itemCount = $target->items->count();
+                            $colors = ['#7C3AED', '#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#2563eb', '#06b6d4'];
+                            $rowChartData = $target->items->values()->map(function ($item, $idx) use ($colors) {
+                                return [
+                                    'label' => $item->productCategory?->name ?? '-',
+                                    'value' => (float) $item->target_value,
+                                    'type' => $item->target_type,
+                                    'color' => $colors[$idx % count($colors)],
+                                ];
+                            });
                         @endphp
                         <tr data-party="{{ $target->party?->display_name ?? 'Cash / Walk-in' }}" data-amount="{{ $amtSum }}" data-percent="{{ $pctSum }}" data-qty="{{ $qtySum }}">
                             <td><strong>{{ $target->party?->display_name ?? 'Cash / Walk-in' }}</strong></td>
                             <td>{{ ucfirst(str_replace('_',' ',$target->period_type)) }}</td>
                             <td>{{ $target->starts_on->format('d M Y') }}<br>to {{ $target->ends_on->format('d M Y') }}</td>
                             <td>
-                                <div class="target-categories-container">
-                                    <div class="categories-grid">
-                                        @foreach($target->items as $item)
-                                        @php
-                                            $colors = ['#7C3AED', '#0ea5e9', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#2563eb', '#06b6d4'];
-                                            $color = $colors[$loop->index % count($colors)];
-                                        @endphp
-                                        <div class="category-card" style="border-left: 4px solid {{ $color }}">
-                                            <div class="category-name">{{ $item->productCategory?->name ?? '-' }}</div>
-                                            <div class="category-value">
-                                                <strong style="font-size:18px;color:{{ $color }}">{{ number_format($item->target_value,0) }}</strong>
-                                                <span class="category-type">{{ $item->target_type }}</span>
-                                            </div>
-                                        </div>
-                                        @endforeach
+                                <div class="sgi-goal-block">
+                                    <div class="sgi-goal-visual">
+                                        <canvas class="sgi-row-pie" id="sgiPie{{ $target->id }}" width="64" height="64"></canvas>
                                     </div>
-                                    <div class="category-totals">
-                                        @if($amtSum > 0)<div class="total-badge">💰 <strong>₹{{ number_format($amtSum,0) }}</strong></div>@endif
-                                        @if($pctSum > 0)<div class="total-badge">📈 <strong>{{ number_format($pctSum,0) }}%</strong></div>@endif
-                                        @if($qtySum > 0)<div class="total-badge">📦 <strong>{{ number_format($qtySum,0) }}</strong></div>@endif
+                                    <div class="sgi-goal-details">
+                                        <div class="sgi-goal-chips">
+                                            @foreach($rowChartData as $c)
+                                            <span class="sgi-goal-chip">
+                                                <i class="sgi-goal-dot" style="background:{{ $c['color'] }}"></i>
+                                                {{ $c['label'] }}
+                                                <b>{{ number_format($c['value'],0) }}</b>
+                                                <small>{{ $c['type'] }}</small>
+                                            </span>
+                                            @endforeach
+                                        </div>
+                                        <div class="sgi-goal-totals">
+                                            @if($amtSum > 0)<div class="sgi-total-pill sgi-total-amt">₹<span>{{ number_format($amtSum,0) }}</span></div>@endif
+                                            @if($pctSum > 0)<div class="sgi-total-pill sgi-total-pct"><span>{{ number_format($pctSum,0) }}</span>%</div>@endif
+                                            @if($qtySum > 0)<div class="sgi-total-pill sgi-total-qty"><span>{{ number_format($qtySum,0) }}</span> qty</div>@endif
+                                        </div>
                                     </div>
                                 </div>
+                                <script type="application/json" class="sgi-row-data">{!! $rowChartData->toJson() !!}</script>
                             </td>
                             <td><span class="badge badge-{{ $target->status === 'active' ? 'success' : 'secondary' }}">{{ ucfirst($target->status) }}</span></td>
                             <td class="text-nowrap">
@@ -151,6 +169,7 @@
 </div>
 @endsection
 @push('scripts')
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
 $(function () {
     $('#sgiPartyFilter').select2({ width: '100%', placeholder: 'Sabhi Parties' });
@@ -192,6 +211,45 @@ $(function () {
     $('#sgiPartyFilter').on('change', function () {
         const val = $(this).val();
         table.column(0).search(val ? '^' + $.fn.dataTable.util.escapeRegex(val) + '$' : '', true, false).draw();
+    });
+
+    // ===== Per-row creative pie chart for Product Categories & Goals =====
+    document.querySelectorAll('.sgi-row-pie').forEach(function (canvas) {
+        const dataEl = canvas.closest('td').querySelector('.sgi-row-data');
+        if (!dataEl) return;
+        let items = [];
+        try { items = JSON.parse(dataEl.textContent || '[]'); } catch (e) { items = []; }
+        if (!items.length) return;
+        new Chart(canvas, {
+            type: 'doughnut',
+            data: {
+                labels: items.map(i => i.label),
+                datasets: [{
+                    data: items.map(i => i.value),
+                    backgroundColor: items.map(i => i.color),
+                    borderWidth: 2,
+                    borderColor: '#fff',
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                responsive: false,
+                maintainAspectRatio: false,
+                cutout: '55%',
+                animation: { duration: 900, easing: 'easeOutQuart' },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        callbacks: {
+                            label: function (ctx) {
+                                const it = items[ctx.dataIndex];
+                                return it.label + ': ' + Number(it.value).toLocaleString('en-IN') + ' (' + it.type + ')';
+                            }
+                        }
+                    }
+                }
+            }
+        });
     });
 });
 </script>
