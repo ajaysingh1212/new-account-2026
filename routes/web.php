@@ -220,6 +220,8 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('sales-targets', SalesTargetController::class)->only(['index','create','store'])->middleware('permission:sales_targets.create');
         Route::resource('sales-targets', SalesTargetController::class)->only(['edit','update'])->middleware('permission:sales_targets.edit');
         Route::resource('sales-targets', SalesTargetController::class)->only(['destroy'])->middleware('permission:sales_targets.delete');
+        Route::get('sales-targets/report/category-detail', [SalesTargetController::class, 'categoryReport'])
+        ->name('sales-targets.report.category-detail');
     });
     Route::middleware('permission:estimates.view')->group(function () {
         Route::get('estimates/{estimate}/print', [EstimateController::class, 'print'])->middleware('permission:estimates.print')->name('estimates.print');
