@@ -164,6 +164,59 @@
 .stx-cat-party-bar-wrap{flex:1;min-width:160px}
 .stx-cat-party-nums{display:flex;gap:14px;font-size:12px;color:var(--stx-muted);white-space:nowrap;align-items:center}
 .stx-cat-modal-loading{text-align:center;padding:50px 20px}
+.stx-cat-party-row {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 15px 18px;
+    border-bottom: 1px solid #eee;
+}
+
+.stx-cat-party-name {
+    width: 100%;
+    font-size: 15px;
+    color: #1f2937;
+}
+
+.stx-cat-party-name strong {
+    display: block;
+    font-weight: 700;
+}
+
+.stx-cat-party-bar-wrap {
+    width: 100%;
+}
+
+.stx-progress-track {
+    width: 100%;
+    height: 12px;
+    background: #f1f5f9;
+    border-radius: 20px;
+    overflow: hidden;
+}
+
+.stx-progress-fill {
+    height: 100%;
+    border-radius: 20px;
+    transition: width .8s ease;
+}
+
+.stx-cat-party-nums {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    font-size: 13px;
+    color: #64748b;
+}
+
+.stx-cat-party-nums b {
+    color: #1f2937;
+}
+
+.stx-badge-ach {
+    margin-left: auto;
+}
 </style>
 
 <div id="stx-wrap">
@@ -824,19 +877,51 @@ $(function () {
         } else {
             let html = '';
             data.parties.forEach(p => {
-                const pct = Math.min(p.achievement, 100);
-                html += `<div class="stx-cat-party-row">
-                    <div class="stx-cat-party-name">${p.party}</div>
+            const pct = Math.min(p.achievement, 100);
+
+            html += `
+                <div class="stx-cat-party-row">
+
+                    <!-- Party Name -->
+                    <div class="stx-cat-party-name">
+                        <strong>${p.party}</strong>
+                    </div>
+
+                    <!-- Progress Bar -->
                     <div class="stx-cat-party-bar-wrap">
-                        <div class="stx-progress-track"><div class="stx-progress-fill" style="width:${pct}%;background:${p.achievement>=100?'linear-gradient(90deg,#10b981,#5eead4)':'linear-gradient(90deg,#7C3AED,#6366F1)'}"></div></div>
+                        <div class="stx-progress-track">
+                            <div class="stx-progress-fill"
+                                style="
+                                    width:${pct}%;
+                                    background:${p.achievement >= 100
+                                        ? 'linear-gradient(90deg,#10b981,#5eead4)'
+                                        : 'linear-gradient(90deg,#7C3AED,#6366F1)'
+                                    };
+                                ">
+                            </div>
+                        </div>
                     </div>
+
+                    <!-- Numbers -->
                     <div class="stx-cat-party-nums">
-                        <span>Target: ${Number(p.target).toLocaleString('en-IN',{maximumFractionDigits:2})}</span>
-                        <span>Actual: ${Number(p.actual).toLocaleString('en-IN',{maximumFractionDigits:2})}</span>
-                        <span class="stx-badge-ach ${p.achievement>=100?'good':'warn'}">${p.achievement.toFixed(1)}%</span>
+                        <span>
+                            Target:
+                            <b>${Number(p.target).toLocaleString('en-IN',{maximumFractionDigits:2})}</b>
+                        </span>
+
+                        <span>
+                            Actual:
+                            <b>${Number(p.actual).toLocaleString('en-IN',{maximumFractionDigits:2})}</b>
+                        </span>
+
+                        <span class="stx-badge-ach ${p.achievement >= 100 ? 'good' : 'warn'}">
+                            ${p.achievement.toFixed(1)}%
+                        </span>
                     </div>
-                </div>`;
-            });
+
+                </div>
+            `;
+        });
             $('#stxCatPartyList').html(html);
         }
 
