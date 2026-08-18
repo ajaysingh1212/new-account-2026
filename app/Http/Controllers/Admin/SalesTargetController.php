@@ -91,6 +91,10 @@ class SalesTargetController extends Controller
             ->whereBetween('billing_date', [$from->toDateString(), $to->toDateString()]), SalesInvoice::class)
             ->when($partyId, fn ($q) => $q->where('party_id', $partyId))->get();
 
+        // Total sales amount for the selected date range — sabhi categories, target ke bina bhi.
+        // "Actual Amount" KPI card ab isi total ko dikhata hai, na ki sirf target-linked amount ko.
+        $totalSalesAmount = $sales->sum(fn ($inv) => $inv->items->sum(fn ($line) => (float) $line->line_total));
+
         $actuals = [];
         $partyTotals = [];
         foreach ($sales as $invoice) {
@@ -115,18 +119,23 @@ class SalesTargetController extends Controller
             });
         })->values();
 
-        $summary = ['target' => $rows->sum('target'), 'actual' => $rows->sum('actual'), 'amount' => $rows->sum('actual_amount'), 'quantity' => $rows->sum('actual_quantity')];
-        $charts = ['labels' => $rows->pluck('category')->values(), 'target' => $rows->pluck('target')->values(), 'actual' => $rows->pluck('actual')->values(), 'achievement' => $rows->pluck('achievement')->values()];
-        $filters = ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'party_id' => $partyId, 'product_category_id' => $categoryId, 'quick_period' => $quickPeriod];
+        $summary = [
+            'target' => $rows->sum('target'),
+            'actual' => $rows->sum('actual'),
+            'amount' => $totalSalesAmount,
+            'quantity' => $rows->sum('actual_quantity'),
+        ];
+        // Overall % target achieved (average nahi, sum-based ratio) — jaise: target 100, actual 80 -> 80% complete.
+        $summary['achievement_pct'] = $summary['target'] > 0 ? ($summary['actual'] / $summary['target']) * 100 : 0;
 
-        // Category-wise progress: works whether a party is selected or not.
-        // When no party is selected, rows across different parties for the same
-        // category are combined so the bars stay easy to read either way.
+        // Category-wise progress: category naam ke hisab se group kiya gaya hai (sabhi parties combine).
+        // Charts (Pie/Bars/Wave/Radar) bhi isi grouped data se banenge taaki ek category baar-baar repeat na ho.
         $progress = $rows->groupBy('category')->map(function ($group) {
             $target = $group->sum('target');
             $actual = $group->sum('actual');
             return [
                 'category' => $group->first()['category'],
+                'category_id' => $group->first()['category_id'],
                 'target_type' => $group->first()['target_type'],
                 'target' => $target,
                 'actual' => $actual,
@@ -134,9 +143,96 @@ class SalesTargetController extends Controller
                 'parties_count' => $group->pluck('party_id')->unique()->count(),
             ];
         })->sortByDesc('achievement')->values();
+
+        $charts = [
+            'labels' => $progress->pluck('category')->values(),
+            'target' => $progress->pluck('target')->values(),
+            'actual' => $progress->pluck('actual')->values(),
+            'achievement' => $progress->pluck('achievement')->values(),
+        ];
+
+        $filters = ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'party_id' => $partyId, 'product_category_id' => $categoryId, 'quick_period' => $quickPeriod];
         $selectedPartyName = $partyId ? optional($parties->firstWhere('id', $partyId))->display_name : null;
 
         return view('admin.sales-targets.report', compact('rows','summary','charts','filters','parties','categories','progress','selectedPartyName'));
+    }
+
+    /**
+     * AJAX endpoint: ek specific product category ke liye sabhi parties ka target vs actual data.
+     * Category-wise progress modal isko use karta hai, month-wise filter ke saath.
+     */
+    public function categoryReport(Request $request, EntryVisibilityService $visibility)
+    {
+        $categoryId = $request->integer('category_id');
+        abort_unless($categoryId, 422, 'Category required.');
+
+        $month = $request->input('month', 'range');
+        if ($month && $month !== 'range') {
+            $from = Carbon::parse($month.'-01')->startOfMonth();
+            $to = $from->copy()->endOfMonth();
+        } else {
+            $from = Carbon::parse($request->input('from_date'))->startOfDay();
+            $to = Carbon::parse($request->input('to_date'))->endOfDay();
+        }
+
+        $partyId = $request->integer('party_id') ?: null;
+
+        $targets = $visibility->scopeForUser(SalesTarget::with(['party', 'items' => fn ($q) => $q->where('product_category_id', $categoryId)])
+            ->whereHas('items', fn ($q) => $q->where('product_category_id', $categoryId))
+            ->where('starts_on', '<=', $to->toDateString())->where('ends_on', '>=', $from->toDateString()), SalesTarget::class)
+            ->when($partyId, fn ($q) => $q->where('party_id', $partyId))
+            ->get();
+
+        $sales = $visibility->scopeForUser(SalesInvoice::with(['items.item.productCategory'])
+            ->whereBetween('billing_date', [$from->toDateString(), $to->toDateString()]), SalesInvoice::class)
+            ->when($partyId, fn ($q) => $q->where('party_id', $partyId))
+            ->get();
+
+        $actuals = [];
+        $partyTotals = [];
+        foreach ($sales as $invoice) {
+            foreach ($invoice->items as $line) {
+                $catId = $line->item?->product_category_id;
+                $partyTotals[$invoice->party_id] = ($partyTotals[$invoice->party_id] ?? 0) + (float) $line->line_total;
+                if ($catId != $categoryId) continue;
+                $actuals[$invoice->party_id]['amount'] = ($actuals[$invoice->party_id]['amount'] ?? 0) + (float) $line->line_total;
+                $actuals[$invoice->party_id]['quantity'] = ($actuals[$invoice->party_id]['quantity'] ?? 0) + (float) $line->quantity;
+            }
+        }
+
+        $partyRows = $targets->map(function (SalesTarget $target) use ($categoryId, $actuals, $partyTotals) {
+            $item = $target->items->firstWhere('product_category_id', $categoryId);
+            if (!$item) return null;
+            $amount = (float) ($actuals[$target->party_id]['amount'] ?? 0);
+            $quantity = (float) ($actuals[$target->party_id]['quantity'] ?? 0);
+            $actual = $item->target_type === 'amount' ? $amount : ($item->target_type === 'quantity' ? $quantity : (($partyTotals[$target->party_id] ?? 0) > 0 ? ($amount / $partyTotals[$target->party_id]) * 100 : 0));
+            $targetValue = (float) $item->target_value;
+
+            return [
+                'party' => $target->party?->display_name ?? 'Cash / Walk-in',
+                'party_id' => $target->party_id,
+                'target_type' => $item->target_type,
+                'target' => $targetValue,
+                'actual' => $actual,
+                'achievement' => $targetValue > 0 ? ($actual / $targetValue) * 100 : 0,
+            ];
+        })->filter()->values();
+
+        $totalTarget = $partyRows->sum('target');
+        $totalActual = $partyRows->sum('actual');
+
+        return response()->json([
+            'category' => optional(ProductCategory::find($categoryId))->name,
+            'from' => $from->format('d M Y'),
+            'to' => $to->format('d M Y'),
+            'parties' => $partyRows,
+            'summary' => [
+                'target' => $totalTarget,
+                'actual' => $totalActual,
+                'achievement' => $totalTarget > 0 ? ($totalActual / $totalTarget) * 100 : 0,
+                'count' => $partyRows->count(),
+            ],
+        ]);
     }
 
     public function export(Request $request, EntryVisibilityService $visibility): StreamedResponse

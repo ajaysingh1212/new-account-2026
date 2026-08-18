@@ -119,6 +119,11 @@
 .stx-progress-track{height:10px;border-radius:6px;background:#f1f5f9;overflow:hidden}
 .stx-progress-fill{display:block;height:100%;border-radius:6px;width:0;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
 
+/* Category-wise progress rows ab clickable hain — click karne par uss category ka dedicated modal khulta hai */
+.stx-progress-item{cursor:pointer;border-radius:14px;padding:10px 12px;margin:0 -12px;transition:background .2s ease}
+.stx-progress-item:hover{background:#f5f3ff}
+.stx-progress-item:hover .stx-cat-chip{color:var(--stx-violet)}
+
 /* ===== Party-wise progress modal (creative redesign) ===== */
 #stxModalCategoryFilter{border-radius:12px;border:1.5px solid #e5e7eb;padding:9px 12px}
 .stx-modal-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
@@ -144,6 +149,10 @@
 .stx-cat-bar{display:block;height:100%;border-radius:4px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
 .stx-cat-details{display:flex;justify-content:space-between}
 .stx-cat-details small{color:var(--stx-muted);font-size:11px}
+
+/* ===== Category-wise progress modal (single category, all parties) ===== */
+#stxCategoryMonthFilter{border-radius:12px;border:1.5px solid #e5e7eb;padding:9px 12px}
+.stx-category-chart-box{position:relative;height:280px;width:100%;margin-bottom:18px}
 </style>
 
 <div id="stx-wrap">
@@ -243,6 +252,7 @@
                         <div class="stx-kpi-label">Actual Amount</div>
                         <div class="stx-kpi-value">₹<span class="stx-count" data-target="{{ $summary['amount'] }}">0</span></div>
                         <div class="stx-kpi-bar"><span style="background:linear-gradient(90deg,#10b981,#5eead4);width:100%"></span></div>
+                        <small style="color:var(--stx-muted)">Selected date range ka total sale</small>
                     </div>
                     <span class="stx-kpi-icon" style="background:#d1fae5;color:var(--stx-mint)">💰</span>
                 </div>
@@ -264,16 +274,16 @@
             <div class="card stx-kpi">
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <div>
-                        <div class="stx-kpi-label">Avg Achievement</div>
-                        <div class="stx-kpi-value">{{ number_format($rows->avg('achievement'),1) }}%</div>
-                        <small style="color:var(--stx-muted)">Poore records ka average</small>
+                        <div class="stx-kpi-label">Target Achieved</div>
+                        <div class="stx-kpi-value">{{ number_format($summary['achievement_pct'],1) }}%</div>
+                        <small style="color:var(--stx-muted)">Total target ka kitna % pura hua</small>
                     </div>
                     <div class="stx-ring-wrap">
                         <svg width="56" height="56" viewBox="0 0 56 56">
                             <circle class="stx-ring-bg" cx="28" cy="28" r="24" fill="none" stroke-width="6"></circle>
                             <circle class="stx-ring-fg" id="stxAchRing" cx="28" cy="28" r="24" fill="none" stroke-width="6"
                                     stroke-dasharray="150.8" stroke-dashoffset="150.8"
-                                    data-pct="{{ number_format($rows->avg('achievement'),1) }}"></circle>
+                                    data-pct="{{ number_format($summary['achievement_pct'],1) }}"></circle>
                         </svg>
                         <div class="stx-ring-txt">🔥</div>
                     </div>
@@ -362,7 +372,7 @@
                 🎯 @if($selectedPartyName) {{ $selectedPartyName }} ka Category-wise Progress @else Overall Category-wise Progress (Sabhi Parties) @endif
                 @if(!$selectedPartyName)<i class="fas fa-external-link-alt ml-2" style="font-size:12px;opacity:.7"></i>@endif
             </h5>
-            <small class="text-muted">Target vs Actual, selected date range ke liye</small>
+            <small class="text-muted">Target vs Actual, selected date range ke liye &middot; kisi bhi category par click karke party-wise breakdown dekhein</small>
         </div>
         <div class="card-body">
             @if($progress->count())
@@ -372,7 +382,7 @@
                     $unitSuffix = $p['target_type']==='amount' ? '₹' : ($p['target_type']==='quantity' ? '' : '%');
                     $pct = min($p['achievement'], 100);
                 @endphp
-                <div class="stx-progress-item mb-3">
+                <div class="stx-progress-item mb-3" data-category-id="{{ $p['category_id'] }}" data-category-name="{{ $p['category'] }}" title="Click karke {{ $p['category'] }} ka party-wise breakdown dekhein">
                     <div class="d-flex justify-content-between align-items-center mb-1">
                         <span class="stx-cat-chip">
                             <span class="stx-cat-dot" style="background:{{ $stxPalette[$loop->index % count($stxPalette)] }}"></span>
@@ -401,7 +411,7 @@
         </div>
     </div>
 
-    {{-- ===================== PARTY-WISE PROGRESS MODAL ===================== --}}
+    {{-- ===================== PARTY-WISE PROGRESS MODAL (sabhi categories, sabhi parties) ===================== --}}
     <div class="modal fade" id="stxPartyProgressModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-lg" role="document">
             <div class="modal-content" style="border-radius:var(--stx-card-radius);border:0;box-shadow:0 24px 60px rgba(99,102,241,.28)">
@@ -429,6 +439,33 @@
             </div>
         </div>
     </div>
+
+    {{-- ===================== CATEGORY-WISE PROGRESS MODAL (ek category, sabhi parties, month filter) ===================== --}}
+    <div class="modal fade" id="stxCategoryProgressModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content" style="border-radius:var(--stx-card-radius);border:0;box-shadow:0 24px 60px rgba(99,102,241,.28)">
+                <div class="modal-header" style="border-bottom:1px solid #f1f5f9;background:linear-gradient(135deg,var(--stx-violet) 0%,var(--stx-indigo) 100%);color:#fff;border-radius:var(--stx-card-radius) var(--stx-card-radius) 0 0">
+                    <h5 class="modal-title" id="stxCategoryModalTitle" style="font-weight:800"><i class="fas fa-bullseye mr-2"></i> Category Progress</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="stx-modal-toolbar">
+                        <div>
+                            <div class="stx-input-label">📅 Month Filter</div>
+                            <select id="stxCategoryMonthFilter" class="form-control"></select>
+                        </div>
+                        <div class="stx-modal-summary" id="stxCategoryModalSummary"></div>
+                    </div>
+                    <div class="stx-category-chart-box">
+                        <canvas id="stxCategoryBarChart"></canvas>
+                    </div>
+                    <div id="stxCategoryPartyList" class="stx-party-list" style="max-height:360px;overflow-y:auto">
+                        <div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="sr-only">Loading...</span></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 @endsection
 
@@ -438,12 +475,17 @@
 $(function () {
     const c = @json($charts);
     const allRows = @json($rows);
+    const categoryDetailUrl = @json(route('admin.sales-targets.report.category-detail'));
+    const currentFrom = @json($filters['from']);
+    const currentTo = @json($filters['to']);
+    const currentPartyId = @json($filters['party_id']);
     const palette = ['#7C3AED','#0ea5e9','#f59e0b','#10b981','#ef4444','#ec4899','#2563eb','#06b6d4'];
     const paletteLight = ['#a78bfa','#7dd3fc','#fcd34d','#6ee7b7','#fca5a5','#f9a8d4','#93c5fd'];
     const paletteDark  = ['#5b21b6','#0369a1','#b45309','#047857','#b91c1c','#be185d','#1d4ed8'];
     const common = { responsive:true, maintainAspectRatio:false, animation:{ duration:1400, easing:'easeOutQuart' },
         plugins:{ tooltip:{ enabled:true, displayColors:true } } };
 
+    // Pie/Bars/Wave/Radar ab grouped category data (c) se banate hain — ek category sirf ek baar aayega
     new Chart($('#stxPieChart'), { type:'doughnut',
         data:{ labels:c.labels, datasets:[{
             data:c.actual,
@@ -688,6 +730,123 @@ $(function () {
     });
     $(document).on('change', '#stxModalCategoryFilter', function () {
         stxBuildPartyReport($(this).val());
+    });
+
+    // ===== CATEGORY-WISE PROGRESS MODAL (ek category, sabhi parties, month filter) =====
+    let stxCategoryChart = null;
+
+    function stxDestroyCategoryChart() {
+        if (stxCategoryChart) { try { stxCategoryChart.destroy(); } catch (e) {} stxCategoryChart = null; }
+    }
+
+    function stxMonthOptionsHtml() {
+        const fromLabel = new Date(currentFrom).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+        const toLabel = new Date(currentTo).toLocaleDateString('en-IN', { day:'2-digit', month:'short', year:'numeric' });
+        let html = `<option value="range">Selected Range (${fromLabel} - ${toLabel})</option>`;
+        const anchor = new Date(currentTo);
+        for (let i = 0; i < 12; i++) {
+            const d = new Date(anchor.getFullYear(), anchor.getMonth() - i, 1);
+            const value = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+            const label = d.toLocaleDateString('en-IN', { month:'long', year:'numeric' });
+            html += `<option value="${value}">${label}</option>`;
+        }
+        return html;
+    }
+
+    function stxLoadCategoryReport(categoryId, categoryName, month) {
+        $('#stxCategoryModalTitle').html(`<i class="fas fa-bullseye mr-2"></i> ${categoryName} — Party-wise Progress`);
+        $('#stxCategoryPartyList').html('<div class="text-center py-4"><div class="spinner-border text-primary" role="status"><span class="sr-only">Loading...</span></div></div>');
+        stxDestroyCategoryChart();
+
+        $.get(categoryDetailUrl, {
+            category_id: categoryId,
+            month: month,
+            from_date: currentFrom,
+            to_date: currentTo,
+            party_id: currentPartyId || ''
+        }).done(function (res) {
+            stxRenderCategoryReport(res);
+        }).fail(function () {
+            $('#stxCategoryPartyList').html('<div class="stx-empty"><span class="stx-empty-emoji">⚠️</span><h5>Kuch galat ho gaya</h5><p class="mb-0">Phir try karein.</p></div>');
+        });
+    }
+
+    function stxRenderCategoryReport(res) {
+        const parties = res.parties || [];
+        const summary = res.summary || {};
+
+        $('#stxCategoryModalSummary').html(`
+            <span class="stx-chip">Period: <b>${res.from} - ${res.to}</b></span>
+            <span class="stx-chip">Parties: <b>${summary.count || 0}</b></span>
+            <span class="stx-chip">Achievement: <b>${(summary.achievement || 0).toFixed(1)}%</b></span>
+        `);
+
+        if (!parties.length) {
+            $('#stxCategoryPartyList').html('<div class="stx-empty"><span class="stx-empty-emoji">🔍</span><h5>Is period ke liye koi data nahi mila</h5><p class="mb-0">Month filter change karke phir try karein.</p></div>');
+            stxDestroyCategoryChart();
+            return;
+        }
+
+        const labels = parties.map(p => p.party);
+        const targets = parties.map(p => p.target);
+        const actuals = parties.map(p => p.actual);
+
+        stxDestroyCategoryChart();
+        stxCategoryChart = new Chart($('#stxCategoryBarChart'), {
+            type: 'bar',
+            data: {
+                labels: labels,
+                datasets: [
+                    { label: 'Target', data: targets, backgroundColor: 'rgba(124,58,237,.22)', borderColor: '#7C3AED', borderWidth: 2, borderRadius: 8 },
+                    { label: 'Actual', data: actuals, backgroundColor: 'rgba(16,185,129,.55)', borderColor: '#10b981', borderWidth: 2, borderRadius: 8 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                animation: { duration: 1000, easing: 'easeOutQuart' },
+                scales: { y: { beginAtZero: true }, x: { ticks: { autoSkip: false } } },
+                plugins: { legend: { position: 'top' } }
+            }
+        });
+
+        let listHtml = '';
+        parties.forEach((p, i) => {
+            const color = palette[i % palette.length];
+            const ach = Math.min(p.achievement, 100);
+            listHtml += `<div class="stx-party-card" style="border-left:4px solid ${color}">
+                <div class="stx-party-title mb-2">
+                    <strong style="color:${color}">${p.party}</strong>
+                    <span class="stx-party-badge" style="background:${color}22;color:${color}">${p.achievement.toFixed(1)}%</span>
+                </div>
+                <div class="stx-cat-progress">
+                    <div class="stx-cat-bar" style="width:${ach}%;background:${p.achievement >= 100 ? 'linear-gradient(90deg,#10b981,#5eead4)' : 'linear-gradient(90deg,#7C3AED,#6366F1)'}"></div>
+                </div>
+                <div class="stx-cat-details">
+                    <small>Target: ${Number(p.target).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</small>
+                    <small>Actual: ${Number(p.actual).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</small>
+                </div>
+            </div>`;
+        });
+        $('#stxCategoryPartyList').html(listHtml);
+    }
+
+    $(document).on('click', '.stx-progress-item', function () {
+        const categoryId = $(this).data('category-id');
+        const categoryName = $(this).data('category-name');
+        $('#stxCategoryProgressModal').data('current-category-id', categoryId).data('current-category-name', categoryName);
+        $('#stxCategoryMonthFilter').html(stxMonthOptionsHtml()).val('range');
+        $('#stxCategoryProgressModal').modal('show');
+        stxLoadCategoryReport(categoryId, categoryName, 'range');
+    });
+
+    $(document).on('change', '#stxCategoryMonthFilter', function () {
+        const categoryId = $('#stxCategoryProgressModal').data('current-category-id');
+        const categoryName = $('#stxCategoryProgressModal').data('current-category-name');
+        stxLoadCategoryReport(categoryId, categoryName, $(this).val());
+    });
+
+    $('#stxCategoryProgressModal').on('hidden.bs.modal', function () {
+        stxDestroyCategoryChart();
     });
 });
 </script>
