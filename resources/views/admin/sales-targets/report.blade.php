@@ -110,7 +110,7 @@
 .stx-pie-legend-item:last-child{border-bottom:0}
 .stx-pie-legend-left{display:flex;align-items:center;gap:10px;font-weight:700}
 .stx-pie-dot{width:11px;height:11px;border-radius:50%;flex-shrink:0;box-shadow:0 0 0 3px rgba(0,0,0,.03)}
-.stx-pie-legend-pct{font-weight:800;color:var(--stx-violet)}
+.stx-pie-legend-pct{font-weight:800;color:var(--stx-violet);text-align:right;white-space:nowrap;flex-shrink:0;margin-left:10px}
 .stx-pie-center-label{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none}
 .stx-pie-center-label b{font-family:'Outfit',sans-serif;font-size:22px;color:var(--stx-ink);line-height:1.1}
 .stx-pie-center-label span{font-size:10px;color:var(--stx-muted);text-transform:uppercase;letter-spacing:.05em;text-align:center;max-width:110px}
@@ -506,9 +506,37 @@ $(function () {
     const common = { responsive:true, maintainAspectRatio:false, animation:{ duration:1400, easing:'easeOutQuart' },
         plugins:{ tooltip:{ enabled:true, displayColors:true } } };
 
+    // ===== Aggregate raw rows (which are per party+category) into ONE entry per
+    // category, so the Pie/Bars/Wave/Radar tabs never show a category twice.
+    // Achievement here is a proper weighted average: sum(actual) / sum(target).
+    const stxCategoryAgg = (function () {
+        const map = {};
+        allRows.forEach(r => {
+            const key = r.category_id ?? r.category;
+            if (!map[key]) {
+                map[key] = { category_id: r.category_id, category: r.category, target: 0, actual: 0, parties: new Set() };
+            }
+            map[key].target += parseFloat(r.target) || 0;
+            map[key].actual += parseFloat(r.actual) || 0;
+            map[key].parties.add(r.party_id);
+        });
+        return Object.values(map).map(v => ({
+            category_id: v.category_id,
+            category: v.category,
+            target: v.target,
+            actual: v.actual,
+            achievement: v.target > 0 ? (v.actual / v.target) * 100 : 0,
+            parties_count: v.parties.size
+        })).sort((a, b) => b.target - a.target);
+    })();
+    const catLabels = stxCategoryAgg.map(x => x.category);
+    const catTargets = stxCategoryAgg.map(x => x.target);
+    const catActuals = stxCategoryAgg.map(x => x.actual);
+    const catAchievements = stxCategoryAgg.map(x => x.achievement);
+
     new Chart($('#stxPieChart'), { type:'doughnut',
-        data:{ labels:c.labels, datasets:[{
-            data:c.actual,
+        data:{ labels:catLabels, datasets:[{
+            data:catActuals,
             backgroundColor: function (context) {
                 const { chart, dataIndex } = context;
                 const { ctx, chartArea } = chart;
@@ -524,37 +552,39 @@ $(function () {
             plugins: { tooltip: { enabled: true, displayColors: true }, legend: { display: false } } } });
 
     (function () {
-        const totalTarget = c.target.reduce((sum, v) => sum + (parseFloat(v) || 0), 0) || 1;
+        const totalTarget = catTargets.reduce((sum, v) => sum + v, 0) || 1;
         let topIdx = 0, topShare = -1, legendHtml = '';
-        c.labels.forEach((label, i) => {
-            const share = ((parseFloat(c.target[i]) || 0) / totalTarget) * 100;
+        stxCategoryAgg.forEach((cat, i) => {
+            const share = (cat.target / totalTarget) * 100;
             if (share > topShare) { topShare = share; topIdx = i; }
             legendHtml += `<div class="stx-pie-legend-item">
                 <span class="stx-pie-legend-left">
-                    <span class="stx-pie-dot" style="background:${paletteDark[i % paletteDark.length]}"></span>${label}
+                    <span class="stx-pie-dot" style="background:${paletteDark[i % paletteDark.length]}"></span>
+                    ${cat.category}
+                    <small class="text-muted ml-1">(${cat.parties_count} ${cat.parties_count === 1 ? 'party' : 'parties'})</small>
                 </span>
-                <span class="stx-pie-legend-pct">${share.toFixed(1)}%</span>
+                <span class="stx-pie-legend-pct" title="Achievement">${share.toFixed(1)}% <small class="text-muted">/ ${cat.achievement.toFixed(1)}% ach.</small></span>
             </div>`;
         });
         $('#stxPieLegend').html(legendHtml || '<div class="text-muted">Koi data nahi mila</div>');
         $('#stxPieCenterVal').text(topShare >= 0 ? topShare.toFixed(0) + '%' : '0%');
-        $('#stxPieCenterLabel').text(c.labels[topIdx] ? (c.labels[topIdx] + ' target share') : 'Top Category');
+        $('#stxPieCenterLabel').text(catLabels[topIdx] ? (catLabels[topIdx] + ' target share') : 'Top Category');
     })();
 
     new Chart($('#stxCandleChart'), { type:'bar',
-        data:{ labels:c.labels, datasets:[
-            { label:'Target', data:c.target, backgroundColor:'#ddd6fe', borderColor:'#7C3AED', borderWidth:2, borderRadius:8 },
-            { label:'Actual', data:c.actual, backgroundColor:'#5eead4', borderColor:'#0f766e', borderWidth:2, borderRadius:8 }
+        data:{ labels:catLabels, datasets:[
+            { label:'Target', data:catTargets, backgroundColor:'#ddd6fe', borderColor:'#7C3AED', borderWidth:2, borderRadius:8 },
+            { label:'Actual', data:catActuals, backgroundColor:'#5eead4', borderColor:'#0f766e', borderWidth:2, borderRadius:8 }
         ] }, options:{ ...common, scales:{ y:{ beginAtZero:true } } } });
 
     new Chart($('#stxWaveChart'), { type:'line',
-        data:{ labels:c.labels, datasets:[
-            { label:'Target wave', data:c.target, borderColor:'#7C3AED', backgroundColor:'rgba(124,58,237,.12)', fill:true, tension:.45 },
-            { label:'Actual wave', data:c.actual, borderColor:'#0f766e', backgroundColor:'rgba(15,118,110,.12)', fill:true, tension:.45 }
+        data:{ labels:catLabels, datasets:[
+            { label:'Target wave', data:catTargets, borderColor:'#7C3AED', backgroundColor:'rgba(124,58,237,.12)', fill:true, tension:.45 },
+            { label:'Actual wave', data:catActuals, borderColor:'#0f766e', backgroundColor:'rgba(15,118,110,.12)', fill:true, tension:.45 }
         ] }, options:{ ...common, scales:{ y:{ beginAtZero:true } } } });
 
     new Chart($('#stxRadarChart'), { type:'radar',
-        data:{ labels:c.labels, datasets:[{ label:'Achievement %', data:c.achievement,
+        data:{ labels:catLabels, datasets:[{ label:'Achievement %', data:catAchievements,
             backgroundColor:'rgba(124,58,237,.2)', borderColor:'#7C3AED', pointBackgroundColor:palette }] },
         options:{ ...common, scales:{ r:{ beginAtZero:true, suggestedMax:100 } } } });
 
