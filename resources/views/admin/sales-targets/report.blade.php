@@ -740,79 +740,79 @@ $(function () {
 
         let html = '<div class="stx-party-list">';
         parties.forEach((partyName, partyIdx) => {
-    const partyData = groupedByParty[partyName];
-    const categories = partyData.categories;
-    const partyTarget = categories.reduce((sum, cat) => sum + cat.target, 0);
-    const partyActual = categories.reduce((sum, cat) => sum + cat.actual, 0);
-    const partyAchievement = partyTarget > 0 ? (partyActual / partyTarget) * 100 : 0;
-    const chartId = 'stxPartyPie' + partyIdx;
+            const partyData = groupedByParty[partyName];
+            const categories = partyData.categories;
+            const partyTarget = categories.reduce((sum, cat) => sum + cat.target, 0);
+            const partyActual = categories.reduce((sum, cat) => sum + cat.actual, 0);
+            const partyAchievement = partyTarget > 0 ? (partyActual / partyTarget) * 100 : 0;
+            const chartId = 'stxPartyPie' + partyIdx;
 
-    html += `<div class="stx-party-card" style="border-left:4px solid ${partyData.color}">
-        <div class="stx-party-header">
-            <div class="stx-party-title">
-                <div>
-                    <strong style="color:${partyData.color};font-size:16px">
-                        ${partyName}
-                    </strong>
+            html += `<div class="stx-party-card" style="border-left:4px solid ${partyData.color}">
+                <div class="stx-party-header">
+                    <div class="stx-party-title">
+                        <div>
+                            <strong style="color:${partyData.color};font-size:16px">
+                                ${partyName}
+                            </strong>
 
-                    <div style="
-                        font-size:12px;
-                        color:#64748b;
-                        margin-top:3px;
-                        font-weight:500;
-                    ">
-                        📍 ${partyData.city || 'N/A'}, ${partyData.state || 'N/A'}
+                            <div style="
+                                font-size:12px;
+                                color:#64748b;
+                                margin-top:3px;
+                                font-weight:500;
+                            ">
+                                📍 ${partyData.city || 'N/A'}, ${partyData.state || 'N/A'}
+                            </div>
+                        </div>
+
+                        <span class="stx-party-badge" style="background:${partyData.color}22;color:${partyData.color}">
+                            ${partyAchievement.toFixed(1)}%
+                        </span>
                     </div>
                 </div>
 
-                <span class="stx-party-badge" style="background:${partyData.color}22;color:${partyData.color}">
-                    ${partyAchievement.toFixed(1)}%
-                </span>
-            </div>
-        </div>
+                <div class="stx-party-body-row">
+                    <div class="stx-party-pie-col">
+                        <canvas id="${chartId}" width="96" height="96"></canvas>
+                    </div>
 
-        <div class="stx-party-body-row">
-            <div class="stx-party-pie-col">
-                <canvas id="${chartId}" width="96" height="96"></canvas>
-            </div>
+                    <div class="stx-party-body">`;
 
-            <div class="stx-party-body">`;
+            categories.forEach((cat, catIdx) => {
+                const catAch = cat.target > 0 ? (cat.actual / cat.target) * 100 : 0;
 
-                categories.forEach((cat, catIdx) => {
-                    const catAch = cat.target > 0 ? (cat.actual / cat.target) * 100 : 0;
+                html += `<div class="stx-party-category">
+                    <div class="stx-cat-row">
+                        <span class="stx-cat-name" style="border-left:3px solid ${palette[catIdx % palette.length]}">
+                            ${cat.category}
+                        </span>
 
-                    html += `<div class="stx-party-category">
-                        <div class="stx-cat-row">
-                            <span class="stx-cat-name" style="border-left:3px solid ${palette[catIdx % palette.length]}">
-                                ${cat.category}
-                            </span>
+                        <span class="stx-cat-achievement" style="
+                            background:${catAch >= 100 ? '#dcfce7' : '#fef3c7'};
+                            color:${catAch >= 100 ? '#15803d' : '#b45309'}
+                        ">
+                            ${catAch.toFixed(1)}%
+                        </span>
+                    </div>
 
-                            <span class="stx-cat-achievement" style="
-                                background:${catAch >= 100 ? '#dcfce7' : '#fef3c7'};
-                                color:${catAch >= 100 ? '#15803d' : '#b45309'}
-                            ">
-                                ${catAch.toFixed(1)}%
-                            </span>
-                        </div>
+                    <div class="stx-cat-progress">
+                        <div class="stx-cat-bar" style="
+                            background:${catAch >= 100
+                                ? 'linear-gradient(90deg,#10b981,#5eead4)'
+                                : 'linear-gradient(90deg,#7C3AED,#6366F1)'};
+                            width:${Math.min(catAch, 100)}%
+                        "></div>
+                    </div>
 
-                        <div class="stx-cat-progress">
-                            <div class="stx-cat-bar" style="
-                                background:${catAch >= 100
-                                    ? 'linear-gradient(90deg,#10b981,#5eead4)'
-                                    : 'linear-gradient(90deg,#7C3AED,#6366F1)'};
-                                width:${Math.min(catAch, 100)}%
-                            "></div>
-                        </div>
-
-                        <div class="stx-cat-details">
-                            <small>Target: ${cat.target.toFixed(2)}</small>
-                            <small>Actual: ${cat.actual.toFixed(2)}</small>
-                        </div>
-                    </div>`;
-                });
-
-                html += `</div></div></div>`;
+                    <div class="stx-cat-details">
+                        <small>Target: ${cat.target.toFixed(2)}</small>
+                        <small>Actual: ${cat.actual.toFixed(2)}</small>
+                    </div>
+                </div>`;
             });
+
+            html += `</div></div></div>`;
+        });
         html += '</div>';
         $('#stxPartyProgressContent').html(html);
 
