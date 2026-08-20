@@ -1017,8 +1017,8 @@ $(function () {
 
                     <!-- Party Name -->
                     <div class="stx-cat-party-name">
-                        <strong>${p.party}</strong>
-                        ${locationLabel ? `<small>📍 ${locationLabel}</small>` : ''}
+                        <h4><strong>${p.party}</strong></h4>
+                        ${locationLabel ? `<h6>📍 ${locationLabel}</h6>` : ''}
                     </div>
 
                     <!-- Progress Bar -->
