@@ -20,11 +20,9 @@ class SalesTargetController extends Controller
     {
         $targets = $visibility->scopeForUser(SalesTarget::with(['party','items.productCategory'])->latest(), SalesTarget::class)->get();
 
-        // Get all active parties with their sales data
         $parties = $visibility->scopeForUser(Party::orderBy('display_name'), Party::class)->get();
         $sales = $visibility->scopeForUser(SalesInvoice::with(['party','items.item.productCategory'])->where('status', 'posted')->latest(), SalesInvoice::class)->get();
 
-        // Calculate party-wise totals
         $partyStats = [];
         foreach ($parties as $party) {
             $partySales = $sales->where('party_id', $party->id);
@@ -56,7 +54,7 @@ class SalesTargetController extends Controller
     {
         $visibility->authorizeView($salesTarget);
         $salesTarget->load('items');
-        return view('admin.sales-targets.edit', $this->formData($visibility) + ['target' => $salesTarget]);
+        return view('admin.sales-targets.edit', $this->formData($visibility, $salesTarget->id) + ['target' => $salesTarget]);
     }
 
     public function update(Request $request, SalesTarget $salesTarget, EntryVisibilityService $visibility)
@@ -81,14 +79,12 @@ class SalesTargetController extends Controller
         [$from, $to, $quickPeriod] = $this->reportDates($request);
         $partyId = $request->integer('party_id') ?: null;
         $categoryId = $request->integer('product_category_id') ?: null;
-        // ===== NEW: State / City filters =====
         $stateFilter = $request->input('party_state') ?: null;
         $cityFilter = $request->input('party_city') ?: null;
 
         $parties = $visibility->scopeForUser(Party::orderBy('display_name'), Party::class)->get();
         $categories = ProductCategory::where('company_id', auth()->user()->current_company_id)->orderBy('name')->get();
 
-        // ===== NEW: Distinct state/city lists for the filter dropdowns (company-scoped) =====
         $states = $visibility->scopeForUser(Party::query(), Party::class)
             ->whereNotNull('state')->where('state', '!=', '')
             ->distinct()->orderBy('state')->pluck('state');
@@ -102,6 +98,11 @@ class SalesTargetController extends Controller
             ->when($stateFilter, fn ($q) => $q->whereHas('party', fn ($q2) => $q2->where('state', $stateFilter)))
             ->when($cityFilter, fn ($q) => $q->whereHas('party', fn ($q2) => $q2->where('city', $cityFilter)))
             ->get();
+
+        // NOTE: this collection is NOT filtered by category. It represents every posted
+        // sale for the selected date range/party/state/city — used both for per-category
+        // "actual" matching below, AND for the brand-new "Total Sales" KPI (same source
+        // of truth as the dashboard's "Sales" stat).
         $sales = $visibility->scopeForUser(SalesInvoice::with(['party','items.item.productCategory'])
             ->whereBetween('billing_date', [$from->toDateString(), $to->toDateString()]), SalesInvoice::class)
             ->when($partyId, fn ($q) => $q->where('party_id', $partyId))
@@ -132,7 +133,6 @@ class SalesTargetController extends Controller
                 return [
                     'party' => $target->party?->display_name ?? 'Cash / Walk-in',
                     'party_id' => $target->party_id,
-                    // ===== NEW: state/city carried on every row =====
                     'party_state' => $target->party?->state,
                     'party_city' => $target->party?->city,
                     'category' => $item->productCategory?->name ?? '-',
@@ -150,9 +150,28 @@ class SalesTargetController extends Controller
             });
         })->values();
 
-        $summary = ['target' => $rows->sum('target'), 'actual' => $rows->sum('actual'), 'amount' => $rows->sum('actual_amount'), 'quantity' => $rows->sum('actual_quantity')];
-        // Overall % of target achieved (sum of actual / sum of target), NOT an average of each row's %.
-        $summary['achievement'] = $summary['target'] > 0 ? ($summary['actual'] / $summary['target']) * 100 : 0;
+        // ===== FIXED KPI SUMMARY =====
+        // Previously "target" summed target_value across ALL target types (percent + amount
+        // + quantity) into a single number — meaningless, since 45% + ₹50,000 + 120 units
+        // can't be added together. That's what was showing a "wrong" Total Target number.
+        //
+        // Fix: "Total Target" (and its achievement %) is now computed ONLY from amount-type
+        // target rows, so it stays in ₹ and lines up correctly with "Actual Amount"
+        // (which is always a ₹ figure regardless of the row's target_type).
+        $amountRows = $rows->where('target_type', 'amount');
+
+        $summary = [
+            'target' => $amountRows->sum('target'),
+            'amount' => $rows->sum('actual_amount'),
+            'quantity' => $rows->sum('actual_quantity'),
+            // NEW: pure overall sales for this filter set — same source as the dashboard's
+            // "Sales" card, completely independent of category/target matching.
+            'total_sales' => (float) $sales->sum('grand_total'),
+        ];
+        // Target Achieved % = Actual Amount * 100 / Total Target (amount-based)
+        $summary['achievement'] = $summary['target'] > 0 ? ($summary['amount'] / $summary['target']) * 100 : 0;
+        // NEW: Target Achieved % using overall Total Sales instead of matched Actual Amount
+        $summary['achievement_on_total_sales'] = $summary['target'] > 0 ? ($summary['total_sales'] / $summary['target']) * 100 : 0;
 
         $charts = ['labels' => $rows->pluck('category')->values(), 'target' => $rows->pluck('target')->values(), 'actual' => $rows->pluck('actual')->values(), 'achievement' => $rows->pluck('achievement')->values()];
         $filters = [
@@ -160,15 +179,11 @@ class SalesTargetController extends Controller
             'to' => $to->toDateString(),
             'party_id' => $partyId,
             'product_category_id' => $categoryId,
-            'party_state' => $stateFilter,   // ===== NEW =====
-            'party_city' => $cityFilter,     // ===== NEW =====
+            'party_state' => $stateFilter,
+            'party_city' => $cityFilter,
             'quick_period' => $quickPeriod,
         ];
 
-        // Category-wise progress: grouped by category_id (not name) so each category
-        // appears exactly once even if two categories share a similar/duplicate name.
-        // Works whether a party is selected or not — rows across different parties
-        // for the same category are combined into a single weighted-average bar.
         $progress = $rows->groupBy('category_id')->map(function ($group) {
             $target = $group->sum('target');
             $actual = $group->sum('actual');
@@ -186,23 +201,16 @@ class SalesTargetController extends Controller
 
         return view('admin.sales-targets.report', compact(
             'rows','summary','charts','filters','parties','categories','progress','selectedPartyName',
-            'states','cities' // ===== NEW =====
+            'states','cities'
         ));
     }
 
-    /**
-     * AJAX endpoint powering the "Category detail" popup modal.
-     * Given a category_id (and either a `month` = YYYY-MM, or from_date/to_date),
-     * returns every party that has a target for that category, their target vs
-     * actual + achievement %, plus a month-wise breakdown of actuals for charting.
-     */
     public function categoryBreakdown(Request $request, EntryVisibilityService $visibility)
     {
         $request->validate([
             'category_id' => ['required', 'integer', 'exists:product_categories,id'],
         ]);
         $categoryId = (int) $request->integer('category_id');
-        // ===== NEW: allow state/city filtering on this popup too =====
         $stateFilter = $request->input('party_state') ?: null;
         $cityFilter = $request->input('party_city') ?: null;
 
@@ -254,7 +262,6 @@ class SalesTargetController extends Controller
             return [
                 'party' => $target->party?->display_name ?? 'Cash / Walk-in',
                 'party_id' => $target->party_id,
-                // ===== NEW =====
                 'party_state' => $target->party?->state,
                 'party_city' => $target->party?->city,
                 'target_type' => $item->target_type,
@@ -267,7 +274,6 @@ class SalesTargetController extends Controller
         $totalTarget = $parties->sum('target');
         $totalActual = $parties->sum('actual');
 
-        // Month-wise actuals for this category, spanning the requested range.
         $months = [];
         $cursor = $from->copy()->startOfMonth();
         $lastMonth = $to->copy()->startOfMonth();
@@ -318,9 +324,44 @@ class SalesTargetController extends Controller
         return view('admin.sales-targets.print', $data);
     }
 
-    private function formData(EntryVisibilityService $visibility): array
+    /**
+     * @param  int|null  $excludeTargetId  when editing, don't count the target being edited
+     *                                     as "already set" against itself.
+     */
+    private function formData(EntryVisibilityService $visibility, ?int $excludeTargetId = null): array
     {
-        return ['parties' => $visibility->scopeForUser(Party::orderBy('display_name'), Party::class)->get(), 'categories' => ProductCategory::where('company_id', auth()->user()->current_company_id)->orderBy('name')->get()];
+        $parties = $visibility->scopeForUser(Party::orderBy('display_name'), Party::class)->get();
+        $categories = ProductCategory::where('company_id', auth()->user()->current_company_id)->orderBy('name')->get();
+
+        // NEW: build a party_id => summary map of existing sales targets, so the "Party"
+        // dropdown can show a 🎯 mark + the total goal value already configured for that
+        // party (across all their targets), instead of the user discovering duplicates
+        // only after saving.
+        $existingTargets = SalesTarget::with('items')
+            ->where('company_id', auth()->user()->current_company_id)
+            ->when($excludeTargetId, fn ($q) => $q->where('id', '!=', $excludeTargetId))
+            ->get();
+
+        $partyTargetSummary = [];
+        foreach ($existingTargets as $t) {
+            if (!$t->party_id || $t->items->isEmpty()) continue;
+            $partyTargetSummary[$t->party_id] ??= ['count' => 0, 'total' => 0, 'targets' => []];
+            $itemsTotal = (float) $t->items->sum('target_value');
+            $type = $t->items->first()->target_type ?? 'percent';
+            $partyTargetSummary[$t->party_id]['count']++;
+            $partyTargetSummary[$t->party_id]['total'] += $itemsTotal;
+            $partyTargetSummary[$t->party_id]['targets'][] = [
+                'id' => $t->id,
+                'period' => ucfirst(str_replace('_', ' ', $t->period_type)),
+                'starts_on' => optional($t->starts_on)->format('d M Y'),
+                'ends_on' => optional($t->ends_on)->format('d M Y'),
+                'status' => $t->status,
+                'type' => $type,
+                'total' => $itemsTotal,
+            ];
+        }
+
+        return compact('parties', 'categories', 'partyTargetSummary');
     }
 
     private function validateData(Request $request): array

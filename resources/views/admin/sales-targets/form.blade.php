@@ -14,6 +14,12 @@
 #targetForm .sgf-total-fill{height:100%;border-radius:4px;width:0;background:linear-gradient(90deg,#7C3AED,#6366F1);transition:width .6s cubic-bezier(.2,.8,.2,1)}
 #targetForm .sgf-total-bar.match .sgf-total-fill{background:linear-gradient(90deg,#10b981,#5eead4)}
 #targetForm .sgf-total-bar.mismatch .sgf-total-fill{background:linear-gradient(90deg,#f59e0b,#fbbf24)}
+/* NEW: party-target mark styles */
+#targetForm .sgf-party-badge{display:inline-flex;align-items:center;gap:4px;background:#ede9fe;color:#7C3AED;border-radius:999px;padding:2px 9px;font-size:11px;font-weight:700;margin-left:6px}
+#partyTargetInfo .alert{border-radius:12px;font-size:13px}
+#partyTargetInfo ul{list-style:none;padding-left:0;margin-top:6px}
+#partyTargetInfo li{padding:4px 0;border-bottom:1px dashed #e5e7eb}
+#partyTargetInfo li:last-child{border-bottom:0}
 </style>
 <div class="card shadow-sm border-0"><div class="card-body p-4">
     <div class="d-flex align-items-center mb-4"><div class="rounded-circle bg-primary text-white p-3 mr-3"><i class="fas fa-bullseye fa-lg"></i></div><div><h3 class="mb-0">{{ $editing ? 'Refine' : 'Create' }} Sales Target</h3><small class="text-muted">Set category-wise goals for one party and measure every rupee, unit or percentage.</small></div></div>
@@ -22,8 +28,19 @@
         <div class="col-md-5 form-group"><label>Party *</label>
             <select name="party_id" id="party_id" class="form-control select2" required>
                 <option value="">Select Party</option>
-                @foreach($parties as $party)<option value="{{ $party->id }}" @selected(old('party_id',$target->party_id ?? '')==$party->id)>{{ $party->display_name }}</option>@endforeach
+                @foreach($parties as $party)
+                    @php($pSummary = $partyTargetSummary[$party->id] ?? null)
+                    <option value="{{ $party->id }}"
+                        data-has-target="{{ $pSummary ? 1 : 0 }}"
+                        data-target-count="{{ $pSummary['count'] ?? 0 }}"
+                        data-target-total="{{ $pSummary['total'] ?? 0 }}"
+                        data-target-info='{{ json_encode($pSummary['targets'] ?? []) }}'
+                        @selected(old('party_id',$target->party_id ?? '')==$party->id)>
+                        {{ $party->display_name }} - {{ $party->target_value }}
+                    </option>
+                @endforeach
             </select>
+            <div id="partyTargetInfo" class="mt-2"></div>
         </div>
         <div class="col-md-3 form-group"><label>Target Period *</label>
             <select name="period_type" id="period_type" class="form-control" required>
@@ -164,8 +181,40 @@ $('#addRow').on('click', ()=>{
     applyUnit();
 });
 
+// ===== NEW: party dropdown shows a 🎯 mark + total goal value already set for that party =====
+function partyOptionTemplate(state){
+    if(!state.id) return state.text;
+    const $opt = $(state.element);
+    const hasTarget = $opt.data('has-target') == 1;
+    if(!hasTarget) return state.text;
+    const count = $opt.data('target-count');
+    const total = parseFloat($opt.data('target-total')) || 0;
+    const $wrap = $('<span></span>').text(state.text);
+    $wrap.append(' <span class="sgf-party-badge">🎯 '+count+' target'+(count>1?'s':'')+' · '+total.toLocaleString('en-IN',{maximumFractionDigits:2})+'</span>');
+    return $wrap;
+}
+
+function showPartyTargetInfo(){
+    const $opt = $('#party_id').find('option:selected');
+    const info = $opt.data('target-info');
+    if(info && info.length){
+        let html = '<div class="alert alert-info py-2 px-3 mb-0"><strong>🎯 Is party ke existing targets ('+info.length+'):</strong><ul>';
+        info.forEach(t=>{
+            html += '<li>'+t.period+' &middot; '+t.starts_on+' - '+t.ends_on+' &middot; '+t.type+' &middot; Total: <b>'+Number(t.total).toLocaleString('en-IN',{maximumFractionDigits:2})+'</b> '
+                 + '<span class="badge badge-'+(t.status==='active'?'success':'secondary')+'">'+t.status+'</span></li>';
+        });
+        html += '</ul></div>';
+        $('#partyTargetInfo').html(html);
+    } else {
+        $('#partyTargetInfo').html('');
+    }
+}
+
+$('#party_id').select2({width:'100%', templateResult: partyOptionTemplate, templateSelection: partyOptionTemplate});
+
 $('#party_id').on('change', function(){
     if($(this).val()){ $('#sgfUnitSection').addClass('show'); }
+    showPartyTargetInfo();
 });
 
 $('#global_target_type').on('change', applyUnit);
@@ -194,5 +243,6 @@ $('#targetForm').on('submit', function(e){
 wireRows();
 applyUnit();
 recalcTotal();
+showPartyTargetInfo(); // pre-fill info on edit page load
 </script>
 @endpush

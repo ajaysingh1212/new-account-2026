@@ -56,13 +56,16 @@
 .stx-kpi{border:0;border-radius:var(--stx-card-radius);box-shadow:0 10px 26px rgba(15,23,42,.06);overflow:hidden;position:relative;
     animation:stxFadeUp .6s ease both}
 .stx-kpi:nth-child(1){animation-delay:.12s}.stx-kpi:nth-child(2){animation-delay:.18s}
-.stx-kpi:nth-child(3){animation-delay:.24s}
+.stx-kpi:nth-child(3){animation-delay:.24s}.stx-kpi:nth-child(4){animation-delay:.30s}
 .stx-kpi .card-body{padding:22px}
 .stx-kpi-icon{width:50px;height:50px;border-radius:16px;display:grid;place-items:center;font-size:20px;flex-shrink:0}
 .stx-kpi-label{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--stx-muted);text-transform:uppercase}
 .stx-kpi-value{font-family:'Outfit',sans-serif;font-weight:800;font-size:26px;margin-top:4px}
 .stx-kpi-bar{height:4px;width:100%;background:#f1f5f9;border-radius:4px;margin-top:14px;overflow:hidden}
 .stx-kpi-bar span{display:block;height:100%;border-radius:4px;width:0;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
+.stx-kpi-clickable{cursor:pointer;transition:transform .2s,box-shadow .2s}
+.stx-kpi-clickable:hover{transform:translateY(-3px);box-shadow:0 16px 34px rgba(124,58,237,.18)}
+.stx-kpi-clickable .stx-kpi-hint{font-size:11px;color:var(--stx-violet);font-weight:700;margin-top:6px;opacity:.85}
 
 .stx-ring-wrap{position:relative;width:56px;height:56px}
 .stx-ring-wrap svg{transform:rotate(-90deg)}
@@ -119,13 +122,11 @@
 .stx-progress-track{height:10px;border-radius:6px;background:#f1f5f9;overflow:hidden}
 .stx-progress-fill{display:block;height:100%;border-radius:6px;width:0;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
 
-/* Category progress bars are now clickable -> opens the category detail modal */
 .stx-cat-clickable{cursor:pointer;border-radius:14px;padding:10px 12px;margin:0 -12px 6px;transition:background .2s,transform .2s}
 .stx-cat-clickable:hover{background:#f5f3ff;transform:translateY(-1px)}
 .stx-cat-clickable .stx-cat-hint{font-size:11px;color:var(--stx-violet);font-weight:700;opacity:0;transition:opacity .2s}
 .stx-cat-clickable:hover .stx-cat-hint{opacity:1}
 
-/* ===== Party-wise progress modal (creative redesign) ===== */
 #stxModalCategoryFilter,#stxModalStateFilter,#stxModalCityFilter{border-radius:12px;border:1.5px solid #e5e7eb;padding:9px 12px}
 .stx-modal-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
 .stx-modal-toolbar .stx-input-label{margin-bottom:6px}
@@ -152,18 +153,12 @@
 .stx-cat-details{display:flex;justify-content:space-between}
 .stx-cat-details small{color:var(--stx-muted);font-size:11px}
 
-/* ===== Category DETAIL modal (party-wise for a single category) ===== */
 .stx-icon-btn{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);color:#fff;border-radius:10px;
     width:36px;height:36px;display:inline-flex;align-items:center;justify-content:center;margin-left:8px;transition:.2s;cursor:pointer}
 .stx-icon-btn:hover{background:rgba(255,255,255,.32);color:#fff}
 .stx-modal-fullscreen{max-width:100vw!important;width:100vw;height:100vh;margin:0}
 .stx-modal-fullscreen .modal-content{height:100vh;border-radius:0!important}
 .stx-cat-chart-box{position:relative;height:320px;width:100%;margin-bottom:22px}
-.stx-cat-party-row{display:flex;align-items:center;gap:16px;background:#f8fafc;border-radius:14px;
-    padding:14px 18px;margin-bottom:10px;flex-wrap:wrap;animation:stxFadeIn .3s ease both}
-.stx-cat-party-name{font-weight:700;min-width:160px;flex:0 0 auto}
-.stx-cat-party-bar-wrap{flex:1;min-width:160px}
-.stx-cat-party-nums{display:flex;gap:14px;font-size:12px;color:var(--stx-muted);white-space:nowrap;align-items:center}
 .stx-cat-modal-loading{text-align:center;padding:50px 20px}
 .stx-cat-party-row {
     display: flex;
@@ -172,67 +167,24 @@
     padding: 15px 18px;
     border-bottom: 1px solid #eee;
 }
-
 .stx-cat-party-name {
     width: 100%;
     font-size: 15px;
     color: #1f2937;
 }
-
-.stx-cat-party-name strong {
-    display: block;
-    font-weight: 700;
-}
-
-.stx-cat-party-name small{
-    display:block;
-    font-weight:500;
-    color:#64748b;
-    font-size:11px;
-    margin-top:2px;
-}
-
-.stx-cat-party-bar-wrap {
-    width: 100%;
-}
-
-.stx-progress-track {
-    width: 100%;
-    height: 12px;
-    background: #f1f5f9;
-    border-radius: 20px;
-    overflow: hidden;
-}
-
-.stx-progress-fill {
-    height: 100%;
-    border-radius: 20px;
-    transition: width .8s ease;
-}
-
-.stx-cat-party-nums {
-    display: flex;
-    align-items: center;
-    gap: 18px;
-    flex-wrap: wrap;
-    font-size: 13px;
-    color: #64748b;
-}
-
-.stx-cat-party-nums b {
-    color: #1f2937;
-}
-
-.stx-badge-ach {
-    margin-left: auto;
-}
+.stx-cat-party-name strong { display: block; font-weight: 700; }
+.stx-cat-party-name small{ display:block; font-weight:500; color:#64748b; font-size:11px; margin-top:2px; }
+.stx-cat-party-bar-wrap { width: 100%; }
+.stx-progress-track { width: 100%; height: 12px; background: #f1f5f9; border-radius: 20px; overflow: hidden; }
+.stx-progress-fill { height: 100%; border-radius: 20px; transition: width .8s ease; }
+.stx-cat-party-nums { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; font-size: 13px; color: #64748b; }
+.stx-cat-party-nums b { color: #1f2937; }
+.stx-badge-ach { margin-left: auto; }
 </style>
 
 <div id="stx-wrap">
 @php
     $stxPalette = ['#7C3AED','#0ea5e9','#f59e0b','#10b981','#ef4444','#ec4899','#2563eb'];
-    // Month options for the category-detail popup's month filter, built from the
-    // currently selected date range on this page.
     $stxMonthOptions = [];
     $stxCursor = \Carbon\Carbon::parse($filters['from'])->startOfMonth();
     $stxEndCursor = \Carbon\Carbon::parse($filters['to'])->startOfMonth();
@@ -300,7 +252,6 @@
                         </select>
                     </div>
                 </div>
-                {{-- ===================== NEW: State + City filter row ===================== --}}
                 <div class="row align-items-end mt-3">
                     <div class="col-md-3 form-group mb-md-0">
                         <div class="stx-input-label">📍 State</div>
@@ -334,40 +285,57 @@
         </div>
     </div>
 
-    {{-- ===================== KPI CARDS ===================== --}}
+    {{-- ===================== KPI CARDS (4 now) ===================== --}}
     <div class="row">
-        <div class="col-lg-4 col-md-6 mb-3">
-            <div class="card stx-kpi">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stx-kpi stx-kpi-clickable" data-toggle="modal" data-target="#stxAmountBreakdownModal" data-source="target">
                 <div class="card-body d-flex justify-content-between align-items-start">
                     <div>
-                        <div class="stx-kpi-label">Total Target</div>
+                        <div class="stx-kpi-label">Total Target <small>(₹ based)</small></div>
                         <div class="stx-kpi-value stx-count" data-target="{{ $summary['target'] }}">0</div>
                         <div class="stx-kpi-bar"><span style="background:linear-gradient(90deg,var(--stx-violet),var(--stx-indigo));width:100%"></span></div>
+                        <div class="stx-kpi-hint"><i class="fas fa-search mr-1"></i>Party-wise dekhein</div>
                     </div>
                     <span class="stx-kpi-icon" style="background:#ede9fe;color:var(--stx-violet)">🎯</span>
                 </div>
             </div>
         </div>
-        <div class="col-lg-4 col-md-6 mb-3">
-            <div class="card stx-kpi">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stx-kpi stx-kpi-clickable" data-toggle="modal" data-target="#stxAmountBreakdownModal" data-source="actual">
                 <div class="card-body d-flex justify-content-between align-items-start">
                     <div>
                         <div class="stx-kpi-label">Actual Amount</div>
                         <div class="stx-kpi-value">₹<span class="stx-count" data-target="{{ $summary['amount'] }}">0</span></div>
                         <div class="stx-kpi-bar"><span style="background:linear-gradient(90deg,#10b981,#5eead4);width:100%"></span></div>
-                        <small style="color:var(--stx-muted)">Selected date range ka total sale</small>
+                        <div class="stx-kpi-hint"><i class="fas fa-search mr-1"></i>Party-wise dekhein</div>
                     </div>
                     <span class="stx-kpi-icon" style="background:#d1fae5;color:var(--stx-mint)">💰</span>
                 </div>
             </div>
         </div>
-        <div class="col-lg-4 col-md-6 mb-3">
+        <div class="col-lg-3 col-md-6 mb-3">
+            <div class="card stx-kpi">
+                <div class="card-body d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="stx-kpi-label">Total Sales</div>
+                        <div class="stx-kpi-value">₹<span class="stx-count" data-target="{{ $summary['total_sales'] }}">0</span></div>
+                        <div class="stx-kpi-bar"><span style="background:linear-gradient(90deg,#0ea5e9,#38bdf8);width:100%"></span></div>
+                        <small style="color:var(--stx-muted)">Poora business sale (dashboard jaisa), filters ke hisab se</small>
+                    </div>
+                    <span class="stx-kpi-icon" style="background:#e0f2fe;color:#0ea5e9">📈</span>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-3 col-md-6 mb-3">
             <div class="card stx-kpi">
                 <div class="card-body d-flex justify-content-between align-items-center">
                     <div>
                         <div class="stx-kpi-label">Target Achieved</div>
                         <div class="stx-kpi-value">{{ number_format($summary['achievement'],1) }}%</div>
-                        <small style="color:var(--stx-muted)">Total target ka kitna % pura hua</small>
+                        <small style="color:var(--stx-muted)">Actual Amount se</small>
+                        <div style="margin-top:6px;font-size:12px;color:var(--stx-muted)">
+                            Total Sales se: <b style="color:var(--stx-ink)">{{ number_format($summary['achievement_on_total_sales'],1) }}%</b>
+                        </div>
                     </div>
                     <div class="stx-ring-wrap">
                         <svg width="56" height="56" viewBox="0 0 56 56">
@@ -506,6 +474,22 @@
         </div>
     </div>
 
+    {{-- ===================== NEW: TOTAL TARGET / ACTUAL AMOUNT BREAKDOWN MODAL ===================== --}}
+    <div class="modal fade" id="stxAmountBreakdownModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content" style="border-radius:var(--stx-card-radius);border:0;box-shadow:0 24px 60px rgba(99,102,241,.28)">
+                <div class="modal-header" style="border-bottom:1px solid #f1f5f9;background:linear-gradient(135deg,var(--stx-violet) 0%,var(--stx-indigo) 100%);color:#fff;border-radius:var(--stx-card-radius) var(--stx-card-radius) 0 0">
+                    <h5 class="modal-title" id="stxAmountModalTitle" style="font-weight:800"><i class="fas fa-users mr-2"></i> Party-wise Breakdown</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="stx-modal-summary mb-3" id="stxAmountModalSummary"></div>
+                    <div id="stxAmountModalBody" style="max-height:520px;overflow-y:auto"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     {{-- ===================== PARTY-WISE PROGRESS MODAL ===================== --}}
     <div class="modal fade" id="stxPartyProgressModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-lg" role="document">
@@ -526,7 +510,6 @@
                                     @endforeach
                                 </select>
                             </div>
-                            {{-- ===================== NEW: State filter ===================== --}}
                             <div>
                                 <div class="stx-input-label">📍 State Filter</div>
                                 <select id="stxModalStateFilter" class="form-control">
@@ -536,7 +519,6 @@
                                     @endforeach
                                 </select>
                             </div>
-                            {{-- ===================== NEW: City filter ===================== --}}
                             <div>
                                 <div class="stx-input-label">🏙️ City Filter</div>
                                 <select id="stxModalCityFilter" class="form-control">
@@ -557,7 +539,7 @@
         </div>
     </div>
 
-    {{-- ===================== CATEGORY DETAIL MODAL (party-wise for ONE category) ===================== --}}
+    {{-- ===================== CATEGORY DETAIL MODAL ===================== --}}
     <div class="modal fade" id="stxCategoryDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
         <div class="modal-dialog modal-xl" role="document">
             <div class="modal-content" style="border-radius:var(--stx-card-radius);border:0;box-shadow:0 24px 60px rgba(99,102,241,.28)">
@@ -579,7 +561,6 @@
                                 <div class="stx-input-label">📅 Month Filter</div>
                                 <select id="stxCatMonthFilter" class="form-control" style="min-width:220px"></select>
                             </div>
-                            {{-- ===================== NEW: State filter ===================== --}}
                             <div>
                                 <div class="stx-input-label">📍 State Filter</div>
                                 <select id="stxCatStateFilter" class="form-control">
@@ -589,7 +570,6 @@
                                     @endforeach
                                 </select>
                             </div>
-                            {{-- ===================== NEW: City filter ===================== --}}
                             <div>
                                 <div class="stx-input-label">🏙️ City Filter</div>
                                 <select id="stxCatCityFilter" class="form-control">
@@ -633,9 +613,6 @@ $(function () {
     const common = { responsive:true, maintainAspectRatio:false, animation:{ duration:1400, easing:'easeOutQuart' },
         plugins:{ tooltip:{ enabled:true, displayColors:true } } };
 
-    // ===== Aggregate raw rows (which are per party+category) into ONE entry per
-    // category, so the Pie/Bars/Wave/Radar tabs never show a category twice.
-    // Achievement here is a proper weighted average: sum(actual) / sum(target).
     const stxCategoryAgg = (function () {
         const map = {};
         allRows.forEach(r => {
@@ -770,14 +747,69 @@ $(function () {
         }
     });
 
-    // ===== PARTY-WISE PROGRESS MODAL (with per-party pie chart + category/state/city filter) =====
+    // ===== NEW: TOTAL TARGET / ACTUAL AMOUNT — party-wise breakdown modal =====
+    // Both KPI cards share the same underlying dataset: amount-type target rows only
+    // (so the numbers always line up with what the "Total Target" / "Actual Amount"
+    // cards actually show — no mixing of %, qty and ₹ anymore).
+    function stxAmountAggregatedByParty() {
+        const amountRows = allRows.filter(r => r.target_type === 'amount');
+        const grouped = {};
+        amountRows.forEach(r => {
+            if (!grouped[r.party]) grouped[r.party] = { party: r.party, target: 0, actual: 0 };
+            grouped[r.party].target += parseFloat(r.target) || 0;
+            grouped[r.party].actual += parseFloat(r.actual_amount ?? r.actual) || 0;
+        });
+        return Object.values(grouped).sort((a, b) => b.target - a.target);
+    }
+
+    function stxRenderAmountBreakdownModal(source) {
+        const parties = stxAmountAggregatedByParty();
+        const isTarget = source === 'target';
+        $('#stxAmountModalTitle').html('<i class="fas fa-users mr-2"></i> ' + (isTarget ? 'Total Target' : 'Actual Amount') + ' — Party-wise Breakdown');
+
+        let totalTarget = 0, totalActual = 0, html = '';
+        parties.forEach(p => {
+            totalTarget += p.target; totalActual += p.actual;
+            const ach = p.target > 0 ? (p.actual / p.target) * 100 : 0;
+            html += `<div class="stx-cat-party-row">
+                <div class="stx-cat-party-name"><strong>${p.party}</strong></div>
+                <div class="stx-cat-party-bar-wrap">
+                    <div class="stx-progress-track">
+                        <div class="stx-progress-fill" style="width:${Math.min(ach,100)}%;background:${ach>=100?'linear-gradient(90deg,#10b981,#5eead4)':'linear-gradient(90deg,#7C3AED,#6366F1)'}"></div>
+                    </div>
+                </div>
+                <div class="stx-cat-party-nums">
+                    <span>Target: <b>₹${p.target.toLocaleString('en-IN',{maximumFractionDigits:2})}</b></span>
+                    <span>Actual: <b>₹${p.actual.toLocaleString('en-IN',{maximumFractionDigits:2})}</b></span>
+                    <span class="stx-badge-ach ${ach>=100?'good':'warn'}">${ach.toFixed(1)}%</span>
+                </div>
+            </div>`;
+        });
+        if (!parties.length) {
+            html = '<div class="stx-empty"><span class="stx-empty-emoji">🔍</span><h5>Koi amount-based target nahi mila</h5><p class="mb-0">Filters change karke phir try karein.</p></div>';
+        }
+        $('#stxAmountModalBody').html(html);
+
+        const overallAch = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
+        $('#stxAmountModalSummary').html(`
+            <span class="stx-chip">Parties: <b>${parties.length}</b></span>
+            <span class="stx-chip">Total Target: <b>₹${totalTarget.toLocaleString('en-IN',{maximumFractionDigits:2})}</b></span>
+            <span class="stx-chip">Total Actual: <b>₹${totalActual.toLocaleString('en-IN',{maximumFractionDigits:2})}</b></span>
+            <span class="stx-chip">Achievement: <b>${overallAch.toFixed(1)}%</b></span>
+        `);
+    }
+
+    $(document).on('click', '.stx-kpi-clickable', function () {
+        stxRenderAmountBreakdownModal($(this).data('source'));
+    });
+
+    // ===== PARTY-WISE PROGRESS MODAL =====
     let stxPartyCharts = [];
     function stxDestroyPartyCharts() {
         stxPartyCharts.forEach(ch => { try { ch.destroy(); } catch (e) {} });
         stxPartyCharts = [];
     }
 
-    // allRows now carries party_state / party_city on every row (from the controller).
     function stxBuildPartyReport(categoryFilter, stateFilter, cityFilter) {
         stxDestroyPartyCharts();
         const groupedByParty = {};
@@ -808,7 +840,6 @@ $(function () {
 
         const parties = Object.keys(groupedByParty).sort();
 
-        // Toolbar summary
         const totalTargetAll = filteredRows.reduce((s, r) => s + (parseFloat(r.target) || 0), 0);
         const totalActualAll = filteredRows.reduce((s, r) => s + (parseFloat(r.actual) || 0), 0);
         const overallAch = totalTargetAll > 0 ? (totalActualAll / totalTargetAll) * 100 : 0;
@@ -838,39 +869,28 @@ $(function () {
                             <strong style="color:${partyData.color};font-size:16px">
                                 ${partyName}
                             </strong>
-
-                            <div style="
-                                font-size:12px;
-                                color:#64748b;
-                                margin-top:3px;
-                                font-weight:500;
-                            ">
+                            <div style="font-size:12px;color:#64748b;margin-top:3px;font-weight:500;">
                                 📍 ${partyData.city}, ${partyData.state}
                             </div>
                         </div>
-
                         <span class="stx-party-badge" style="background:${partyData.color}22;color:${partyData.color}">
                             ${partyAchievement.toFixed(1)}%
                         </span>
                     </div>
                 </div>
-
                 <div class="stx-party-body-row">
                     <div class="stx-party-pie-col">
                         <canvas id="${chartId}" width="96" height="96"></canvas>
                     </div>
-
                     <div class="stx-party-body">`;
 
             categories.forEach((cat, catIdx) => {
                 const catAch = cat.target > 0 ? (cat.actual / cat.target) * 100 : 0;
-
                 html += `<div class="stx-party-category">
                     <div class="stx-cat-row">
                         <span class="stx-cat-name" style="border-left:3px solid ${palette[catIdx % palette.length]}">
                             ${cat.category}
                         </span>
-
                         <span class="stx-cat-achievement" style="
                             background:${catAch >= 100 ? '#dcfce7' : '#fef3c7'};
                             color:${catAch >= 100 ? '#15803d' : '#b45309'}
@@ -878,7 +898,6 @@ $(function () {
                             ${catAch.toFixed(1)}%
                         </span>
                     </div>
-
                     <div class="stx-cat-progress">
                         <div class="stx-cat-bar" style="
                             background:${catAch >= 100
@@ -887,7 +906,6 @@ $(function () {
                             width:${Math.min(catAch, 100)}%
                         "></div>
                     </div>
-
                     <div class="stx-cat-details">
                         <small>Target: ${cat.target.toFixed(2)}</small>
                         <small>Actual: ${cat.actual.toFixed(2)}</small>
@@ -900,7 +918,6 @@ $(function () {
         html += '</div>';
         $('#stxPartyProgressContent').html(html);
 
-        // Render one creative doughnut chart per party (category-wise actuals)
         parties.forEach((partyName, partyIdx) => {
             const categories = groupedByParty[partyName].categories;
             const canvas = document.getElementById('stxPartyPie' + partyIdx);
@@ -960,12 +977,11 @@ $(function () {
         );
     });
 
-    // ===== CATEGORY DETAIL MODAL (party-wise breakdown for ONE clicked category) =====
+    // ===== CATEGORY DETAIL MODAL =====
     let stxCategoryChart = null;
     let stxCurrentCategoryData = null;
     let stxCurrentCategoryId = null;
 
-    // Populate month filter once (built server-side from the page's selected date range)
     let stxCatMonthHtml = `<option value="">Poori Range (${stxFilters.from} &rarr; ${stxFilters.to})</option>`;
     stxMonthOptions.forEach(m => { stxCatMonthHtml += `<option value="${m.value}">${m.label}</option>`; });
     $('#stxCatMonthFilter').html(stxCatMonthHtml);
@@ -975,7 +991,6 @@ $(function () {
         $('#stxCatModalBody').hide();
         const params = { category_id: categoryId };
         if (month) { params.month = month; } else { params.from_date = stxFilters.from; params.to_date = stxFilters.to; }
-        // ===== NEW: pass state/city filters to the AJAX endpoint =====
         const stateVal = $('#stxCatStateFilter').val();
         const cityVal = $('#stxCatCityFilter').val();
         if (stateVal) { params.party_state = stateVal; }
@@ -1007,55 +1022,29 @@ $(function () {
         } else {
             let html = '';
             data.parties.forEach(p => {
-            const pct = Math.min(p.achievement, 100);
-            const locationLabel = (p.party_city || p.party_state)
-                ? `${p.party_city || 'N/A'}, ${p.party_state || 'N/A'}`
-                : '';
-
-            html += `
-                <div class="stx-cat-party-row">
-
-                    <!-- Party Name -->
-                    <div class="stx-cat-party-name">
-                        <h4><strong>${p.party}</strong></h4>
-                        ${locationLabel ? `<h6>📍 ${locationLabel}</h6>` : ''}
-                    </div>
-
-                    <!-- Progress Bar -->
-                    <div class="stx-cat-party-bar-wrap">
-                        <div class="stx-progress-track">
-                            <div class="stx-progress-fill"
-                                style="
-                                    width:${pct}%;
-                                    background:${p.achievement >= 100
-                                        ? 'linear-gradient(90deg,#10b981,#5eead4)'
-                                        : 'linear-gradient(90deg,#7C3AED,#6366F1)'
-                                    };
-                                ">
+                const pct = Math.min(p.achievement, 100);
+                const locationLabel = (p.party_city || p.party_state)
+                    ? `${p.party_city || 'N/A'}, ${p.party_state || 'N/A'}`
+                    : '';
+                html += `
+                    <div class="stx-cat-party-row">
+                        <div class="stx-cat-party-name">
+                            <h4><strong>${p.party}</strong></h4>
+                            ${locationLabel ? `<h6>📍 ${locationLabel}</h6>` : ''}
+                        </div>
+                        <div class="stx-cat-party-bar-wrap">
+                            <div class="stx-progress-track">
+                                <div class="stx-progress-fill" style="width:${pct}%;background:${p.achievement >= 100 ? 'linear-gradient(90deg,#10b981,#5eead4)' : 'linear-gradient(90deg,#7C3AED,#6366F1)'};"></div>
                             </div>
                         </div>
+                        <div class="stx-cat-party-nums">
+                            <span>Target: <b>${Number(p.target).toLocaleString('en-IN',{maximumFractionDigits:2})}</b></span>
+                            <span>Actual: <b>${Number(p.actual).toLocaleString('en-IN',{maximumFractionDigits:2})}</b></span>
+                            <span class="stx-badge-ach ${p.achievement >= 100 ? 'good' : 'warn'}">${p.achievement.toFixed(1)}%</span>
+                        </div>
                     </div>
-
-                    <!-- Numbers -->
-                    <div class="stx-cat-party-nums">
-                        <span>
-                            Target:
-                            <b>${Number(p.target).toLocaleString('en-IN',{maximumFractionDigits:2})}</b>
-                        </span>
-
-                        <span>
-                            Actual:
-                            <b>${Number(p.actual).toLocaleString('en-IN',{maximumFractionDigits:2})}</b>
-                        </span>
-
-                        <span class="stx-badge-ach ${p.achievement >= 100 ? 'good' : 'warn'}">
-                            ${p.achievement.toFixed(1)}%
-                        </span>
-                    </div>
-
-                </div>
-            `;
-        });
+                `;
+            });
             $('#stxCatPartyList').html(html);
         }
 
@@ -1094,7 +1083,6 @@ $(function () {
         stxFetchCategoryData(stxCurrentCategoryId, $(this).val());
     });
 
-    // ===== NEW: re-fetch when state/city filter changes inside category modal =====
     $(document).on('change', '#stxCatStateFilter, #stxCatCityFilter', function () {
         if (!stxCurrentCategoryId) return;
         stxFetchCategoryData(stxCurrentCategoryId, $('#stxCatMonthFilter').val());
