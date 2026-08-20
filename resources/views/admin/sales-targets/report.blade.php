@@ -475,16 +475,44 @@
     </div>
 
     {{-- ===================== NEW: TOTAL TARGET / ACTUAL AMOUNT BREAKDOWN MODAL ===================== --}}
+    {{-- ===================== TOTAL TARGET / ACTUAL AMOUNT BREAKDOWN MODAL ===================== --}}
     <div class="modal fade" id="stxAmountBreakdownModal" tabindex="-1" role="dialog" aria-hidden="true">
-        <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-dialog modal-xl" role="document">
             <div class="modal-content" style="border-radius:var(--stx-card-radius);border:0;box-shadow:0 24px 60px rgba(99,102,241,.28)">
                 <div class="modal-header" style="border-bottom:1px solid #f1f5f9;background:linear-gradient(135deg,var(--stx-violet) 0%,var(--stx-indigo) 100%);color:#fff;border-radius:var(--stx-card-radius) var(--stx-card-radius) 0 0">
                     <h5 class="modal-title" id="stxAmountModalTitle" style="font-weight:800"><i class="fas fa-users mr-2"></i> Party-wise Breakdown</h5>
-                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                    <div class="d-flex align-items-center">
+                        <span class="stx-icon-btn" id="stxAmountFullscreenBtn" title="Fullscreen"><i class="fas fa-expand"></i></span>
+                        <button type="button" class="close text-white ml-2" data-dismiss="modal" aria-label="Close" style="opacity:.9"><span aria-hidden="true">&times;</span></button>
+                    </div>
                 </div>
                 <div class="modal-body">
-                    <div class="stx-modal-summary mb-3" id="stxAmountModalSummary"></div>
-                    <div id="stxAmountModalBody" style="max-height:520px;overflow-y:auto"></div>
+                    <div class="d-flex justify-content-between align-items-center flex-wrap mb-3" style="gap:12px">
+                        <div class="stx-tabbar" id="stxAmountTabbar">
+                            <button class="stx-tab active" data-view="pie">🍩 Pie</button>
+                            <button class="stx-tab" data-view="bar">📊 Bars</button>
+                            <button class="stx-tab" data-view="table">📋 Table</button>
+                        </div>
+                        <div class="stx-modal-summary" id="stxAmountModalSummary"></div>
+                    </div>
+
+                    <div id="stxAmountPieView" class="stx-amount-view">
+                        <div class="stx-pie-wrap">
+                            <div class="stx-pie-canvas-col">
+                                <canvas id="stxAmountPieChart"></canvas>
+                                <div class="stx-pie-center-label"><b id="stxAmountPieCenterVal">0%</b><span id="stxAmountPieCenterLabel">Top Party</span></div>
+                            </div>
+                            <div class="stx-pie-legend" id="stxAmountPieLegend"></div>
+                        </div>
+                    </div>
+
+                    <div id="stxAmountBarView" class="stx-amount-view" style="display:none">
+                        <div class="stx-chart-box"><canvas id="stxAmountBarChart"></canvas></div>
+                    </div>
+
+                    <div id="stxAmountTableView" class="stx-amount-view" style="display:none;max-height:520px;overflow-y:auto">
+                        <div id="stxAmountModalBody"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -747,10 +775,15 @@ $(function () {
         }
     });
 
-    // ===== NEW: TOTAL TARGET / ACTUAL AMOUNT — party-wise breakdown modal =====
+    // ===== TOTAL TARGET / ACTUAL AMOUNT — party-wise breakdown modal =====
     // Both KPI cards share the same underlying dataset: amount-type target rows only
     // (so the numbers always line up with what the "Total Target" / "Actual Amount"
-    // cards actually show — no mixing of %, qty and ₹ anymore).
+    // cards actually show — no mixing of %, qty and ₹). Modal now supports three
+    // views (Pie / Bars / Table) + fullscreen.
+    let stxAmountPieChart = null;
+    let stxAmountBarChart = null;
+    let stxAmountPartiesData = [];
+
     function stxAmountAggregatedByParty() {
         const amountRows = allRows.filter(r => r.target_type === 'amount');
         const grouped = {};
@@ -762,16 +795,99 @@ $(function () {
         return Object.values(grouped).sort((a, b) => b.target - a.target);
     }
 
+    function stxDestroyAmountCharts() {
+        if (stxAmountPieChart) { try { stxAmountPieChart.destroy(); } catch (e) {} stxAmountPieChart = null; }
+        if (stxAmountBarChart) { try { stxAmountBarChart.destroy(); } catch (e) {} stxAmountBarChart = null; }
+    }
+
+    function stxBuildAmountPieChart(parties, valueKey) {
+        if (stxAmountPieChart) { try { stxAmountPieChart.destroy(); } catch (e) {} }
+        const labels = parties.map(p => p.party);
+        const values = parties.map(p => p[valueKey]);
+
+        stxAmountPieChart = new Chart($('#stxAmountPieChart'), {
+            type: 'doughnut',
+            data: { labels, datasets: [{
+                data: values,
+                backgroundColor: function (context) {
+                    const { chart, dataIndex } = context;
+                    const { ctx, chartArea } = chart;
+                    if (!chartArea) return palette[dataIndex % palette.length];
+                    const gradient = ctx.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
+                    gradient.addColorStop(0, paletteLight[dataIndex % paletteLight.length]);
+                    gradient.addColorStop(1, paletteDark[dataIndex % paletteDark.length]);
+                    return gradient;
+                },
+                borderWidth: 3, borderColor: '#fff', hoverOffset: 16, borderRadius: 6, spacing: 3
+            }] },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                animation: { duration: 1200, easing: 'easeOutQuart' },
+                cutout: '66%', rotation: -15,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        enabled: true, displayColors: true,
+                        callbacks: {
+                            label: (ctx) => {
+                                const p = parties[ctx.dataIndex];
+                                return p.party + ': ₹' + Number(ctx.raw).toLocaleString('en-IN', { maximumFractionDigits: 2 });
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        const total = values.reduce((s, v) => s + v, 0) || 1;
+        let topIdx = 0, topShare = -1, legendHtml = '';
+        parties.forEach((p, i) => {
+            const share = (p[valueKey] / total) * 100;
+            if (share > topShare) { topShare = share; topIdx = i; }
+            const ach = p.target > 0 ? (p.actual / p.target) * 100 : 0;
+            legendHtml += `<div class="stx-pie-legend-item">
+                <span class="stx-pie-legend-left">
+                    <span class="stx-pie-dot" style="background:${paletteDark[i % paletteDark.length]}"></span>
+                    ${p.party}
+                </span>
+                <span class="stx-pie-legend-pct">${share.toFixed(1)}% <small class="text-muted">/ ${ach.toFixed(1)}% ach.</small></span>
+            </div>`;
+        });
+        $('#stxAmountPieLegend').html(legendHtml || '<div class="text-muted">Koi data nahi mila</div>');
+        $('#stxAmountPieCenterVal').text(topShare >= 0 ? topShare.toFixed(0) + '%' : '0%');
+        $('#stxAmountPieCenterLabel').text(labels[topIdx] ? (labels[topIdx] + ' share') : 'Top Party');
+    }
+
+    function stxBuildAmountBarChart(parties) {
+        if (stxAmountBarChart) { try { stxAmountBarChart.destroy(); } catch (e) {} }
+        stxAmountBarChart = new Chart($('#stxAmountBarChart'), {
+            type: 'bar',
+            data: {
+                labels: parties.map(p => p.party),
+                datasets: [
+                    { label: 'Target', data: parties.map(p => p.target), backgroundColor: '#ddd6fe', borderColor: '#7C3AED', borderWidth: 2, borderRadius: 8 },
+                    { label: 'Actual', data: parties.map(p => p.actual), backgroundColor: '#5eead4', borderColor: '#0f766e', borderWidth: 2, borderRadius: 8 }
+                ]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                animation: { duration: 1000, easing: 'easeOutQuart' },
+                scales: { y: { beginAtZero: true } }
+            }
+        });
+    }
+
     function stxRenderAmountBreakdownModal(source) {
         const parties = stxAmountAggregatedByParty();
+        stxAmountPartiesData = parties;
         const isTarget = source === 'target';
         $('#stxAmountModalTitle').html('<i class="fas fa-users mr-2"></i> ' + (isTarget ? 'Total Target' : 'Actual Amount') + ' — Party-wise Breakdown');
 
-        let totalTarget = 0, totalActual = 0, html = '';
+        let totalTarget = 0, totalActual = 0, tableHtml = '';
         parties.forEach(p => {
             totalTarget += p.target; totalActual += p.actual;
             const ach = p.target > 0 ? (p.actual / p.target) * 100 : 0;
-            html += `<div class="stx-cat-party-row">
+            tableHtml += `<div class="stx-cat-party-row">
                 <div class="stx-cat-party-name"><strong>${p.party}</strong></div>
                 <div class="stx-cat-party-bar-wrap">
                     <div class="stx-progress-track">
@@ -786,9 +902,9 @@ $(function () {
             </div>`;
         });
         if (!parties.length) {
-            html = '<div class="stx-empty"><span class="stx-empty-emoji">🔍</span><h5>Koi amount-based target nahi mila</h5><p class="mb-0">Filters change karke phir try karein.</p></div>';
+            tableHtml = '<div class="stx-empty"><span class="stx-empty-emoji">🔍</span><h5>Koi amount-based target nahi mila</h5><p class="mb-0">Filters change karke phir try karein.</p></div>';
         }
-        $('#stxAmountModalBody').html(html);
+        $('#stxAmountModalBody').html(tableHtml);
 
         const overallAch = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
         $('#stxAmountModalSummary').html(`
@@ -797,10 +913,55 @@ $(function () {
             <span class="stx-chip">Total Actual: <b>₹${totalActual.toLocaleString('en-IN',{maximumFractionDigits:2})}</b></span>
             <span class="stx-chip">Achievement: <b>${overallAch.toFixed(1)}%</b></span>
         `);
+
+        // Modal khulte hi hamesha Pie view default rahe
+        $('#stxAmountTabbar .stx-tab').removeClass('active');
+        $('#stxAmountTabbar .stx-tab[data-view="pie"]').addClass('active');
+        $('.stx-amount-view').hide();
+        $('#stxAmountPieView').show();
+
+        stxDestroyAmountCharts();
+        stxBuildAmountPieChart(parties, isTarget ? 'target' : 'actual');
     }
 
     $(document).on('click', '.stx-kpi-clickable', function () {
         stxRenderAmountBreakdownModal($(this).data('source'));
+    });
+
+    // Tab switching: Bar chart lazily banta hai jab tab pehli baar khule
+    // (Chart.js ko canvas visible hone par hi sahi size milta hai).
+    $(document).on('click', '#stxAmountTabbar .stx-tab', function () {
+        const view = $(this).data('view');
+        $('#stxAmountTabbar .stx-tab').removeClass('active');
+        $(this).addClass('active');
+        $('.stx-amount-view').hide();
+
+        if (view === 'pie') {
+            $('#stxAmountPieView').show();
+            if (stxAmountPieChart) stxAmountPieChart.resize();
+        } else if (view === 'bar') {
+            $('#stxAmountBarView').show();
+            if (!stxAmountBarChart) stxBuildAmountBarChart(stxAmountPartiesData);
+            else stxAmountBarChart.resize();
+        } else {
+            $('#stxAmountTableView').show();
+        }
+    });
+
+    $('#stxAmountBreakdownModal').on('hidden.bs.modal', function () {
+        stxDestroyAmountCharts();
+        $('#stxAmountBreakdownModal .modal-dialog').removeClass('stx-modal-fullscreen');
+        $('#stxAmountFullscreenBtn i').removeClass('fa-compress').addClass('fa-expand');
+    });
+
+    $('#stxAmountFullscreenBtn').on('click', function () {
+        $('#stxAmountBreakdownModal .modal-dialog').toggleClass('stx-modal-fullscreen');
+        const isFull = $('#stxAmountBreakdownModal .modal-dialog').hasClass('stx-modal-fullscreen');
+        $(this).find('i').toggleClass('fa-expand', !isFull).toggleClass('fa-compress', isFull);
+        setTimeout(() => {
+            if (stxAmountPieChart) stxAmountPieChart.resize();
+            if (stxAmountBarChart) stxAmountBarChart.resize();
+        }, 300);
     });
 
     // ===== PARTY-WISE PROGRESS MODAL =====
