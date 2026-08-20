@@ -81,15 +81,33 @@ class SalesTargetController extends Controller
         [$from, $to, $quickPeriod] = $this->reportDates($request);
         $partyId = $request->integer('party_id') ?: null;
         $categoryId = $request->integer('product_category_id') ?: null;
+        // ===== NEW: State / City filters =====
+        $stateFilter = $request->input('party_state') ?: null;
+        $cityFilter = $request->input('party_city') ?: null;
+
         $parties = $visibility->scopeForUser(Party::orderBy('display_name'), Party::class)->get();
         $categories = ProductCategory::where('company_id', auth()->user()->current_company_id)->orderBy('name')->get();
 
+        // ===== NEW: Distinct state/city lists for the filter dropdowns (company-scoped) =====
+        $states = $visibility->scopeForUser(Party::query(), Party::class)
+            ->whereNotNull('state')->where('state', '!=', '')
+            ->distinct()->orderBy('state')->pluck('state');
+        $cities = $visibility->scopeForUser(Party::query(), Party::class)
+            ->whereNotNull('city')->where('city', '!=', '')
+            ->distinct()->orderBy('city')->pluck('city');
+
         $targets = $visibility->scopeForUser(SalesTarget::with(['party','items.productCategory'])
             ->where('starts_on', '<=', $to->toDateString())->where('ends_on', '>=', $from->toDateString()), SalesTarget::class)
-            ->when($partyId, fn ($q) => $q->where('party_id', $partyId))->get();
+            ->when($partyId, fn ($q) => $q->where('party_id', $partyId))
+            ->when($stateFilter, fn ($q) => $q->whereHas('party', fn ($q2) => $q2->where('state', $stateFilter)))
+            ->when($cityFilter, fn ($q) => $q->whereHas('party', fn ($q2) => $q2->where('city', $cityFilter)))
+            ->get();
         $sales = $visibility->scopeForUser(SalesInvoice::with(['party','items.item.productCategory'])
             ->whereBetween('billing_date', [$from->toDateString(), $to->toDateString()]), SalesInvoice::class)
-            ->when($partyId, fn ($q) => $q->where('party_id', $partyId))->get();
+            ->when($partyId, fn ($q) => $q->where('party_id', $partyId))
+            ->when($stateFilter, fn ($q) => $q->whereHas('party', fn ($q2) => $q2->where('state', $stateFilter)))
+            ->when($cityFilter, fn ($q) => $q->whereHas('party', fn ($q2) => $q2->where('city', $cityFilter)))
+            ->get();
 
         $actuals = [];
         $partyTotals = [];
@@ -111,7 +129,24 @@ class SalesTargetController extends Controller
                 $quantity = (float) ($actuals[$key]['quantity'] ?? 0);
                 $actual = $item->target_type === 'amount' ? $amount : ($item->target_type === 'quantity' ? $quantity : (($partyTotals[$target->party_id] ?? 0) > 0 ? ($amount / $partyTotals[$target->party_id]) * 100 : 0));
                 $targetValue = (float) $item->target_value;
-                return ['party' => $target->party?->display_name ?? 'Cash / Walk-in', 'party_id' => $target->party_id, 'category' => $item->productCategory?->name ?? '-', 'category_id' => $item->product_category_id, 'period' => ucfirst(str_replace('_', ' ', $target->period_type)), 'target_type' => $item->target_type, 'target' => $targetValue, 'actual' => $actual, 'actual_amount' => $amount, 'actual_quantity' => $quantity, 'achievement' => $targetValue > 0 ? ($actual / $targetValue) * 100 : 0, 'starts_on' => $target->starts_on->format('d M Y'), 'ends_on' => $target->ends_on->format('d M Y')];
+                return [
+                    'party' => $target->party?->display_name ?? 'Cash / Walk-in',
+                    'party_id' => $target->party_id,
+                    // ===== NEW: state/city carried on every row =====
+                    'party_state' => $target->party?->state,
+                    'party_city' => $target->party?->city,
+                    'category' => $item->productCategory?->name ?? '-',
+                    'category_id' => $item->product_category_id,
+                    'period' => ucfirst(str_replace('_', ' ', $target->period_type)),
+                    'target_type' => $item->target_type,
+                    'target' => $targetValue,
+                    'actual' => $actual,
+                    'actual_amount' => $amount,
+                    'actual_quantity' => $quantity,
+                    'achievement' => $targetValue > 0 ? ($actual / $targetValue) * 100 : 0,
+                    'starts_on' => $target->starts_on->format('d M Y'),
+                    'ends_on' => $target->ends_on->format('d M Y'),
+                ];
             });
         })->values();
 
@@ -120,7 +155,15 @@ class SalesTargetController extends Controller
         $summary['achievement'] = $summary['target'] > 0 ? ($summary['actual'] / $summary['target']) * 100 : 0;
 
         $charts = ['labels' => $rows->pluck('category')->values(), 'target' => $rows->pluck('target')->values(), 'actual' => $rows->pluck('actual')->values(), 'achievement' => $rows->pluck('achievement')->values()];
-        $filters = ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'party_id' => $partyId, 'product_category_id' => $categoryId, 'quick_period' => $quickPeriod];
+        $filters = [
+            'from' => $from->toDateString(),
+            'to' => $to->toDateString(),
+            'party_id' => $partyId,
+            'product_category_id' => $categoryId,
+            'party_state' => $stateFilter,   // ===== NEW =====
+            'party_city' => $cityFilter,     // ===== NEW =====
+            'quick_period' => $quickPeriod,
+        ];
 
         // Category-wise progress: grouped by category_id (not name) so each category
         // appears exactly once even if two categories share a similar/duplicate name.
@@ -141,7 +184,10 @@ class SalesTargetController extends Controller
         })->sortByDesc('achievement')->values();
         $selectedPartyName = $partyId ? optional($parties->firstWhere('id', $partyId))->display_name : null;
 
-        return view('admin.sales-targets.report', compact('rows','summary','charts','filters','parties','categories','progress','selectedPartyName'));
+        return view('admin.sales-targets.report', compact(
+            'rows','summary','charts','filters','parties','categories','progress','selectedPartyName',
+            'states','cities' // ===== NEW =====
+        ));
     }
 
     /**
@@ -156,6 +202,9 @@ class SalesTargetController extends Controller
             'category_id' => ['required', 'integer', 'exists:product_categories,id'],
         ]);
         $categoryId = (int) $request->integer('category_id');
+        // ===== NEW: allow state/city filtering on this popup too =====
+        $stateFilter = $request->input('party_state') ?: null;
+        $cityFilter = $request->input('party_city') ?: null;
 
         if ($month = $request->input('month')) {
             $from = Carbon::parse($month.'-01')->startOfDay();
@@ -170,11 +219,15 @@ class SalesTargetController extends Controller
         $targets = $visibility->scopeForUser(SalesTarget::with(['party', 'items' => fn ($q) => $q->where('product_category_id', $categoryId)])
                 ->where('starts_on', '<=', $to->toDateString())
                 ->where('ends_on', '>=', $from->toDateString()), SalesTarget::class)
+            ->when($stateFilter, fn ($q) => $q->whereHas('party', fn ($q2) => $q2->where('state', $stateFilter)))
+            ->when($cityFilter, fn ($q) => $q->whereHas('party', fn ($q2) => $q2->where('city', $cityFilter)))
             ->get()
             ->filter(fn (SalesTarget $t) => $t->items->isNotEmpty());
 
         $sales = $visibility->scopeForUser(SalesInvoice::with(['party', 'items.item.productCategory'])
                 ->whereBetween('billing_date', [$from->toDateString(), $to->toDateString()]), SalesInvoice::class)
+            ->when($stateFilter, fn ($q) => $q->whereHas('party', fn ($q2) => $q2->where('state', $stateFilter)))
+            ->when($cityFilter, fn ($q) => $q->whereHas('party', fn ($q2) => $q2->where('city', $cityFilter)))
             ->get();
 
         $partyTotals = [];
@@ -201,6 +254,9 @@ class SalesTargetController extends Controller
             return [
                 'party' => $target->party?->display_name ?? 'Cash / Walk-in',
                 'party_id' => $target->party_id,
+                // ===== NEW =====
+                'party_state' => $target->party?->state,
+                'party_city' => $target->party?->city,
                 'target_type' => $item->target_type,
                 'target' => $targetValue,
                 'actual' => $actual,

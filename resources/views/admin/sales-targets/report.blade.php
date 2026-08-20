@@ -126,9 +126,10 @@
 .stx-cat-clickable:hover .stx-cat-hint{opacity:1}
 
 /* ===== Party-wise progress modal (creative redesign) ===== */
-#stxModalCategoryFilter{border-radius:12px;border:1.5px solid #e5e7eb;padding:9px 12px}
+#stxModalCategoryFilter,#stxModalStateFilter,#stxModalCityFilter{border-radius:12px;border:1.5px solid #e5e7eb;padding:9px 12px}
 .stx-modal-toolbar{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
 .stx-modal-toolbar .stx-input-label{margin-bottom:6px}
+.stx-modal-filters{display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end}
 .stx-modal-summary{display:flex;gap:10px;flex-wrap:wrap}
 .stx-modal-summary .stx-chip{background:#f1f5f9;border-radius:10px;padding:6px 12px;font-size:12px;font-weight:700;color:var(--stx-muted)}
 .stx-modal-summary .stx-chip b{color:var(--stx-ink);font-family:'Outfit',sans-serif;font-size:14px}
@@ -181,6 +182,14 @@
 .stx-cat-party-name strong {
     display: block;
     font-weight: 700;
+}
+
+.stx-cat-party-name small{
+    display:block;
+    font-weight:500;
+    color:#64748b;
+    font-size:11px;
+    margin-top:2px;
 }
 
 .stx-cat-party-bar-wrap {
@@ -287,6 +296,27 @@
                             <option value="">All Categories</option>
                             @foreach($categories as $category)
                                 <option value="{{ $category->id }}" @selected($filters['product_category_id']==$category->id)>{{ $category->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                </div>
+                {{-- ===================== NEW: State + City filter row ===================== --}}
+                <div class="row align-items-end mt-3">
+                    <div class="col-md-3 form-group mb-md-0">
+                        <div class="stx-input-label">📍 State</div>
+                        <select name="party_state" class="form-control select2">
+                            <option value="">All States</option>
+                            @foreach($states as $state)
+                                <option value="{{ $state }}" @selected($filters['party_state']==$state)>{{ $state }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-3 form-group mb-md-0">
+                        <div class="stx-input-label">🏙️ City</div>
+                        <select name="party_city" class="form-control select2">
+                            <option value="">All Cities</option>
+                            @foreach($cities as $city)
+                                <option value="{{ $city }}" @selected($filters['party_city']==$city)>{{ $city }}</option>
                             @endforeach
                         </select>
                     </div>
@@ -486,14 +516,36 @@
                 </div>
                 <div class="modal-body">
                     <div class="stx-modal-toolbar">
-                        <div>
-                            <div class="stx-input-label">📦 Product Category Filter</div>
-                            <select id="stxModalCategoryFilter" class="form-control">
-                                <option value="">Sabhi Categories</option>
-                                @foreach($categories as $category)
-                                    <option value="{{ $category->id }}">{{ $category->name }}</option>
-                                @endforeach
-                            </select>
+                        <div class="stx-modal-filters">
+                            <div>
+                                <div class="stx-input-label">📦 Product Category Filter</div>
+                                <select id="stxModalCategoryFilter" class="form-control">
+                                    <option value="">Sabhi Categories</option>
+                                    @foreach($categories as $category)
+                                        <option value="{{ $category->id }}">{{ $category->name }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            {{-- ===================== NEW: State filter ===================== --}}
+                            <div>
+                                <div class="stx-input-label">📍 State Filter</div>
+                                <select id="stxModalStateFilter" class="form-control">
+                                    <option value="">Sabhi States</option>
+                                    @foreach($states as $state)
+                                        <option value="{{ $state }}">{{ $state }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            {{-- ===================== NEW: City filter ===================== --}}
+                            <div>
+                                <div class="stx-input-label">🏙️ City Filter</div>
+                                <select id="stxModalCityFilter" class="form-control">
+                                    <option value="">Sabhi Cities</option>
+                                    @foreach($cities as $city)
+                                        <option value="{{ $city }}">{{ $city }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
                         </div>
                         <div class="stx-modal-summary" id="stxModalSummary"></div>
                     </div>
@@ -522,9 +574,31 @@
                 </div>
                 <div class="modal-body">
                     <div class="stx-modal-toolbar">
-                        <div>
-                            <div class="stx-input-label">📅 Month Filter</div>
-                            <select id="stxCatMonthFilter" class="form-control" style="min-width:220px"></select>
+                        <div class="stx-modal-filters">
+                            <div>
+                                <div class="stx-input-label">📅 Month Filter</div>
+                                <select id="stxCatMonthFilter" class="form-control" style="min-width:220px"></select>
+                            </div>
+                            {{-- ===================== NEW: State filter ===================== --}}
+                            <div>
+                                <div class="stx-input-label">📍 State Filter</div>
+                                <select id="stxCatStateFilter" class="form-control">
+                                    <option value="">Sabhi States</option>
+                                    @foreach($states as $state)
+                                        <option value="{{ $state }}">{{ $state }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
+                            {{-- ===================== NEW: City filter ===================== --}}
+                            <div>
+                                <div class="stx-input-label">🏙️ City Filter</div>
+                                <select id="stxCatCityFilter" class="form-control">
+                                    <option value="">Sabhi Cities</option>
+                                    @foreach($cities as $city)
+                                        <option value="{{ $city }}">{{ $city }}</option>
+                                    @endforeach
+                                </select>
+                            </div>
                         </div>
                         <div class="stx-modal-summary" id="stxCatModalSummary"></div>
                     </div>
@@ -696,25 +770,35 @@ $(function () {
         }
     });
 
-    // ===== PARTY-WISE PROGRESS MODAL (with per-party pie chart + category filter) =====
+    // ===== PARTY-WISE PROGRESS MODAL (with per-party pie chart + category/state/city filter) =====
     let stxPartyCharts = [];
     function stxDestroyPartyCharts() {
         stxPartyCharts.forEach(ch => { try { ch.destroy(); } catch (e) {} });
         stxPartyCharts = [];
     }
 
-    function stxBuildPartyReport(categoryFilter) {
+    // allRows now carries party_state / party_city on every row (from the controller).
+    function stxBuildPartyReport(categoryFilter, stateFilter, cityFilter) {
         stxDestroyPartyCharts();
         const groupedByParty = {};
 
-        const filteredRows = categoryFilter
-            ? allRows.filter(r => String(r.category_id) === String(categoryFilter))
-            : allRows;
+        let filteredRows = allRows;
+        if (categoryFilter) {
+            filteredRows = filteredRows.filter(r => String(r.category_id) === String(categoryFilter));
+        }
+        if (stateFilter) {
+            filteredRows = filteredRows.filter(r => (r.party_state || '') === stateFilter);
+        }
+        if (cityFilter) {
+            filteredRows = filteredRows.filter(r => (r.party_city || '') === cityFilter);
+        }
 
         filteredRows.forEach((row) => {
             if (!groupedByParty[row.party]) {
                 groupedByParty[row.party] = {
                     party_id: row.party_id,
+                    state: row.party_state || 'N/A',
+                    city: row.party_city || 'N/A',
                     color: palette[Object.keys(groupedByParty).length % palette.length],
                     categories: []
                 };
@@ -734,7 +818,7 @@ $(function () {
         `);
 
         if (!parties.length) {
-            $('#stxPartyProgressContent').html('<div class="stx-empty"><span class="stx-empty-emoji">🔍</span><h5>Is category ke liye koi data nahi mila</h5><p class="mb-0">Filter change karke phir try karein.</p></div>');
+            $('#stxPartyProgressContent').html('<div class="stx-empty"><span class="stx-empty-emoji">🔍</span><h5>Is filter ke liye koi data nahi mila</h5><p class="mb-0">Filter change karke phir try karein.</p></div>');
             return;
         }
 
@@ -761,7 +845,7 @@ $(function () {
                                 margin-top:3px;
                                 font-weight:500;
                             ">
-                                📍 ${partyData.city || 'N/A'}, ${partyData.state || 'N/A'}
+                                📍 ${partyData.city}, ${partyData.state}
                             </div>
                         </div>
 
@@ -858,13 +942,22 @@ $(function () {
     }
 
     $('#stxPartyProgressModal').on('show.bs.modal', function () {
-        stxBuildPartyReport($('#stxModalCategoryFilter').val());
+        stxBuildPartyReport(
+            $('#stxModalCategoryFilter').val(),
+            $('#stxModalStateFilter').val(),
+            $('#stxModalCityFilter').val()
+        );
     });
     $('#stxPartyProgressModal').on('hidden.bs.modal', function () {
         stxDestroyPartyCharts();
+        $('#stxModalCategoryFilter, #stxModalStateFilter, #stxModalCityFilter').val('');
     });
-    $(document).on('change', '#stxModalCategoryFilter', function () {
-        stxBuildPartyReport($(this).val());
+    $(document).on('change', '#stxModalCategoryFilter, #stxModalStateFilter, #stxModalCityFilter', function () {
+        stxBuildPartyReport(
+            $('#stxModalCategoryFilter').val(),
+            $('#stxModalStateFilter').val(),
+            $('#stxModalCityFilter').val()
+        );
     });
 
     // ===== CATEGORY DETAIL MODAL (party-wise breakdown for ONE clicked category) =====
@@ -882,6 +975,11 @@ $(function () {
         $('#stxCatModalBody').hide();
         const params = { category_id: categoryId };
         if (month) { params.month = month; } else { params.from_date = stxFilters.from; params.to_date = stxFilters.to; }
+        // ===== NEW: pass state/city filters to the AJAX endpoint =====
+        const stateVal = $('#stxCatStateFilter').val();
+        const cityVal = $('#stxCatCityFilter').val();
+        if (stateVal) { params.party_state = stateVal; }
+        if (cityVal) { params.party_city = cityVal; }
         $.get(stxCategoryBreakdownUrl, params)
             .done(function (data) { stxRenderCategoryModal(data); })
             .fail(function () {
@@ -905,11 +1003,14 @@ $(function () {
         `);
 
         if (!data.parties.length) {
-            $('#stxCatPartyList').html('<div class="stx-empty"><span class="stx-empty-emoji">🔍</span><h5>Is category/month ke liye koi party target nahi mila</h5><p class="mb-0">Month filter change karke dekhein.</p></div>');
+            $('#stxCatPartyList').html('<div class="stx-empty"><span class="stx-empty-emoji">🔍</span><h5>Is category/month/filter ke liye koi party target nahi mila</h5><p class="mb-0">Filter change karke dekhein.</p></div>');
         } else {
             let html = '';
             data.parties.forEach(p => {
             const pct = Math.min(p.achievement, 100);
+            const locationLabel = (p.party_city || p.party_state)
+                ? `${p.party_city || 'N/A'}, ${p.party_state || 'N/A'}`
+                : '';
 
             html += `
                 <div class="stx-cat-party-row">
@@ -917,6 +1018,7 @@ $(function () {
                     <!-- Party Name -->
                     <div class="stx-cat-party-name">
                         <strong>${p.party}</strong>
+                        ${locationLabel ? `<small>📍 ${locationLabel}</small>` : ''}
                     </div>
 
                     <!-- Progress Bar -->
@@ -981,6 +1083,8 @@ $(function () {
         const categoryName = $(this).data('category-name');
         $('#stxCatModalTitle').text('🎯 ' + categoryName + ' — Party-wise Progress');
         $('#stxCatMonthFilter').val('');
+        $('#stxCatStateFilter').val('');
+        $('#stxCatCityFilter').val('');
         $('#stxCategoryDetailModal').modal('show');
         stxFetchCategoryData(stxCurrentCategoryId, null);
     });
@@ -988,6 +1092,12 @@ $(function () {
     $(document).on('change', '#stxCatMonthFilter', function () {
         if (!stxCurrentCategoryId) return;
         stxFetchCategoryData(stxCurrentCategoryId, $(this).val());
+    });
+
+    // ===== NEW: re-fetch when state/city filter changes inside category modal =====
+    $(document).on('change', '#stxCatStateFilter, #stxCatCityFilter', function () {
+        if (!stxCurrentCategoryId) return;
+        stxFetchCategoryData(stxCurrentCategoryId, $('#stxCatMonthFilter').val());
     });
 
     $('#stxCategoryDetailModal').on('hidden.bs.modal', function () {
