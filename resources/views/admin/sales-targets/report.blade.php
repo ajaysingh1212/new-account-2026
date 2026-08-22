@@ -314,13 +314,14 @@
             </div>
         </div>
         <div class="col-lg-3 col-md-6 mb-3">
-            <div class="card stx-kpi">
+            <div class="card stx-kpi stx-kpi-clickable" data-toggle="modal" data-target="#stxUncoveredSalesModal">
                 <div class="card-body d-flex justify-content-between align-items-start">
                     <div>
                         <div class="stx-kpi-label">Total Sales</div>
                         <div class="stx-kpi-value">₹<span class="stx-count" data-target="{{ $summary['total_sales'] }}">0</span></div>
                         <div class="stx-kpi-bar"><span style="background:linear-gradient(90deg,#0ea5e9,#38bdf8);width:100%"></span></div>
                         <small style="color:var(--stx-muted)">Poora business sale (dashboard jaisa), filters ke hisab se</small>
+                        <div class="stx-kpi-hint"><i class="fas fa-search mr-1"></i>Unmapped products dekhein</div>
                     </div>
                     <span class="stx-kpi-icon" style="background:#e0f2fe;color:#0ea5e9">📈</span>
                 </div>
@@ -471,6 +472,74 @@
                 <p class="mb-0">Filters change karke phir dekhein.</p>
             </div>
             @endif
+        </div>
+    </div>
+
+    {{-- ===================== TOTAL SALES DIAGNOSIS MODAL ===================== --}}
+    <div class="modal fade" id="stxUncoveredSalesModal" tabindex="-1" role="dialog" aria-hidden="true">
+        <div class="modal-dialog modal-xl" role="document">
+            <div class="modal-content" style="border-radius:var(--stx-card-radius);border:0;box-shadow:0 24px 60px rgba(14,165,233,.24)">
+                <div class="modal-header" style="border-bottom:1px solid #f1f5f9;background:linear-gradient(135deg,#0ea5e9,#6366F1);color:#fff;border-radius:var(--stx-card-radius) var(--stx-card-radius) 0 0">
+                    <h5 class="modal-title" style="font-weight:800"><i class="fas fa-search-dollar mr-2"></i> Total Sales Difference Report</h5>
+                    <button type="button" class="close text-white" data-dismiss="modal" aria-label="Close" style="opacity:.9"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <div class="stx-modal-summary mb-3">
+                        <span class="stx-chip">Actual Amount: <b>Rs {{ number_format($summary['amount'],2) }}</b></span>
+                        <span class="stx-chip">Total Sales: <b>Rs {{ number_format($summary['total_sales'],2) }}</b></span>
+                        <span class="stx-chip">Difference: <b>Rs {{ number_format($summary['total_sales'] - $summary['amount'],2) }}</b></span>
+                        <span class="stx-chip">Unmapped Items: <b>{{ $uncoveredSummary['items_count'] }}</b></span>
+                        <span class="stx-chip">Unmapped Amount: <b>Rs {{ number_format($uncoveredSummary['amount'],2) }}</b></span>
+                        @if(abs($uncoveredSummary['invoice_adjustment']) > 0.01)
+                            <span class="stx-chip">Invoice Adjustment/Tax: <b>Rs {{ number_format($uncoveredSummary['invoice_adjustment'],2) }}</b></span>
+                        @endif
+                    </div>
+
+                    @if(count($uncoveredSales))
+                        <div class="table-responsive" style="max-height:560px;overflow:auto">
+                            <table class="table stx-table mb-0" id="stxUncoveredSalesTable">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Bill</th>
+                                        <th>Party</th>
+                                        <th>Product</th>
+                                        <th>Category</th>
+                                        <th>Qty</th>
+                                        <th class="text-right">Amount</th>
+                                        <th>Reason</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach($uncoveredSales as $sale)
+                                        <tr>
+                                            <td>{{ $sale['billing_date'] }}</td>
+                                            <td><a href="{{ $sale['invoice_url'] }}" target="_blank">{{ $sale['invoice_no'] ?: '#'.$sale['invoice_id'] }}</a></td>
+                                            <td>{{ $sale['party'] }}</td>
+                                            <td>
+                                                <strong>{{ $sale['item'] }}</strong>
+                                                @if($sale['item_code'])
+                                                    <br><small class="text-muted">{{ $sale['item_code'] }}</small>
+                                                @endif
+                                            </td>
+                                            <td>{{ $sale['category'] }}</td>
+                                            <td>{{ number_format($sale['quantity'],2) }}</td>
+                                            <td class="text-right"><strong>Rs {{ number_format($sale['amount'],2) }}</strong></td>
+                                            <td><span class="badge badge-warning">{{ $sale['reason'] }}</span></td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                            </table>
+                        </div>
+                    @else
+                        <div class="stx-empty">
+                            <span class="stx-empty-emoji">OK</span>
+                            <h5>Sab sale lines target categories me covered hain</h5>
+                            <p class="mb-0">Agar amount fir bhi alag hai to invoice grand total aur line total ke adjustment/tax/rounding ko check karein.</p>
+                        </div>
+                    @endif
+                </div>
+            </div>
         </div>
     </div>
 
@@ -730,6 +799,9 @@ $(function () {
     if ($('#stxReportTable').length) {
         $('#stxReportTable').DataTable({ pageLength:25, order:[[5,'desc']] });
     }
+    if ($('#stxUncoveredSalesTable').length) {
+        $('#stxUncoveredSalesTable').DataTable({ pageLength:25, order:[[6,'desc']] });
+    }
 
     $('.stx-count').each(function () {
         const $el = $(this), target = parseFloat($el.data('target')) || 0;
@@ -924,7 +996,7 @@ $(function () {
         stxBuildAmountPieChart(parties, isTarget ? 'target' : 'actual');
     }
 
-    $(document).on('click', '.stx-kpi-clickable', function () {
+    $(document).on('click', '.stx-kpi-clickable[data-source]', function () {
         stxRenderAmountBreakdownModal($(this).data('source'));
     });
 

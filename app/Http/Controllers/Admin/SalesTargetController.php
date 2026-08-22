@@ -110,18 +110,60 @@ class SalesTargetController extends Controller
             ->when($cityFilter, fn ($q) => $q->whereHas('party', fn ($q2) => $q2->where('city', $cityFilter)))
             ->get();
 
+        $targetCategoryIdsByParty = [];
+        foreach ($targets as $target) {
+            $targetCategoryIdsByParty[$target->party_id] = array_values(array_unique(array_merge(
+                $targetCategoryIdsByParty[$target->party_id] ?? [],
+                $target->items->pluck('product_category_id')->filter()->map(fn ($id) => (int) $id)->all()
+            )));
+        }
+
         $actuals = [];
         $partyTotals = [];
+        $uncoveredSales = [];
+        $invoiceLineTotals = [];
         foreach ($sales as $invoice) {
             foreach ($invoice->items as $line) {
                 $catId = $line->item?->product_category_id;
+                $lineAmount = (float) $line->line_total;
                 $partyTotals[$invoice->party_id] = ($partyTotals[$invoice->party_id] ?? 0) + (float) $line->line_total;
+                $invoiceLineTotals[$invoice->id] = ($invoiceLineTotals[$invoice->id] ?? 0) + $lineAmount;
+
+                $coveredCategoryIds = $targetCategoryIdsByParty[$invoice->party_id] ?? [];
+                if (!$catId || !in_array((int) $catId, $coveredCategoryIds, true)) {
+                    $uncoveredSales[] = [
+                        'invoice_id' => $invoice->id,
+                        'invoice_no' => $invoice->invoice_no,
+                        'billing_date' => optional($invoice->billing_date)->format('d M Y'),
+                        'party' => $invoice->party?->display_name ?? 'Cash / Walk-in',
+                        'party_id' => $invoice->party_id,
+                        'item' => $line->item?->name ?? $line->description ?? 'Unknown item',
+                        'item_code' => $line->item?->item_code,
+                        'category' => $line->item?->productCategory?->name ?? 'Category not set',
+                        'category_id' => $catId,
+                        'quantity' => (float) $line->quantity,
+                        'amount' => $lineAmount,
+                        'reason' => $catId ? 'Party ke target me ye category set nahi hai' : 'Product category set nahi hai',
+                        'invoice_url' => route('admin.sales.show', $invoice),
+                    ];
+                }
+
                 if (!$catId || ($categoryId && $catId !== $categoryId)) continue;
                 $key = $invoice->party_id.'-'.$catId;
                 $actuals[$key]['amount'] = ($actuals[$key]['amount'] ?? 0) + (float) $line->line_total;
                 $actuals[$key]['quantity'] = ($actuals[$key]['quantity'] ?? 0) + (float) $line->quantity;
             }
         }
+
+        $invoiceGrandTotal = (float) $sales->sum('grand_total');
+        $invoiceLineTotal = array_sum($invoiceLineTotals);
+        $uncoveredSummary = [
+            'items_count' => count($uncoveredSales),
+            'amount' => array_sum(array_column($uncoveredSales, 'amount')),
+            'invoice_line_total' => $invoiceLineTotal,
+            'invoice_grand_total' => $invoiceGrandTotal,
+            'invoice_adjustment' => $invoiceGrandTotal - $invoiceLineTotal,
+        ];
 
         $rows = $targets->flatMap(function (SalesTarget $target) use ($actuals, $partyTotals, $categoryId) {
             return $target->items->filter(fn ($item) => !$categoryId || $item->product_category_id === $categoryId)->map(function (SalesTargetItem $item) use ($target, $actuals, $partyTotals) {
@@ -201,7 +243,7 @@ class SalesTargetController extends Controller
 
         return view('admin.sales-targets.report', compact(
             'rows','summary','charts','filters','parties','categories','progress','selectedPartyName',
-            'states','cities'
+            'states','cities','uncoveredSales','uncoveredSummary'
         ));
     }
 
