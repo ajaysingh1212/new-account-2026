@@ -619,38 +619,49 @@ class SalesInvoiceController extends Controller
 
     private function finishedGoodsUnitPool(int $companyId, ?int $currentInvoiceId = null): array
     {
-        $soldKeys = app(SerialUnitService::class)->activeSoldKeys($companyId, $currentInvoiceId);
+        $serials = app(SerialUnitService::class);
+        $soldKeys = $serials->activeSoldScopedKeys($companyId, $currentInvoiceId);
+        $pool = collect($serials->currentStockUnitsByItem($companyId))
+            ->map(fn(array $rows, int $itemId) => collect($rows)
+                ->map(function (array $unit) use ($serials, $itemId, $soldKeys) {
+                    $scopeKey = $serials->scopeUnitKey($itemId, $unit);
 
-        $producedUnits = ProductionBatch::with('finishedItem')
-            ->where('company_id', $companyId)
-            ->where('status', 'posted')
-            ->get()
-            ->flatMap(function (ProductionBatch $batch) use ($soldKeys) {
-                return collect($batch->units_data ?? [])
-                    ->filter(fn($unit) => empty($unit['reverted_at']))
-                    ->map(function ($unit, $index) use ($batch, $soldKeys) {
-                    $key = $batch->id . '-' . $index;
                     return array_merge($unit, [
-                        'key' => $key,
-                        'item_id' => $batch->finished_item_id,
-                        'item_name' => $batch->finishedItem?->name,
-                        'production_batch_no' => $batch->batch_no,
-                        'production_date' => $batch->production_date?->format('Y-m-d'),
-                        'cost_per_unit' => (float) $batch->cost_per_unit,
-                        'sold' => in_array($key, $soldKeys, true),
+                        'scope_key' => $scopeKey,
+                        'sold' => in_array($scopeKey, $soldKeys, true),
                     ]);
-                });
-            })
-            ->groupBy('item_id')
-            ->map(fn($rows) => $rows->values()->all())
+                })
+                ->values()
+                ->all())
             ->all();
 
-        $purchasedUnits = $this->purchasedFinishedGoodsUnitPool($companyId, $soldKeys);
-        foreach ($purchasedUnits as $itemId => $rows) {
-            $producedUnits[$itemId] = array_values(array_merge($producedUnits[$itemId] ?? [], $rows));
+        if ($currentInvoiceId) {
+            SalesInvoiceItem::with(['salesInvoice', 'item'])
+                ->whereHas('salesInvoice', fn($query) => $query->where('company_id', $companyId)->whereKey($currentInvoiceId))
+                ->get()
+                ->each(function (SalesInvoiceItem $line) use (&$pool, $serials) {
+                    foreach (($line->selected_units ?? []) as $unit) {
+                        if (!is_array($unit)) {
+                            continue;
+                        }
+
+                        $scopeKey = $serials->scopeUnitKey((int) $line->item_id, $unit);
+                        $pool[$line->item_id] ??= [];
+                        if (collect($pool[$line->item_id])->contains(fn($row) => ($row['scope_key'] ?? null) === $scopeKey)) {
+                            continue;
+                        }
+
+                        $pool[$line->item_id][] = array_merge($unit, [
+                            'item_id' => $line->item_id,
+                            'item_name' => $line->item?->name,
+                            'scope_key' => $scopeKey,
+                            'sold' => false,
+                        ]);
+                    }
+                });
         }
 
-        return $producedUnits;
+        return $pool;
     }
 
     private function purchasedFinishedGoodsUnitPool(int $companyId, array $soldKeys): array

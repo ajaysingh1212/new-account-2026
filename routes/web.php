@@ -32,7 +32,10 @@ use App\Http\Controllers\Admin\Sales\StockOutChallanController;
 use App\Http\Controllers\Admin\Sales\PendingOrderController;
 use App\Http\Controllers\Admin\SalesTargetController;
 use App\Http\Controllers\ProfileController;
+use App\Models\PartyPayment;
 use Illuminate\Support\Facades\Route;
+
+Route::bind('partyPayment', fn($value) => PartyPayment::findOrFail($value));
 
 // ── Auth Routes (Breeze) ──────────────────────────────────
 Route::get('/', function () {
@@ -109,9 +112,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
     Route::middleware('permission:party_payments.view')->group(function () {
         Route::get('party-payments/open-bills', [PartyPaymentController::class, 'openBills'])->name('party-payments.open-bills');
         Route::get('party-advances/available', [PartyAdvanceController::class, 'available'])->name('party-advances.available');
-        Route::resource('party-payments', PartyPaymentController::class)->only(['index','create','store']);
-        Route::resource('party-payments', PartyPaymentController::class)->only(['edit','update'])->middleware('permission:party_payments.create');
-        Route::resource('party-payments', PartyPaymentController::class)->only(['destroy'])->middleware('permission:party_payments.create');
+        Route::resource('party-payments', PartyPaymentController::class)->only(['index','create','store'])->parameters(['party-payments' => 'partyPayment']);
+        Route::resource('party-payments', PartyPaymentController::class)->only(['edit','update'])->parameters(['party-payments' => 'partyPayment'])->middleware('permission:party_payments.create');
+        Route::resource('party-payments', PartyPaymentController::class)->only(['destroy'])->parameters(['party-payments' => 'partyPayment'])->middleware('permission:party_payments.create');
     });
     Route::middleware('permission:product_types.view')->group(function () {
         Route::resource('product-types', ProductTypeController::class)->only(['index']);

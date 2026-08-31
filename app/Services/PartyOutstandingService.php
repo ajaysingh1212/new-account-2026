@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Models\Party;
 use App\Models\PartyLedger;
-use App\Models\PartyOpeningBalanceAdjustment;
 use App\Models\PartyPaymentAllocation;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseReturn;
@@ -241,27 +240,19 @@ class PartyOutstandingService
 
     private function openingRows(EntryVisibilityService $visibility, ?int $partyId, string $toDate, string $kind, Carbon $asOf, ?int $companyId = null): Collection
     {
-        $adjustments = PartyOpeningBalanceAdjustment::query()
-            ->when($companyId, fn($query) => $query->where('company_id', $companyId))
-            ->when($partyId, fn($query) => $query->where('party_id', $partyId))
-            ->whereDate('adjustment_date', '<=', $toDate)
-            ->selectRaw('party_id, COALESCE(SUM(adjustment_amount), 0) as total_adjustment')
-            ->groupBy('party_id')
-            ->pluck('total_adjustment', 'party_id');
-
         return $visibility->scopeForUser(Party::query(), Party::class)
             ->when($partyId, fn($query) => $query->where('id', $partyId))
             ->when($companyId, fn($query) => $query->where('company_id', $companyId))
             ->whereDate('opening_balance_date', '<=', $toDate)
             ->where('opening_balance', '>', 0)
             ->get()
-            ->map(function (Party $party) use ($kind, $toDate, $asOf, $adjustments) {
+            ->map(function (Party $party) use ($kind, $toDate, $asOf) {
                 $side = $party->opening_balance_type === 'receivable' ? 'receivable' : 'payable';
                 if ($kind !== 'both' && $kind !== $side) {
                     return null;
                 }
 
-                $effectiveOpening = max(0, (float) $party->opening_balance + (float) ($adjustments[$party->id] ?? 0));
+                $effectiveOpening = max(0, (float) $party->opening_balance);
 
                 $paid = (float) PartyPaymentAllocation::where('company_id', $party->company_id)
                     ->where('party_id', $party->id)

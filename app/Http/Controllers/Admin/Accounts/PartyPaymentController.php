@@ -47,8 +47,9 @@ class PartyPaymentController extends Controller
         return view('admin.party-payments.create', $this->formData($type));
     }
 
-    public function edit(PartyPayment $partyPayment)
+    public function edit($partyPayment)
     {
+        $partyPayment = $this->findPayment($partyPayment);
         $this->authorizePayment($partyPayment);
 
         return view('admin.party-payments.create', $this->formData($partyPayment->payment_type, $partyPayment));
@@ -67,10 +68,7 @@ class PartyPaymentController extends Controller
         $advanceDirection = $data['payment_type'] === 'payment_in' ? 'in' : 'out';
         $availableAdvances = $advances->availableForParty($party->id, $advanceDirection);
 
-        $adjustmentTotal = (float) $party->openingBalanceAdjustments()
-            ->whereDate('adjustment_date', '<=', now()->toDateString())
-            ->sum('adjustment_amount');
-        $effectiveOpeningBalance = max(0, (float) $party->opening_balance + $adjustmentTotal);
+        $effectiveOpeningBalance = max(0, (float) $party->opening_balance);
 
         $openingBalanceAvailable = ($data['payment_type'] === 'payment_in' && $party->opening_balance_type === 'receivable')
             || ($data['payment_type'] === 'payment_out' && $party->opening_balance_type === 'payable');
@@ -143,8 +141,9 @@ class PartyPaymentController extends Controller
             ->with('success', 'Payment posted to party ledger and bank ledger.');
     }
 
-    public function update(Request $request, PartyPayment $partyPayment, AccountingService $accounting, EntryVisibilityService $visibility, PartyOutstandingService $outstanding, PartyAdvanceService $advanceService)
+    public function update(Request $request, $partyPayment, AccountingService $accounting, EntryVisibilityService $visibility, PartyOutstandingService $outstanding, PartyAdvanceService $advanceService)
     {
+        $partyPayment = $this->findPayment($partyPayment);
         $this->authorizePayment($partyPayment);
         $old = $partyPayment->load('allocations')->toArray();
         $data = $this->validatedData($request, $partyPayment);
@@ -167,8 +166,9 @@ class PartyPaymentController extends Controller
             ->with('success', 'Payment updated and all ledger effects recalculated.');
     }
 
-    public function destroy(PartyPayment $partyPayment, PartyAdvanceService $advanceService)
+    public function destroy($partyPayment, PartyAdvanceService $advanceService)
     {
+        $partyPayment = $this->findPayment($partyPayment);
         $this->authorizePayment($partyPayment);
         $old = $partyPayment->load(['allocations', 'party', 'bankAccount'])->toArray();
 
@@ -279,7 +279,7 @@ class PartyPaymentController extends Controller
             $openingTypeAllowed = ($payment->payment_type === 'payment_in' && $party->opening_balance_type === 'receivable')
                 || ($payment->payment_type === 'payment_out' && $party->opening_balance_type === 'payable');
             abort_unless($openingTypeAllowed, 422, 'This party opening balance is not applicable for the selected payment type.');
-            $effectiveOpening = max(0, (float) $party->opening_balance + (float) $party->openingBalanceAdjustments()->sum('adjustment_amount'));
+            $effectiveOpening = max(0, (float) $party->opening_balance);
             $alreadyPaid = (float) PartyPaymentAllocation::where('company_id', $companyId)
                 ->where('party_id', $party->id)
                 ->where('bill_type', 'opening_balance')
@@ -556,5 +556,14 @@ class PartyPaymentController extends Controller
     private function authorizePayment(PartyPayment $payment): void
     {
         abort_unless($payment->company_id === auth()->user()->current_company_id || auth()->user()->isSuperAdmin(), 403);
+    }
+
+    private function findPayment($payment): PartyPayment
+    {
+        if ($payment instanceof PartyPayment) {
+            return $payment;
+        }
+
+        return PartyPayment::findOrFail($payment);
     }
 }

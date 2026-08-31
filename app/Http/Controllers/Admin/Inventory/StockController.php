@@ -254,11 +254,13 @@ class StockController extends Controller
     private function serialTrackedItemIds(int $companyId)
     {
         return PurchaseBillItem::whereHas('purchaseBill', fn($query) => $query->where('company_id', $companyId))
+            ->whereHas('item.productType', fn($query) => $query->where('nature', 'finished_goods'))
             ->get()
             ->filter(fn($line) => collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit) && !empty($unit['key']))->isNotEmpty())
             ->pluck('item_id')
             ->merge(
                 StockMovement::where('company_id', $companyId)
+                    ->whereHas('item.productType', fn($query) => $query->where('nature', 'finished_goods'))
                     ->get()
                     ->filter(fn($movement) => collect($movement->movement_units ?? [])->filter(fn($unit) => is_array($unit) && !empty($unit['key']))->isNotEmpty())
                     ->pluck('item_id')

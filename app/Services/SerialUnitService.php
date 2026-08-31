@@ -19,6 +19,15 @@ class SerialUnitService
 {
     public function activeSoldKeys(int $companyId, ?int $excludeInvoiceId = null): array
     {
+        return collect($this->activeSoldScopedKeys($companyId, $excludeInvoiceId))
+            ->map(fn($key) => preg_replace('/^\d+:/', '', (string) $key))
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    public function activeSoldScopedKeys(int $companyId, ?int $excludeInvoiceId = null): array
+    {
         $soldCounts = SalesInvoiceItem::whereHas('salesInvoice', function ($query) use ($companyId, $excludeInvoiceId) {
                 $query->where('company_id', $companyId);
                 if ($excludeInvoiceId) {
@@ -70,7 +79,7 @@ class SerialUnitService
         return array_values(array_unique(array_merge($salesKeys, $challanKeys, $stockOutKeys)));
     }
 
-    private function scopeUnitKey(int $itemId, array|string|null $unit): ?string
+    public function scopeUnitKey(int $itemId, array|string|null $unit): ?string
     {
         $rawKey = is_array($unit)
             ? ($unit['key'] ?? $unit['serial_no'] ?? $unit['vts_sim'] ?? $unit['buyer_code'] ?? $unit['sku'] ?? $unit['batch_no'] ?? $unit['production_batch_no'] ?? null)
@@ -90,40 +99,24 @@ class SerialUnitService
     {
         $usedKeys = $this->allocatedKeys($companyId, $excludeType, $excludeId);
 
-        $produced = ProductionBatch::with('finishedItem')
-            ->where('company_id', $companyId)->where('status', 'posted')->get()
-            ->flatMap(fn(ProductionBatch $batch) => collect($batch->units_data ?? [])->map(function ($unit, $index) use ($batch, $usedKeys) {
-                if (!is_array($unit) || !empty($unit['reverted_at'])) return null;
-                $key = $batch->id.'-'.$index;
-                $scopeKey = $this->scopeUnitKey((int) $batch->finished_item_id, ['key' => $key] + $unit);
-                return array_merge($unit, [
-                    'key' => $key, 'item_id' => $batch->finished_item_id,
-                    'item_name' => $batch->finishedItem?->name,
-                    'production_batch_no' => $batch->batch_no,
-                    'production_date' => $batch->production_date?->format('Y-m-d'),
-                    'scope_key' => $scopeKey,
-                    'sold' => in_array($scopeKey, $usedKeys, true),
-                ]);
-            }))->filter()->groupBy('item_id')->map(fn($rows) => $rows->values()->all())->all();
+        $currentUnits = collect($this->currentStockUnitsByItem($companyId));
+        if ($currentUnits->isEmpty()) {
+            $currentUnits = $this->postedFinishedGoodsUnits($companyId);
+        }
 
-        PurchaseBillItem::with(['purchaseBill','item.productType'])
-            ->whereHas('purchaseBill', fn($q) => $q->where('company_id', $companyId))
-            ->whereHas('item.productType', fn($q) => $q->where('nature', '<>', 'raw_material'))
-            ->get()->each(function (PurchaseBillItem $line) use (&$produced, $usedKeys) {
-                foreach (($line->selected_units ?? []) as $index => $unit) {
-                    $key = $unit['key'] ?? 'PBI-'.$line->id.'-'.$index;
-                    $scopeKey = $this->scopeUnitKey((int) $line->item_id, ['key' => $key] + $unit);
-                    $produced[$line->item_id][] = array_merge($unit, [
-                        'key' => $key, 'item_id' => $line->item_id, 'item_name' => $line->item?->name,
-                        'production_batch_no' => $unit['production_batch_no'] ?? $line->purchaseBill?->invoice_no,
-                        'production_date' => $line->purchaseBill?->billing_date?->format('Y-m-d'),
+        return $currentUnits
+            ->map(fn(array $rows, int $itemId) => collect($rows)
+                ->map(function (array $unit) use ($itemId, $usedKeys) {
+                    $scopeKey = $this->scopeUnitKey($itemId, $unit);
+
+                    return array_merge($unit, [
                         'scope_key' => $scopeKey,
                         'sold' => in_array($scopeKey, $usedKeys, true),
                     ]);
-                }
-            });
-
-        return $produced;
+                })
+                ->values()
+                ->all())
+            ->all();
     }
 
     public function reconcile(array $requested, array $pool, int $quantity, bool $requiresGps): array
@@ -154,9 +147,10 @@ class SerialUnitService
     {
         $balances = [];
 
-        StockMovement::with(['item', 'party'])
+        StockMovement::with(['item.productType', 'party'])
             ->where('company_id', $companyId)
             ->when($itemId, fn($query) => $query->where('item_id', $itemId))
+            ->whereHas('item.productType', fn($query) => $query->where('nature', 'finished_goods'))
             ->orderBy('movement_date')
             ->orderBy('id')
             ->get()
@@ -295,22 +289,84 @@ class SerialUnitService
     private function activeSoldKeysWithoutOtherDocuments(int $companyId): array
     {
         $sold = SalesInvoiceItem::whereHas('salesInvoice', fn($q) => $q->where('company_id', $companyId))
-            ->get()->flatMap(fn($line) => collect($line->selected_units ?? [])->pluck('key'))->filter()->countBy();
+            ->get()
+            ->flatMap(fn($line) => collect($line->selected_units ?? [])->map(fn($unit) => $this->scopeUnitKey((int) ($line->item_id ?? 0), $unit)))
+            ->filter()
+            ->countBy();
         $returned = SalesReturnItem::whereHas('salesReturn', fn($q) => $q->where('company_id', $companyId))
-            ->get()->flatMap(fn($line) => collect($line->selected_units ?? [])->pluck('key'))->filter()->countBy();
+            ->get()
+            ->flatMap(fn($line) => collect($line->selected_units ?? [])->map(fn($unit) => $this->scopeUnitKey((int) ($line->item_id ?? 0), $unit)))
+            ->filter()
+            ->countBy();
         return $sold->filter(fn($count, $key) => $count > (int) $returned->get($key, 0))->keys()->values()->all();
+    }
+
+    private function postedFinishedGoodsUnits(int $companyId): \Illuminate\Support\Collection
+    {
+        $produced = ProductionBatch::with('finishedItem')
+            ->where('company_id', $companyId)
+            ->where('status', 'posted')
+            ->get()
+            ->flatMap(fn(ProductionBatch $batch) => collect($batch->units_data ?? [])
+                ->map(function ($unit, $index) use ($batch) {
+                    if (!is_array($unit) || !empty($unit['reverted_at'])) {
+                        return null;
+                    }
+
+                    return array_merge($unit, [
+                        'key' => $unit['key'] ?? $batch->id . '-' . $index,
+                        'item_id' => $batch->finished_item_id,
+                        'item_name' => $batch->finishedItem?->name,
+                        'production_batch_no' => $batch->batch_no,
+                        'production_date' => $batch->production_date?->format('Y-m-d'),
+                    ]);
+                }))
+            ->filter();
+
+        $purchased = PurchaseBillItem::with(['purchaseBill','item.productType'])
+            ->whereHas('purchaseBill', fn($q) => $q->where('company_id', $companyId))
+            ->whereHas('item.productType', fn($q) => $q->where('nature', 'finished_goods'))
+            ->get()
+            ->flatMap(fn(PurchaseBillItem $line) => collect($line->selected_units ?? [])
+                ->map(function ($unit, $index) use ($line) {
+                    if (!is_array($unit)) {
+                        return null;
+                    }
+
+                    return array_merge($unit, [
+                        'key' => $unit['key'] ?? 'PBI-' . $line->id . '-' . $index,
+                        'item_id' => $line->item_id,
+                        'item_name' => $line->item?->name,
+                        'production_batch_no' => $unit['production_batch_no'] ?? $line->purchaseBill?->invoice_no,
+                        'production_date' => $line->purchaseBill?->billing_date?->format('Y-m-d'),
+                    ]);
+                }))
+            ->filter();
+
+        return $produced
+            ->concat($purchased)
+            ->groupBy('item_id')
+            ->map(fn($rows) => $rows->values()->all());
     }
 
     private function challanKeys(int $companyId, ?int $excludeId = null): array
     {
         return DeliveryChallanItem::whereHas('deliveryChallan', fn($q) => $q->where('company_id', $companyId)->where('status', 'issued')->when($excludeId, fn($x) => $x->whereKeyNot($excludeId)))
-            ->get()->flatMap(fn($line) => collect($line->selected_units ?? [])->pluck('key'))->filter()->values()->all();
+            ->get()
+            ->flatMap(fn($line) => collect($line->selected_units ?? [])->map(fn($unit) => $this->scopeUnitKey((int) ($line->item_id ?? 0), $unit)))
+            ->filter()
+            ->values()
+            ->all();
     }
 
     private function stockOutKeys(int $companyId, ?int $excludeId = null): array
     {
         return StockOutChallanItem::whereHas('stockOutChallan', fn($q) => $q->where('company_id', $companyId)->where('status', 'issued')->when($excludeId, fn($x) => $x->whereKeyNot($excludeId)))
-            ->get()->flatMap(fn($line) => collect($line->selected_units ?? [])->pluck('key'))->filter()->values()->all();
+            ->get()
+            ->flatMap(fn($line) => collect($line->selected_units ?? [])->map(fn($unit) => $this->scopeUnitKey((int) ($line->item_id ?? 0), $unit)))
+            ->filter()
+            ->values()
+            ->all();
     }
 
     public function returnedKeysForInvoiceLine(int $invoiceLineId, ?int $excludeReturnId = null): array
