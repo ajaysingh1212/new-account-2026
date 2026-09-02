@@ -28,4 +28,5 @@ class SalesInvoice extends Model
     public function items() { return $this->hasMany(SalesInvoiceItem::class); }
     public function returns() { return $this->hasMany(SalesReturn::class, 'sales_invoice_id'); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
+    public function sourceChallan() { return $this->hasOne(DeliveryChallan::class, 'converted_sales_invoice_id'); }
 }

@@ -53,20 +53,32 @@
 
         <div class="table-responsive mt-3">
             <table id="pendingTable" class="table table-hover">
-                <thead><tr><th>Date</th><th>Party</th><th>Challan</th><th>Category</th><th>Item</th><th>Pending Qty</th><th>Stock Now</th><th>Sales</th><th>Cost</th><th>Profit</th><th>%</th><th></th></tr></thead>
+                <thead><tr><th>Date</th><th>Party</th><th>Challan</th><th>Invoice</th><th>Status</th><th>Category</th><th>Item</th><th>Pending Qty</th><th>Stock Now</th><th>Sales</th><th>Cost</th><th>Profit</th><th>%</th><th></th></tr></thead>
                 <tbody>@foreach($orders as $order)<tr>
                     <td>{{ $order->pending_date?->format('d M Y') }}</td>
                     <td>{{ $order->party?->display_name ?: 'Walk-in' }}</td>
                     <td>{{ $order->deliveryChallan?->challan_no }}</td>
+                    <td>
+                        @if($order->convertedInvoice)
+                            <a href="{{ route('admin.sales.show', $order->convertedInvoice) }}">{{ $order->convertedInvoice->invoice_no }}</a>
+                        @else
+                            -
+                        @endif
+                    </td>
+                    <td><span class="badge {{ $order->status === 'converted' ? 'badge-primary' : 'badge-warning' }}">{{ ucfirst($order->status) }}</span></td>
                     <td>{{ $order->item?->productCategory?->name ?: '-' }}</td>
                     <td>{{ $order->item?->name }}</td>
                     <td>{{ number_format((float)$order->quantity,2) }} {{ $order->unit }}</td>
-                    <td>{{ number_format((float)($stockByItem[$order->item_id] ?? 0),2) }}</td>
+                    @php $stockNow = (float)($stockByItem[$order->item_id] ?? 0); @endphp
+                    <td><span class="badge {{ $stockNow >= (float)$order->quantity ? 'badge-success' : 'badge-danger' }}">{{ number_format($stockNow,2) }}</span></td>
                     <td>Rs {{ number_format((float)$order->line_total,2) }}</td>
                     <td>Rs {{ number_format((float)$order->cost_amount,2) }}</td>
                     <td>Rs {{ number_format((float)$order->profit_amount,2) }}</td>
                     <td>{{ number_format((float)$order->profit_percent,2) }}%</td>
-                    <td><button class="btn btn-sm btn-info detail-btn" data-detail='@json($order->raw_materials ?? [])' data-title="{{ $order->item?->name }}"><i class="fas fa-eye"></i></button></td>
+                    <td class="text-nowrap">
+                        <a class="btn btn-sm {{ $order->status === 'pending' && $stockNow >= (float)$order->quantity ? 'btn-success' : 'btn-secondary disabled' }}" href="{{ $order->status === 'pending' && $stockNow >= (float)$order->quantity ? route('admin.pending-orders.convert-form', $order) : '#' }}"><i class="fas fa-exchange-alt"></i></a>
+                        <button class="btn btn-sm btn-info detail-btn" data-detail='@json($order->raw_materials ?? [])' data-title="{{ $order->item?->name }}"><i class="fas fa-eye"></i></button>
+                    </td>
                 </tr>@endforeach</tbody>
             </table>
         </div>
@@ -77,7 +89,7 @@
 @push('scripts')
 @include('admin.partials.segment-viz-scripts')
 <script>
-$('#pendingTable').DataTable({pageLength:25, columnDefs:[{orderable:false, targets:11}]});
+$('#pendingTable').DataTable({pageLength:25, columnDefs:[{orderable:false, targets:13}]});
 $(document).on('click','.detail-btn',function(){let rows=$(this).data('detail')||[];$('.modal-title').text($(this).data('title'));$('#rawRows').html(rows.length?rows.map(r=>`<tr><td>${r.name}</td><td>${Number(r.qty||0).toFixed(2)} ${r.unit||''}</td><td>Rs ${Number(r.unit_price||0).toFixed(2)}</td><td>Rs ${Number(r.amount||0).toFixed(2)}</td></tr>`).join(''):'<tr><td colspan="4">No raw material details.</td></tr>');$('#detailModal').modal('show')});
 </script>
 @endpush

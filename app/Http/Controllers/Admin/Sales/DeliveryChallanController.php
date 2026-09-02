@@ -136,9 +136,13 @@ class DeliveryChallanController extends Controller
             ];
         })->values();
 
+        $sourceItemIds = $deliveryChallan->items->pluck('item_id')->filter()->unique()->all();
         $activeItems = Item::where('company_id', $companyId)
             ->where('status', 'active')
-            ->whereHas('productType', fn($q) => $q->where('nature', 'finished_goods'))
+            ->where(function ($query) use ($sourceItemIds) {
+                $query->whereIn('id', $sourceItemIds)
+                    ->orWhereHas('productType', fn($q) => $q->where('nature', 'finished_goods'));
+            })
             ->orderBy('name')
             ->get();
 
