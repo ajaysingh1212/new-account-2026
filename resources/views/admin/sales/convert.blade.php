@@ -138,11 +138,11 @@
                         <td data-label="Description"><input name="description[]" class="form-control" value="{{ old('description.' . $loop->index, $line['description'] ?? '') }}" {{ $isPendingOrder ? 'readonly' : '' }}></td>
                         <td data-label="{{ $isDeliveryChallan ? 'Challan Qty' : 'Qty' }}"><input type="number" step="1" min="1" name="quantity[]" class="form-control line-qty" value="{{ old('quantity.' . $loop->index, $line['quantity'] ?? 1) }}" required {{ ($isDeliveryChallan || $isPendingOrder) ? 'readonly' : '' }}></td>
                         <td data-label="Serials">
-                            <button type="button" class="btn btn-outline-info btn-sm choose-units">
+                            <button type="button" class="btn btn-outline-info btn-sm choose-units" {{ $isDeliveryChallan ? 'disabled' : '' }}>
                                 <i class="fas fa-barcode mr-1"></i> Units (<span class="unit-count">0</span>)
                             </button>
                             <input type="hidden" name="selected_units[]" class="selected-units-json" value='@json($line["selected_units"] ?? [])'>
-                            @if($isDeliveryChallan)<small class="text-muted d-block">Invoice qty selected units se banegi.</small>@endif
+                            @if($isDeliveryChallan)<small class="text-muted d-block">DC me selected units direct invoice me jayenge.</small>@endif
                             <div class="selected-units mt-1"></div>
                         </td>
                         <td data-label="Unit"><input name="unit[]" class="form-control" value="{{ old('unit.' . $loop->index, $line['unit'] ?? '') }}" {{ $isPendingOrder ? 'readonly' : '' }}></td>
@@ -298,7 +298,7 @@ function recalc(){
         const $row = $(this);
         const challanQty = parseFloat($row.find('[name="quantity[]"]').val()) || 0;
         const units = rowUnits($row);
-        const qty = @json($isDeliveryChallan) ? units.length : challanQty;
+        const qty = challanQty;
         const price = parseFloat($row.find('[name="unit_price[]"]').val()) || 0;
         const discType = $row.find('[name="discount_type[]"]').val();
         const discValue = parseFloat($row.find('[name="discount_value[]"]').val()) || 0;
@@ -340,6 +340,15 @@ function addLine(data){
         $row.find('[name="tax_percent[]"]').val(data.tax_percent || 18);
         setRowUnits($row, data.selected_units || []);
     }
+    if (@json($isDeliveryChallan)) {
+        $row.find('[name="quantity[]"]').prop('readonly', true);
+        $row.find('.choose-units').prop('disabled', true);
+    }
+    if (@json($isPendingOrder)) {
+        $row.find('.item-select').prop('disabled', true).after(`<input type="hidden" name="item_id[]" value="${data?.item_id || ''}">`);
+        $row.find('[name="description[]"],[name="quantity[]"],[name="unit[]"]').prop('readonly', true);
+        $row.find('.remove-row').remove();
+    }
     recalc();
 }
 
@@ -364,14 +373,16 @@ $(document).on('submit', '#convertForm', function(){
     $('#lineTable tbody tr').each(function(){
         const qty = parseInt($(this).find('[name="quantity[]"]').val()) || 0;
         const units = rowUnits($(this));
-            if (@json($isDeliveryChallan || $isPendingOrder)) {
+        if (@json($isDeliveryChallan)) {
+            if (units.length !== qty) ok = false;
+        } else if (@json($isPendingOrder)) {
             if (units.length > qty) ok = false;
         } else if (qty > 0 && units.length !== qty) {
             ok = false;
         }
     });
     if (!ok) {
-        alert(@json(($isDeliveryChallan || $isPendingOrder) ? 'Selected serial/unit quantity se zyada nahi ho sakte.' : 'Har line ke liye quantity ke barabar serial/unit select karein.'));
+        alert(@json($isDeliveryChallan ? 'DC ke selected serial/unit quantity ke barabar hone chahiye.' : (($isPendingOrder) ? 'Selected serial/unit quantity se zyada nahi ho sakte.' : 'Har line ke liye quantity ke barabar serial/unit select karein.')));
         return false;
     }
 });
