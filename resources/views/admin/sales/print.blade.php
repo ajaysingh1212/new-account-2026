@@ -13,6 +13,9 @@
     'grandTotal' => $invoice->grand_total,
     'totalWeight' => $invoice->total_weight,
     'terms' => $invoice->terms ?: ($defaultTerms?->content ?? ''),
+    'metaLines' => $sourceChallan ? [
+        ['label' => 'Converted From DC', 'value' => $sourceChallan->challan_no],
+    ] : [],
     'company' => $company ?? $invoice->company,
     'bankAccount' => $bankAccount ?? null,
     'accent' => '#2563eb',

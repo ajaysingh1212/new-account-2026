@@ -510,7 +510,7 @@ class ProductionBatchController extends Controller
             $batch = $match['batch']->fresh('finishedItem.bomMaterials.rawItem');
             $unitIndex = (int) $match['index'];
             $units = $batch->units_data ?? [];
-            if (!empty($units[$unitIndex]['reverted_at'])) {
+            if (!empty($units[$unitIndex]['reverted_at']) && $this->unitRevertHasRawRestore($batch, $unitIndex)) {
                 $revertedBy = $units[$unitIndex]['reverted_by'] ? (User::find($units[$unitIndex]['reverted_by'])?->name ?? 'System') : 'System';
                 $revertedAt = $units[$unitIndex]['reverted_at'] ? \Carbon\Carbon::parse($units[$unitIndex]['reverted_at'])->format('d M Y h:i A') : 'unknown time';
                 abort(422, "This serial is already reverted on {$revertedAt} by {$revertedBy}.");
@@ -555,7 +555,7 @@ class ProductionBatchController extends Controller
                     'reference_type' => ProductionBatch::class,
                     'reference_id' => $batch->id,
                     'reference_no' => $batch->batch_no,
-                    'description' => 'Production serial reverted - raw material restored.',
+                    'description' => 'Production serial reverted - raw material restored: ' . ($units[$unitIndex]['serial_no'] ?? $unitIndex),
                 ]);
             }
 
@@ -709,22 +709,45 @@ class ProductionBatchController extends Controller
                 ]), true)) {
                     $revertedAt = $unit['reverted_at'] ?? null;
                     $revertedBy = $unit['reverted_by'] ?? null;
+                    $isReverted = !empty($revertedAt) && $this->unitRevertHasRawRestore($batch, (int) $index);
                     return [
                         'batch' => $batch,
                         'index' => $index,
                         'unit' => $unit,
                         'key' => $batch->id . '-' . $index,
                         'raw' => $this->rawMaterialRows($batch, 1),
-                        'is_reverted' => !empty($revertedAt),
-                        'reverted_at' => $revertedAt,
+                        'is_reverted' => $isReverted,
+                        'reverted_at' => $isReverted ? $revertedAt : null,
                         'reverted_by' => $revertedBy,
-                        'reverted_by_name' => $revertedBy ? (User::find($revertedBy)?->name ?? 'System') : null,
+                        'reverted_by_name' => $isReverted && $revertedBy ? (User::find($revertedBy)?->name ?? 'System') : null,
                     ];
                 }
             }
         }
 
         return null;
+    }
+
+    private function unitRevertHasRawRestore(ProductionBatch $batch, int $unitIndex): bool
+    {
+        if (empty(($batch->units_data ?? [])[$unitIndex]['reverted_at'])) {
+            return false;
+        }
+
+        $unit = ($batch->units_data ?? [])[$unitIndex] ?? [];
+        $serial = trim((string) ($unit['serial_no'] ?? ''));
+        $query = StockMovement::where('reference_type', ProductionBatch::class)
+            ->where('reference_id', $batch->id)
+            ->where('movement_type', 'production_serial_revert_raw')
+            ->where('direction', 'in');
+
+        if ($serial !== '' && (clone $query)->where('description', 'like', '%' . $serial . '%')->exists()) {
+            return true;
+        }
+
+        $revertedUnitCount = collect($batch->units_data ?? [])->filter(fn($row) => is_array($row) && !empty($row['reverted_at']))->count();
+
+        return $revertedUnitCount === 1 && $query->exists();
     }
 
     private function assertUnitIdentifiersAvailable(array $units, int $companyId, ?int $excludeBatchId = null): void

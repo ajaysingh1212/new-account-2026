@@ -14,6 +14,7 @@
     $terms        = $terms        ?? '';
     $status       = $status       ?? 'posted';
     $title        = $title        ?? 'INVOICE';
+    $metaLines    = collect($metaLines ?? []);
     $billingAddress  = $billingAddress  ?: (($party ?? null)?->billing_address ?? '');
     $shippingAddress = $shippingAddress ?: (($party ?? null)?->shipping_address ?? '');
 
@@ -390,6 +391,16 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
         <div class="meta-val">{{ $placeOfSupply ?? '—' }}</div>
       </div>
     </div>
+    @if($metaLines->isNotEmpty())
+      <div class="meta-strip" style="margin-top:8px">
+        @foreach($metaLines as $line)
+          <div class="meta-cell">
+            <div class="meta-lbl">{{ $line['label'] ?? 'Reference' }}</div>
+            <div class="meta-val">{{ $line['value'] ?? '-' }}</div>
+          </div>
+        @endforeach
+      </div>
+    @endif
 
     <!-- PARTY -->
     <div class="party-grid">

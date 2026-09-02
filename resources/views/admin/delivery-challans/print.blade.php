@@ -12,5 +12,8 @@
     'tax' => $deliveryChallan->tax_amount,
     'grandTotal' => $deliveryChallan->grand_total,
     'terms' => trim(($deliveryChallan->terms ?? '')."\nDispatch: ".($deliveryChallan->dispatch_through ?? '')."\nVehicle: ".($deliveryChallan->vehicle_no ?? '')."\nLR: ".($deliveryChallan->lr_no ?? '')),
+    'metaLines' => $deliveryChallan->convertedInvoice ? [
+        ['label' => 'Converted Sale Invoice', 'value' => $deliveryChallan->convertedInvoice->invoice_no],
+    ] : [],
     'accent' => '#0f766e',
 ])

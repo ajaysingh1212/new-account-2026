@@ -15,6 +15,13 @@
             <div class="col-md-2"><b>Total</b><br>Rs {{ number_format((float)$invoice->grand_total,2) }}</div>
             <div class="col-md-3">@if($invoice->attachment)<b>Attachment</b><br><a href="{{ asset('storage/'.$invoice->attachment) }}" target="_blank">Open attachment</a>@endif</div>
         </div>
+        @if($sourceChallan)
+            <div class="alert alert-info">
+                <b>Converted from DC:</b>
+                <a href="{{ route('admin.delivery-challans.show', $sourceChallan) }}">{{ $sourceChallan->challan_no }}</a>
+                <span class="text-muted">on {{ $sourceChallan->converted_at?->format('d M Y h:i A') }}</span>
+            </div>
+        @endif
         @if($invoiceReturnDetails['has_return'] ?? false)
             <div class="alert alert-warning">
                 <b>This invoice has sales return activity.</b> Returned quantity: {{ number_format((float) ($invoiceReturnDetails['returned_qty'] ?? 0), 3) }}

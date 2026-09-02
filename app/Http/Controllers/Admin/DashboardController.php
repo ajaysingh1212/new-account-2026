@@ -13,6 +13,7 @@ use App\Models\EstimateItem;
 use App\Models\Expense;
 use App\Models\Item;
 use App\Models\Party;
+use App\Models\PartyPayment;
 use App\Models\PartyPaymentAllocation;
 use App\Models\PendingOrder;
 use App\Models\ProductCategory;
@@ -51,6 +52,7 @@ class DashboardController extends Controller
                 'estimates' => $this->scope(Estimate::query(), $companyId)->whereBetween('estimate_date', [$from, $to])->count(),
                 'estimate_amount' => $this->scope(Estimate::query(), $companyId)->whereBetween('estimate_date', [$from, $to])->sum('grand_total'),
                 'challans' => $this->scope(DeliveryChallan::query(), $companyId)->whereBetween('challan_date', [$from, $to])->count(),
+                'collection' => $this->scope(PartyPayment::query(), $companyId)->where('payment_type', 'payment_in')->whereBetween('payment_date', [$from, $to])->sum('total_amount'),
                 'pending_expenses' => $this->scope(Expense::query(), $companyId)->where('status', 'pending_approval')->count(),
             ];
             $recentLogs = AuditLog::with('user','company')
@@ -81,6 +83,7 @@ class DashboardController extends Controller
                 'estimates' => $visibility->scopeForUser(Estimate::query(), Estimate::class)->whereBetween('estimate_date', [$from, $to])->count(),
                 'estimate_amount' => $visibility->scopeForUser(Estimate::query(), Estimate::class)->whereBetween('estimate_date', [$from, $to])->sum('grand_total'),
                 'challans' => $visibility->scopeForUser(DeliveryChallan::query(), DeliveryChallan::class)->whereBetween('challan_date', [$from, $to])->count(),
+                'collection' => $visibility->scopeForUser(PartyPayment::query(), PartyPayment::class)->where('payment_type', 'payment_in')->whereBetween('payment_date', [$from, $to])->sum('total_amount'),
                 'pending_expenses' => $visibility->scopeForUser(Expense::query(), Expense::class)->where('status', 'pending_approval')->count(),
             ];
             $recentLogs = AuditLog::with('user')
@@ -217,8 +220,9 @@ class DashboardController extends Controller
             'Cash' => (float) ($stats['cash_balance'] ?? 0),
         ];
         $quickActions = $this->quickActions($user);
+        $collectionRows = $this->collectionRows($companyId, $visibility, $user, $from, $to);
 
-        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','estimateSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals','chequeRows','completedChequeRows'));
+        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','estimateSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals','chequeRows','completedChequeRows','collectionRows'));
     }
 
     private function dateRange(Request $request): array
@@ -231,6 +235,7 @@ class DashboardController extends Controller
             'yesterday' => [$period, $today->copy()->subDay()->toDateString(), $today->copy()->subDay()->toDateString()],
             'week', 'this_week' => ['week', $today->copy()->startOfWeek()->toDateString(), $today->copy()->endOfWeek()->toDateString()],
             'month', 'this_month' => ['month', $today->copy()->startOfMonth()->toDateString(), $today->copy()->endOfMonth()->toDateString()],
+            'last_month' => ['last_month', $today->copy()->subMonthNoOverflow()->startOfMonth()->toDateString(), $today->copy()->subMonthNoOverflow()->endOfMonth()->toDateString()],
             'three_months', 'last_3_months' => ['three_months', $today->copy()->subMonths(3)->startOfDay()->toDateString(), $today->toDateString()],
             'six_months' => [$period, $today->copy()->subMonths(6)->startOfDay()->toDateString(), $today->toDateString()],
             'nine_months' => [$period, $today->copy()->subMonths(9)->startOfDay()->toDateString(), $today->toDateString()],
@@ -254,6 +259,32 @@ class DashboardController extends Controller
     private function scope($query, ?int $companyId)
     {
         return $companyId ? $query->where('company_id', $companyId) : $query;
+    }
+
+    private function collectionRows(?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to)
+    {
+        $query = PartyPayment::with(['party','bankAccount'])
+            ->where('payment_type', 'payment_in')
+            ->whereBetween('payment_date', [$from, $to]);
+
+        $query = $user->isSuperAdmin()
+            ? $this->scope($query, $companyId)
+            : $visibility->scopeForUser($query, PartyPayment::class);
+
+        return $query->latest('payment_date')
+            ->get()
+            ->map(fn(PartyPayment $payment) => [
+                'date' => $payment->payment_date?->format('Y-m-d'),
+                'display_date' => $payment->payment_date?->format('d M Y'),
+                'party' => $payment->party?->display_name ?: 'Cash / Walk-in',
+                'state' => $payment->party?->state ?: '-',
+                'district' => $payment->party?->district ?: '-',
+                'city' => $payment->party?->city ?: '-',
+                'mode' => $payment->payment_mode ?: '-',
+                'reference' => $payment->reference_no ?: '-',
+                'bank' => $payment->bankAccount?->account_name ?: '-',
+                'amount' => (float) $payment->total_amount,
+            ]);
     }
 
     private function monthlySeries(?int $companyId, EntryVisibilityService $visibility, User $user, string $from, string $to): array

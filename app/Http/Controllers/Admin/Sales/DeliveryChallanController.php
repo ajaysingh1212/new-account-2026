@@ -103,7 +103,7 @@ class DeliveryChallanController extends Controller
     public function print(DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($deliveryChallan);
-        $deliveryChallan->load(['party','items.item']);
+        $deliveryChallan->load(['party','items.item','convertedInvoice']);
 
         return view('admin.delivery-challans.print', compact('deliveryChallan'));
     }

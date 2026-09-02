@@ -57,7 +57,7 @@
     if ($user->can('banking.view')) $cards[] = ['label'=>'Bank Balance','value'=>'Rs '.number_format($stats['bank_balance'] ?? 0,2),'icon'=>'fa-university','accent'=>'#06b6d4'];
     if ($user->can('estimates.view')) $cards[] = ['label'=>'Estimates','value'=>'Rs '.number_format($stats['estimate_amount'] ?? 0,2),'icon'=>'fa-file-contract','accent'=>'#4338ca','modal'=>'estimateSegmentModal'];
     if ($user->can('delivery_challans.view')) $cards[] = ['label'=>'Pending Sales','value'=>'Rs '.number_format($stats['pending_sales'] ?? 0,2),'icon'=>'fa-hourglass-half','accent'=>'#f97316','url'=>route('admin.pending-orders.index', ['from_date' => $from, 'to_date' => $to])];
-    if ($user->can('delivery_challans.view')) $cards[] = ['label'=>'Challans','value'=>$stats['challans'] ?? 0,'icon'=>'fa-truck','accent'=>'#0f766e'];
+    if ($user->can('party_payments.view')) $cards[] = ['label'=>'Total Collection','value'=>'Rs '.number_format($stats['collection'] ?? 0,2),'icon'=>'fa-hand-holding-usd','accent'=>'#0f766e','modal'=>'collectionModal'];
     if ($user->can('expenses.view')) $cards[] = ['label'=>'Pending Expenses','value'=>$stats['pending_expenses'] ?? 0,'icon'=>'fa-clipboard-check','accent'=>'#10b981'];
     if ($user->can('reports.transaction')) $cards[] = ['label'=>'Total Profit (on Cost)','html'=>'Rs '.number_format($stats['total_profit'] ?? 0,2).'<br><small style="color:#64748b;font-weight:800">On Sale '.number_format($stats['total_profit_percent_on_sale'] ?? 0,2).'% | On Cost '.number_format($stats['total_profit_percent'] ?? 0,2).'%</small>','icon'=>'fa-chart-line','accent'=>'#0f766e','modal'=>'profitSegmentModal'];
     $sales = max(0, (float)($mix['Sales'] ?? 0)); $purchase = max(0, (float)($mix['Purchase'] ?? 0)); $bank = max(0, (float)($mix['Bank'] ?? 0)); $cash = max(0, (float)($mix['Cash'] ?? 0));
@@ -90,7 +90,7 @@
         <div class="col-md-{{ $user->isSuperAdmin() ? '8' : '10' }} form-group mb-md-0">
             <label>Date Filter</label>
             <div class="period-tabs">
-                @foreach(['today'=>'Today','yesterday'=>'Yesterday','week'=>'Week','month'=>'Month','three_months'=>'3 Month','six_months'=>'6 Month','nine_months'=>'9 Month','year'=>'1 Year','all'=>'All','custom'=>'Custom Date'] as $value => $label)
+                @foreach(['today'=>'Today','yesterday'=>'Yesterday','week'=>'Week','month'=>'Month','last_month'=>'Last Month','three_months'=>'3 Month','six_months'=>'6 Month','nine_months'=>'9 Month','year'=>'1 Year','all'=>'All','custom'=>'Custom Date'] as $value => $label)
                     <button type="button" data-period="{{ $value }}" class="period-tab {{ $period === $value ? 'active' : '' }}">{{ $label }}</button>
                 @endforeach
             </div>
@@ -387,6 +387,36 @@
     'segments' => $salesSegments,
 ])
 
+@can('party_payments.view')
+@php
+    $collectionParties = $collectionRows->pluck('party')->filter()->unique()->sort()->values();
+    $collectionStates = $collectionRows->pluck('state')->filter(fn($v) => $v !== '-')->unique()->sort()->values();
+    $collectionDistricts = $collectionRows->pluck('district')->filter(fn($v) => $v !== '-')->unique()->sort()->values();
+    $collectionCities = $collectionRows->pluck('city')->filter(fn($v) => $v !== '-')->unique()->sort()->values();
+@endphp
+<div class="modal fade pro-modal" id="collectionModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document"><div class="modal-content">
+        <div class="modal-header"><div><h5 class="modal-title mb-0">Total Collection</h5><small>Payment In from {{ $from }} to {{ $to }}</small></div><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+        <div class="modal-body">
+            <div class="segment-filter-grid mb-3">
+                <select class="form-control collection-filter" data-filter="party"><option value="">All Parties</option>@foreach($collectionParties as $party)<option value="{{ $party }}">{{ $party }}</option>@endforeach</select>
+                <select class="form-control collection-filter" data-filter="state"><option value="">All States</option>@foreach($collectionStates as $state)<option value="{{ $state }}">{{ $state }}</option>@endforeach</select>
+                <select class="form-control collection-filter" data-filter="district"><option value="">All Districts</option>@foreach($collectionDistricts as $district)<option value="{{ $district }}">{{ $district }}</option>@endforeach</select>
+                <select class="form-control collection-filter" data-filter="city"><option value="">All Cities</option>@foreach($collectionCities as $city)<option value="{{ $city }}">{{ $city }}</option>@endforeach</select>
+                <input type="date" class="form-control collection-date" id="collectionFrom" value="{{ $from }}">
+                <input type="date" class="form-control collection-date" id="collectionTo" value="{{ $to }}">
+            </div>
+            <div class="row mb-3">
+                <div class="col-md-4"><div class="modal-metric"><span>Filtered Collection</span><b id="collectionTotal">Rs {{ number_format($collectionRows->sum('amount'),2) }}</b></div></div>
+                <div class="col-md-4"><div class="modal-metric"><span>Payments</span><b id="collectionCount">{{ number_format($collectionRows->count()) }}</b></div></div>
+                <div class="col-md-4"><div class="modal-metric"><span>Parties</span><b id="collectionPartyCount">{{ number_format($collectionRows->pluck('party')->unique()->count()) }}</b></div></div>
+            </div>
+            <div class="modal-table-wrap"><table class="table mb-0"><thead><tr><th>Date</th><th>Party</th><th>Location</th><th>Mode</th><th>Reference</th><th>Bank</th><th class="text-right">Amount</th></tr></thead><tbody id="collectionBody"></tbody></table></div>
+        </div>
+    </div></div>
+</div>
+@endcan
+
 <div class="modal fade pro-modal" id="salesDueModal" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
         <div class="modal-content">
@@ -620,6 +650,38 @@ $('#dashboardFilterForm input[type="date"]').on('change', function(){
     $('.period-tab[data-period="custom"]').addClass('active');
     $('.custom-date-box').show().find('input').prop('required', true);
 });
+const collectionRows = @json(($collectionRows ?? collect())->values());
+function collectionMoney(n){return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function renderCollectionRows(){
+    if(!$('#collectionBody').length) return;
+    const filters = {};
+    $('.collection-filter').each(function(){ filters[$(this).data('filter')] = $(this).val(); });
+    const from = $('#collectionFrom').val();
+    const to = $('#collectionTo').val();
+    const rows = collectionRows.filter(row => {
+        if(from && row.date < from) return false;
+        if(to && row.date > to) return false;
+        return Object.keys(filters).every(key => !filters[key] || row[key] === filters[key]);
+    });
+    const total = rows.reduce((sum,row) => sum + (Number(row.amount)||0), 0);
+    $('#collectionTotal').text(collectionMoney(total));
+    $('#collectionCount').text(rows.length.toLocaleString('en-IN'));
+    $('#collectionPartyCount').text(new Set(rows.map(row => row.party)).size.toLocaleString('en-IN'));
+    $('#collectionBody').html(rows.map(row => `
+        <tr>
+            <td>${row.display_date || '-'}</td>
+            <td><b>${row.party || '-'}</b></td>
+            <td>${row.city || '-'}<br><small>${row.district || '-'}, ${row.state || '-'}</small></td>
+            <td>${row.mode || '-'}</td>
+            <td>${row.reference || '-'}</td>
+            <td>${row.bank || '-'}</td>
+            <td class="text-right"><b>${collectionMoney(row.amount)}</b></td>
+        </tr>
+    `).join('') || '<tr><td colspan="7" class="text-center text-muted py-4">No collection found for selected filters.</td></tr>');
+}
+$('.collection-filter,.collection-date').on('change', renderCollectionRows);
+$('#collectionModal').on('shown.bs.modal', renderCollectionRows);
+renderCollectionRows();
 $('#openQuickDrawer').on('click',function(){
     $('#quickDrawer,#quickDrawerBackdrop').addClass('open');
     $('#quickDrawer').attr('aria-hidden','false');

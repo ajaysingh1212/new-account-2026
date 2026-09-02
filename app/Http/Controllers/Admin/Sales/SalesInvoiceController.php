@@ -8,6 +8,7 @@ use App\Models\AuditLog;
 use App\Models\BankAccount;
 use App\Models\Company;
 use App\Models\CompanyMerge;
+use App\Models\DeliveryChallan;
 use App\Models\EntryVisibility;
 use App\Models\Item;
 use App\Models\Party;
@@ -278,6 +279,7 @@ class SalesInvoiceController extends Controller
             'invoice' => $sale,
             'auditLogs' => $auditLogs,
             'invoiceReturnDetails' => $this->invoiceReturnSummary($sale),
+            'sourceChallan' => DeliveryChallan::where('converted_sales_invoice_id', $sale->id)->first(),
         ]);
     }
 
@@ -287,7 +289,7 @@ class SalesInvoiceController extends Controller
         $sale->load(['party','items.item','company']);
         $bankAccount = BankAccount::where('company_id', $sale->company_id)->where('print_on_invoice', true)->where('status', 'active')->first();
         $defaultTerms = TermsTemplate::where('company_id', $sale->company_id)->where('status', 'active')->whereIn('document_type', ['sales','all'])->orderByDesc('is_default')->first();
-        return view('admin.sales.print', ['invoice' => $sale, 'bankAccount' => $bankAccount, 'company' => $sale->company, 'defaultTerms' => $defaultTerms]);
+        return view('admin.sales.print', ['invoice' => $sale, 'bankAccount' => $bankAccount, 'company' => $sale->company, 'defaultTerms' => $defaultTerms, 'sourceChallan' => DeliveryChallan::where('converted_sales_invoice_id', $sale->id)->first()]);
     }
 
     public function detailPdf(SalesInvoice $sale, EntryVisibilityService $visibility, SalesProfitService $profits)
