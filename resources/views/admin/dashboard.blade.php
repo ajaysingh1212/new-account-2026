@@ -39,6 +39,12 @@
 #collectionVizShell .bar-stage,#collectionVizShell .candle-stage,#collectionVizShell .wave-pro{background:rgba(255,255,255,.78);border:1px solid #dbeafe}
 .collection-payment-link{border:0;background:#e0f2fe;color:#075985;border-radius:999px;padding:5px 10px;font-weight:900;min-width:42px}
 .collection-payment-link:hover{background:#0ea5e9;color:#fff}
+.collection-action-btn{border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.16);color:#fff;border-radius:9px;padding:7px 10px;font-weight:850}
+.collection-action-btn:hover{background:#fff;color:#0f766e}
+#collectionModal.collection-fullscreen .modal-dialog{width:100vw;max-width:100vw;height:100vh;margin:0}
+#collectionModal.collection-fullscreen .modal-content{min-height:100vh;border-radius:0}
+#collectionModal.collection-fullscreen .modal-body{height:calc(100vh - 78px);overflow:auto}
+#collectionModal.collection-fullscreen #collectionVizShell .sales-viz-pane{min-height:calc(100vh - 360px)}
 </style>
 @include('admin.partials.segment-viz-styles')
 @endpush
@@ -405,7 +411,14 @@
 @endphp
 <div class="modal fade pro-modal" id="collectionModal" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document"><div class="modal-content">
-        <div class="modal-header"><div><h5 class="modal-title mb-0">Total Collection</h5><small>Payment In from {{ $from }} to {{ $to }}</small></div><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+        <div class="modal-header">
+            <div><h5 class="modal-title mb-0">Total Collection</h5><small>Payment In from {{ $from }} to {{ $to }}</small></div>
+            <div class="d-flex align-items-center" style="gap:8px">
+                <button type="button" class="collection-action-btn" id="collectionFullscreenBtn"><i class="fas fa-expand mr-1"></i>Full Screen</button>
+                <button type="button" class="collection-action-btn" id="collectionPdfBtn"><i class="fas fa-file-pdf mr-1"></i>Download PDF</button>
+                <button type="button" class="close text-white ml-1" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+        </div>
         <div class="modal-body">
             <div class="segment-filter-grid mb-3">
                 <select class="form-control collection-filter" data-filter="party"><option value="">All Parties</option>@foreach($collectionParties as $party)<option value="{{ $party }}">{{ $party }}</option>@endforeach</select>
@@ -687,6 +700,10 @@
 </div>
 
 @push('scripts')
+@once
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+@endonce
 <script>
 $('.period-tab').on('click', function(){
     const period = $(this).data('period');
@@ -704,6 +721,8 @@ $('#dashboardFilterForm input[type="date"]').on('change', function(){
     $('.custom-date-box').show().find('input').prop('required', true);
 });
 const collectionRows = @json(($collectionRows ?? collect())->values());
+let currentCollectionGroups = [];
+let currentCollectionTotal = 0;
 function collectionMoney(n){return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
 const collectionPalette = ['#2563eb','#14b8a6','#f59e0b','#ec4899','#7c3aed','#22c55e','#ef4444','#0f766e','#0891b2','#db2777'];
 function escapeCollectionText(value){return $('<div>').text(value || '-').html();}
@@ -776,6 +795,8 @@ function renderCollectionRows(){
     $('#collectionTotal').text(collectionMoney(total));
     $('#collectionCount').text(rows.length.toLocaleString('en-IN'));
     $('#collectionPartyCount').text(groups.length.toLocaleString('en-IN'));
+    currentCollectionGroups = groups;
+    currentCollectionTotal = total;
     renderCollectionCharts(groups, total);
     $('#collectionBody').html(groups.map((row, index) => `
         <tr>
@@ -792,6 +813,113 @@ function renderCollectionRows(){
 $('.collection-filter,.collection-date').on('change', renderCollectionRows);
 $('#collectionModal').on('shown.bs.modal', renderCollectionRows);
 renderCollectionRows();
+$('#collectionFullscreenBtn').on('click',function(){
+    const full = $('#collectionModal').toggleClass('collection-fullscreen').hasClass('collection-fullscreen');
+    $(this).html(full ? '<i class="fas fa-compress mr-1"></i>Exit Full Screen' : '<i class="fas fa-expand mr-1"></i>Full Screen');
+});
+function collectionPdfRows(){
+    return currentCollectionGroups.length ? currentCollectionGroups : groupCollectionByParty(collectionRows);
+}
+function drawCollectionPdfPie(doc, groups, total, cx, cy, radius){
+    if(!groups.length || total <= 0){
+        doc.setFillColor(226,232,240);
+        doc.circle(cx, cy, radius, 'F');
+        return;
+    }
+    let start = -90;
+    groups.forEach(group => {
+        const slice = Math.abs(group.amount) / total * 360;
+        const end = start + slice;
+        const points = [[cx, cy]];
+        for(let angle = start; angle <= end; angle += 4){
+            const rad = angle * Math.PI / 180;
+            points.push([cx + Math.cos(rad) * radius, cy + Math.sin(rad) * radius]);
+        }
+        const endRad = end * Math.PI / 180;
+        points.push([cx + Math.cos(endRad) * radius, cy + Math.sin(endRad) * radius]);
+        const hex = group.color.replace('#','');
+        doc.setFillColor(parseInt(hex.substring(0,2),16), parseInt(hex.substring(2,4),16), parseInt(hex.substring(4,6),16));
+        doc.lines(points.slice(1).map((point, index) => [point[0] - points[index][0], point[1] - points[index][1]]), points[0][0], points[0][1], [1,1], 'F', true);
+        start = end;
+    });
+    doc.setFillColor(248,250,252);
+    doc.circle(cx, cy, radius * .42, 'F');
+    doc.setTextColor(15,23,42);
+    doc.setFontSize(11);
+    doc.text('Total', cx, cy - 3, {align:'center'});
+    doc.setFontSize(9);
+    doc.text(collectionMoney(total).replace('Rs ', 'Rs. '), cx, cy + 8, {align:'center'});
+}
+function addCollectionPdfPageHeader(doc, title){
+    const pageWidth = doc.internal.pageSize.getWidth();
+    doc.setFillColor(15,118,110);
+    doc.rect(0,0,pageWidth,34,'F');
+    doc.setTextColor(255);
+    doc.setFontSize(15);
+    doc.text(title,14,14);
+    doc.setFontSize(8);
+    doc.text(`Filter: ${$('#collectionFrom').val() || '-'} to ${$('#collectionTo').val() || '-'} | Generated ${new Date().toLocaleString('en-IN')}`,14,24);
+}
+$('#collectionPdfBtn').on('click',function(){
+    if(!window.jspdf || !window.jspdf.jsPDF){
+        alert('PDF library load nahi hui. Internet connection check karke dobara try karein.');
+        return;
+    }
+    const groups = collectionPdfRows();
+    const total = groups.reduce((sum,row) => sum + (Number(row.amount)||0), 0);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({orientation:'portrait', unit:'pt', format:'a4'});
+    const pageWidth = doc.internal.pageSize.getWidth();
+    addCollectionPdfPageHeader(doc, 'Total Collection - Party Wise Report');
+    doc.setFillColor(236,254,255); doc.roundedRect(14,48,170,62,8,8,'F');
+    doc.setFillColor(240,253,244); doc.roundedRect(202,48,170,62,8,8,'F');
+    doc.setFillColor(255,247,237); doc.roundedRect(390,48,190,62,8,8,'F');
+    doc.setTextColor(100,116,139); doc.setFontSize(8);
+    doc.text('FILTERED COLLECTION',26,68); doc.text('PAYMENTS',214,68); doc.text('PARTIES',402,68);
+    doc.setTextColor(15,23,42); doc.setFontSize(15);
+    doc.text(collectionMoney(total).replace('Rs ', 'Rs. '),26,92);
+    doc.text(groups.reduce((sum,row) => sum + row.count, 0).toLocaleString('en-IN'),214,92);
+    doc.text(groups.length.toLocaleString('en-IN'),402,92);
+    drawCollectionPdfPie(doc, groups, total, pageWidth / 2, 205, 76);
+    doc.setFontSize(12); doc.setTextColor(15,23,42); doc.text('Party Wise Collection Summary',14,315);
+    doc.autoTable({
+        startY:326,
+        head:[['Party','Location','Payments','Last Payment','Modes / Banks','Total']],
+        body:groups.map(row => [row.party, `${row.city || '-'}, ${row.district || '-'}, ${row.state || '-'}`, row.count, row.last_display_date || '-', `${row.modes_text} / ${row.banks_text}`, collectionMoney(row.amount).replace('Rs ', 'Rs. ')]),
+        theme:'grid',
+        styles:{fontSize:7,cellPadding:3,textColor:[15,23,42]},
+        headStyles:{fillColor:[15,118,110],textColor:255,fontStyle:'bold'},
+        alternateRowStyles:{fillColor:[248,250,252]},
+    });
+    groups.forEach(group => {
+        const startY = (doc.lastAutoTable?.finalY || 0) + 18;
+        if(startY > 690) {
+            doc.addPage();
+            addCollectionPdfPageHeader(doc, 'Payment Breakup');
+        }
+        doc.setTextColor(15,23,42);
+        doc.setFontSize(11);
+        doc.text(`${group.party} - ${collectionMoney(group.amount).replace('Rs ', 'Rs. ')} (${group.count} payments)`,14,(doc.lastAutoTable?.finalY || 50) + 18);
+        doc.autoTable({
+            startY:(doc.lastAutoTable?.finalY || 50) + 24,
+            head:[['Date','Mode','Reference','Bank','Amount']],
+            body:(group.payments || []).map(payment => [payment.display_date || '-', payment.mode || '-', payment.reference || '-', payment.bank || '-', collectionMoney(payment.amount).replace('Rs ', 'Rs. ')]),
+            theme:'striped',
+            styles:{fontSize:7,cellPadding:3},
+            headStyles:{fillColor:[14,165,233],textColor:255},
+            foot:[['','','','Party Total',collectionMoney(group.amount).replace('Rs ', 'Rs. ')]],
+            footStyles:{fillColor:[236,254,255],textColor:[15,23,42],fontStyle:'bold'},
+        });
+    });
+    const pages = doc.internal.getNumberOfPages();
+    for(let i=1;i<=pages;i++){
+        doc.setPage(i);
+        doc.setFontSize(7);
+        doc.setTextColor(100);
+        doc.text(`Page ${i} of ${pages}`, pageWidth - 14, doc.internal.pageSize.getHeight() - 8, {align:'right'});
+    }
+    doc.save('total-collection-party-wise.pdf');
+});
 $(document).on('click','.collection-payment-link',function(){
     const groups = $('#collectionModal').data('partyGroups') || [];
     const group = groups[Number($(this).data('party-index'))];
