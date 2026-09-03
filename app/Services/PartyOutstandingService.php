@@ -262,7 +262,8 @@ class PartyOutstandingService
                             ->whereDate('payment_date', '<=', $toDate);
                     })
                     ->sum('amount');
-                $due = max(0, $effectiveOpening - $paid);
+                $openingTotal = $effectiveOpening + $paid;
+                $due = $effectiveOpening;
                 $date = $party->opening_balance_date ?: now();
 
                 return [
@@ -272,9 +273,9 @@ class PartyOutstandingService
                     'invoice' => 'Opening Balance',
                     'date' => $date,
                     'age' => (int) floor($date->copy()->startOfDay()->diffInDays($asOf)),
-                    'total' => $effectiveOpening,
+                    'total' => $openingTotal,
                     'returned' => 0.0,
-                    'effective_total' => $effectiveOpening,
+                    'effective_total' => $openingTotal,
                     'paid' => $paid,
                     'due' => $due,
                     'bill_id' => null,

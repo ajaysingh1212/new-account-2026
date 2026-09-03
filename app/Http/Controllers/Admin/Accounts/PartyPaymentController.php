@@ -68,7 +68,7 @@ class PartyPaymentController extends Controller
         $advanceDirection = $data['payment_type'] === 'payment_in' ? 'in' : 'out';
         $availableAdvances = $advances->availableForParty($party->id, $advanceDirection);
 
-        $effectiveOpeningBalance = max(0, (float) $party->opening_balance);
+        $remainingOpeningBalance = max(0, (float) $party->opening_balance);
 
         $openingBalanceAvailable = ($data['payment_type'] === 'payment_in' && $party->opening_balance_type === 'receivable')
             || ($data['payment_type'] === 'payment_out' && $party->opening_balance_type === 'payable');
@@ -80,7 +80,7 @@ class PartyPaymentController extends Controller
             ->latest()
             ->get();
         $openingPaid = (float) $openingHistory->sum('amount');
-        $openingTotal = $openingBalanceAvailable ? $effectiveOpeningBalance : 0;
+        $openingTotal = $openingBalanceAvailable ? $remainingOpeningBalance + $openingPaid : 0;
 
         return response()->json([
             'bills' => $bills,
@@ -89,7 +89,7 @@ class PartyPaymentController extends Controller
                 'type' => $party->opening_balance_type,
                 'total' => round($openingTotal, 2),
                 'paid' => round($openingPaid, 2),
-                'remaining' => round(max(0, $openingTotal - $openingPaid), 2),
+                'remaining' => round($openingBalanceAvailable ? $remainingOpeningBalance : 0, 2),
                 'date' => $party->opening_balance_date?->format('d M Y'),
                 'history' => $openingHistory->map(fn($allocation) => [
                     'date' => $allocation->payment?->payment_date?->format('d M Y'),
@@ -286,7 +286,7 @@ class PartyPaymentController extends Controller
                 ->whereHas('payment', fn($query) => $query->where('payment_type', $payment->payment_type))
                 ->lockForUpdate()
                 ->sum('amount');
-            $remaining = max(0, $effectiveOpening - $alreadyPaid);
+            $remaining = $effectiveOpening;
             $amount = round((float) ($data['opening_balance_amount'] ?? 0), 2);
             abort_if($amount <= 0, 422, 'Enter opening balance payment amount.');
             abort_if($amount > $remaining, 422, 'Aap opening balance se jyada payment nahi kar sakte.');
@@ -301,8 +301,12 @@ class PartyPaymentController extends Controller
                 'bill_id' => $party->id,
                 'bill_no' => 'Opening Balance',
                 'bill_date' => $party->opening_balance_date,
-                'bill_total' => $effectiveOpening,
+                'bill_total' => $effectiveOpening + $alreadyPaid,
                 'amount' => $amount,
+            ]);
+            $party->update([
+                'opening_balance' => max(0, round($effectiveOpening - $amount, 2)),
+                'updated_by' => auth()->id(),
             ]);
         } else {
             foreach ($allocations as $row) {
@@ -518,6 +522,15 @@ class PartyPaymentController extends Controller
             $transaction->delete();
         }
 
+        $openingAmount = (float) $payment->allocations()
+            ->where('bill_type', 'opening_balance')
+            ->sum('amount');
+        if ($openingAmount > 0) {
+            $party->update([
+                'opening_balance' => round((float) $party->opening_balance + $openingAmount, 2),
+                'updated_by' => auth()->id(),
+            ]);
+        }
         PartyPaymentAllocation::where('party_payment_id', $payment->id)->delete();
         ChequeLeaf::where('party_payment_id', $payment->id)->update([
             'party_payment_id' => null,
