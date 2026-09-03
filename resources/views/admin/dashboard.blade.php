@@ -394,142 +394,46 @@
     $collectionDistricts = $collectionRows->pluck('district')->filter(fn($v) => $v !== '-')->unique()->sort()->values();
     $collectionCities = $collectionRows->pluck('city')->filter(fn($v) => $v !== '-')->unique()->sort()->values();
 @endphp
-<!-- Total Collection Modal — link collection-modal.css separately -->
-<div class="modal fade collection-pro-modal" id="collectionModal" tabindex="-1" role="dialog" aria-hidden="true">
-  <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
-    <div class="modal-content">
-
-      <!-- Header -->
-      <div class="modal-header">
-        <div>
-          <h5 class="modal-title mb-0"><i class="fas fa-wallet mr-2"></i>Total Collection</h5>
-          <small>Payment In from {{ $from }} to {{ $to }}</small>
+<div class="modal fade pro-modal" id="collectionModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document"><div class="modal-content">
+        <div class="modal-header"><div><h5 class="modal-title mb-0">Total Collection</h5><small>Payment In from {{ $from }} to {{ $to }}</small></div><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+        <div class="modal-body">
+            <div class="segment-filter-grid mb-3">
+                <select class="form-control collection-filter" data-filter="party"><option value="">All Parties</option>@foreach($collectionParties as $party)<option value="{{ $party }}">{{ $party }}</option>@endforeach</select>
+                <select class="form-control collection-filter" data-filter="state"><option value="">All States</option>@foreach($collectionStates as $state)<option value="{{ $state }}">{{ $state }}</option>@endforeach</select>
+                <select class="form-control collection-filter" data-filter="district"><option value="">All Districts</option>@foreach($collectionDistricts as $district)<option value="{{ $district }}">{{ $district }}</option>@endforeach</select>
+                <select class="form-control collection-filter" data-filter="city"><option value="">All Cities</option>@foreach($collectionCities as $city)<option value="{{ $city }}">{{ $city }}</option>@endforeach</select>
+                <input type="date" class="form-control collection-date" id="collectionFrom" value="{{ $from }}">
+                <input type="date" class="form-control collection-date" id="collectionTo" value="{{ $to }}">
+            </div>
+            <div class="row mb-3">
+                <div class="col-md-4"><div class="modal-metric"><span>Filtered Collection</span><b id="collectionTotal">Rs {{ number_format($collectionRows->sum('amount'),2) }}</b></div></div>
+                <div class="col-md-4"><div class="modal-metric"><span>Payments</span><b id="collectionCount">{{ number_format($collectionRows->count()) }}</b></div></div>
+                <div class="col-md-4"><div class="modal-metric"><span>Parties</span><b id="collectionPartyCount">{{ number_format($collectionRows->pluck('party')->unique()->count()) }}</b></div></div>
+            </div>
+            <div class="sales-viz-shell mb-3" id="collectionVizShell">
+                <div class="d-flex justify-content-between align-items-center flex-wrap mb-3" style="gap:10px">
+                    <div>
+                        <div class="segment-total-label">Party Wise Total Collection</div>
+                        <div class="segment-total-value" id="collectionChartTotal">Rs {{ number_format($collectionRows->sum('amount'),2) }}</div>
+                    </div>
+                    <div class="sales-viz-tabs">
+                        <button type="button" class="sales-viz-tab active text-primary" data-sales-viz="pie"><i class="fas fa-chart-pie mr-1"></i>Pie</button>
+                        <button type="button" class="sales-viz-tab text-primary" data-sales-viz="bar"><i class="fas fa-chart-bar mr-1"></i>Bar</button>
+                        <button type="button" class="sales-viz-tab text-primary" data-sales-viz="wave"><i class="fas fa-water mr-1"></i>Wave</button>
+                        <button type="button" class="sales-viz-tab text-primary" data-sales-viz="candle"><i class="fas fa-chart-simple mr-1"></i>Candle</button>
+                        <button type="button" class="sales-viz-tab text-primary" data-sales-viz="content"><i class="fas fa-list mr-1"></i>Content</button>
+                    </div>
+                </div>
+                <div class="sales-viz-pane active" data-sales-pane="pie"><div class="category-pie-wrap"><div class="category-pie segment-pie" id="collectionPie" style="--pie-gradient:conic-gradient(#e2e8f0 0 100%)"><div class="category-pie-center text-white" id="collectionPieCenter">0%<br><span style="font-size:11px;color:#64748b">Collection</span></div></div><div class="category-legend" id="collectionLegend"></div></div></div>
+                <div class="sales-viz-pane" data-sales-pane="bar"><div class="bar-stage segment-bars" id="collectionBar"></div></div>
+                <div class="sales-viz-pane" data-sales-pane="wave"><svg class="wave-pro" viewBox="0 0 760 330" preserveAspectRatio="none" id="collectionWave">@foreach(range(0,4) as $line)<line x1="25" x2="735" y1="{{ 55 + ($line * 52) }}" y2="{{ 55 + ($line * 52) }}" stroke="#dbeafe"/>@endforeach<path class="segment-wave-path" d="M 35,285" stroke="#38bdf8"/><g id="collectionWavePoints"></g></svg></div>
+                <div class="sales-viz-pane" data-sales-pane="candle"><div class="candle-stage" id="collectionCandle"></div></div>
+                <div class="sales-viz-pane" data-sales-pane="content"><div id="collectionContent"></div></div>
+            </div>
+            <div class="modal-table-wrap"><table class="table mb-0"><thead><tr><th>Party</th><th>Location</th><th>Payments</th><th>Last Payment</th><th>Modes / Banks</th><th class="text-right">Total Amount</th></tr></thead><tbody id="collectionBody"></tbody></table></div>
         </div>
-        <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
-      </div>
-
-      <div class="modal-body">
-
-        <!-- Filters -->
-        <div class="cp-filter-grid">
-          <select class="form-control collection-filter" data-filter="party">
-            <option value="">All Parties</option>
-            @foreach($collectionParties as $party)<option value="{{ $party }}">{{ $party }}</option>@endforeach
-          </select>
-          <select class="form-control collection-filter" data-filter="state">
-            <option value="">All States</option>
-            @foreach($collectionStates as $state)<option value="{{ $state }}">{{ $state }}</option>@endforeach
-          </select>
-          <select class="form-control collection-filter" data-filter="district">
-            <option value="">All Districts</option>
-            @foreach($collectionDistricts as $district)<option value="{{ $district }}">{{ $district }}</option>@endforeach
-          </select>
-          <select class="form-control collection-filter" data-filter="city">
-            <option value="">All Cities</option>
-            @foreach($collectionCities as $city)<option value="{{ $city }}">{{ $city }}</option>@endforeach
-          </select>
-          <input type="date" class="form-control collection-date" id="collectionFrom" value="{{ $from }}">
-          <input type="date" class="form-control collection-date" id="collectionTo" value="{{ $to }}">
-        </div>
-
-        <!-- KPI cards -->
-        <div class="cp-metric-row">
-          <div class="cp-metric-card cp-accent-violet">
-            <div class="cp-metric-icon"><i class="fas fa-coins"></i></div>
-            <div>
-              <div class="cp-metric-label">Filtered Collection</div>
-              <div class="cp-metric-value" id="collectionTotal">Rs {{ number_format($collectionRows->sum('amount'),2) }}</div>
-            </div>
-          </div>
-          <div class="cp-metric-card cp-accent-cyan">
-            <div class="cp-metric-icon"><i class="fas fa-receipt"></i></div>
-            <div>
-              <div class="cp-metric-label">Payments</div>
-              <div class="cp-metric-value" id="collectionCount">{{ number_format($collectionRows->count()) }}</div>
-            </div>
-          </div>
-          <div class="cp-metric-card cp-accent-emerald">
-            <div class="cp-metric-icon"><i class="fas fa-users"></i></div>
-            <div>
-              <div class="cp-metric-label">Parties</div>
-              <div class="cp-metric-value" id="collectionPartyCount">{{ number_format($collectionRows->pluck('party')->unique()->count()) }}</div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Visualization shell -->
-        <div class="cp-viz-shell" id="collectionVizShell">
-          <div class="cp-viz-top">
-            <div>
-              <div class="cp-viz-total-label">Party Wise Total Collection</div>
-              <div class="cp-viz-total-value" id="collectionChartTotal">Rs {{ number_format($collectionRows->sum('amount'),2) }}</div>
-            </div>
-            <div class="cp-viz-tabs">
-              <button type="button" class="cp-viz-tab active" data-sales-viz="pie"><i class="fas fa-chart-pie"></i>Pie</button>
-              <button type="button" class="cp-viz-tab" data-sales-viz="bar"><i class="fas fa-chart-bar"></i>Bar</button>
-              <button type="button" class="cp-viz-tab" data-sales-viz="wave"><i class="fas fa-water"></i>Wave</button>
-              <button type="button" class="cp-viz-tab" data-sales-viz="candle"><i class="fas fa-chart-simple"></i>Candle</button>
-              <button type="button" class="cp-viz-tab" data-sales-viz="content"><i class="fas fa-list"></i>Content</button>
-            </div>
-          </div>
-
-          <!-- Pie pane -->
-          <div class="cp-viz-pane active" data-sales-pane="pie">
-            <div class="cp-pie-wrap">
-              <div class="cp-pie" id="collectionPie" style="--pie-gradient:conic-gradient(#334155 0 100%)">
-                <div class="cp-pie-center" id="collectionPieCenter">0%<span>Collection</span></div>
-              </div>
-              <div class="cp-legend" id="collectionLegend"></div>
-            </div>
-          </div>
-
-          <!-- Bar pane -->
-          <div class="cp-viz-pane" data-sales-pane="bar">
-            <div class="cp-bar-stage" id="collectionBar"></div>
-          </div>
-
-          <!-- Wave pane -->
-          <div class="cp-viz-pane" data-sales-pane="wave">
-            <svg class="cp-wave" viewBox="0 0 760 330" preserveAspectRatio="none" id="collectionWave">
-              @foreach(range(0,4) as $line)
-                <line x1="25" x2="735" y1="{{ 55 + ($line * 52) }}" y2="{{ 55 + ($line * 52) }}"/>
-              @endforeach
-              <path class="segment-wave-path" d="M 35,285"/>
-              <g id="collectionWavePoints"></g>
-            </svg>
-          </div>
-
-          <!-- Candle pane -->
-          <div class="cp-viz-pane" data-sales-pane="candle">
-            <div class="cp-candle-stage" id="collectionCandle"></div>
-          </div>
-
-          <!-- Content pane -->
-          <div class="cp-viz-pane" data-sales-pane="content">
-            <div id="collectionContent"></div>
-          </div>
-        </div>
-
-        <!-- Data table -->
-        <div class="cp-table-wrap">
-          <table class="table cp-table mb-0">
-            <thead>
-              <tr>
-                <th>Party</th>
-                <th>Location</th>
-                <th>Payments</th>
-                <th>Last Payment</th>
-                <th>Modes / Banks</th>
-                <th class="text-right">Total Amount</th>
-              </tr>
-            </thead>
-            <tbody id="collectionBody"></tbody>
-          </table>
-        </div>
-
-      </div>
-    </div>
-  </div>
+    </div></div>
 </div>
 @endcan
 
