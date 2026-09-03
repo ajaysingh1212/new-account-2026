@@ -232,7 +232,7 @@ const LOCATION_DATA = {
             'Gopalganj': '841428', 'Sheohar': '843329', 'Madhubani': '847211',
             'Vaishali': '844128', 'Nalanda': '803101', 'Rohtas': '821115',
             'Kaimur': '821101', 'Lakhisarai': '811311', 'Sheikhpura': '811105',
-            'Khagaria': '851204', 'Jamui': '811307', 'Banka': '813102'
+            'Khagaria': '851204', 'Jamui': '811307', 'Banka': '813102','Samastipur': '848101', 'Arwal': '804402', 'Aurangabad (Bihar)': '824101'
         },
         'Chhattisgarh': {
             'Raipur': '492001', 'Bhilai': '490001', 'Bilaspur': '495001',
