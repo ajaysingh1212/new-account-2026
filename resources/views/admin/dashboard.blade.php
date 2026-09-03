@@ -411,7 +411,27 @@
                 <div class="col-md-4"><div class="modal-metric"><span>Payments</span><b id="collectionCount">{{ number_format($collectionRows->count()) }}</b></div></div>
                 <div class="col-md-4"><div class="modal-metric"><span>Parties</span><b id="collectionPartyCount">{{ number_format($collectionRows->pluck('party')->unique()->count()) }}</b></div></div>
             </div>
-            <div class="modal-table-wrap"><table class="table mb-0"><thead><tr><th>Date</th><th>Party</th><th>Location</th><th>Mode</th><th>Reference</th><th>Bank</th><th class="text-right">Amount</th></tr></thead><tbody id="collectionBody"></tbody></table></div>
+            <div class="sales-viz-shell mb-3" id="collectionVizShell">
+                <div class="d-flex justify-content-between align-items-center flex-wrap mb-3" style="gap:10px">
+                    <div>
+                        <div class="segment-total-label">Party Wise Total Collection</div>
+                        <div class="segment-total-value" id="collectionChartTotal">Rs {{ number_format($collectionRows->sum('amount'),2) }}</div>
+                    </div>
+                    <div class="sales-viz-tabs">
+                        <button type="button" class="sales-viz-tab active text-primary" data-sales-viz="pie"><i class="fas fa-chart-pie mr-1"></i>Pie</button>
+                        <button type="button" class="sales-viz-tab text-primary" data-sales-viz="bar"><i class="fas fa-chart-bar mr-1"></i>Bar</button>
+                        <button type="button" class="sales-viz-tab text-primary" data-sales-viz="wave"><i class="fas fa-water mr-1"></i>Wave</button>
+                        <button type="button" class="sales-viz-tab text-primary" data-sales-viz="candle"><i class="fas fa-chart-simple mr-1"></i>Candle</button>
+                        <button type="button" class="sales-viz-tab text-primary" data-sales-viz="content"><i class="fas fa-list mr-1"></i>Content</button>
+                    </div>
+                </div>
+                <div class="sales-viz-pane active" data-sales-pane="pie"><div class="category-pie-wrap"><div class="category-pie segment-pie" id="collectionPie" style="--pie-gradient:conic-gradient(#e2e8f0 0 100%)"><div class="category-pie-center text-white" id="collectionPieCenter">0%<br><span style="font-size:11px;color:#64748b">Collection</span></div></div><div class="category-legend" id="collectionLegend"></div></div></div>
+                <div class="sales-viz-pane" data-sales-pane="bar"><div class="bar-stage segment-bars" id="collectionBar"></div></div>
+                <div class="sales-viz-pane" data-sales-pane="wave"><svg class="wave-pro" viewBox="0 0 760 330" preserveAspectRatio="none" id="collectionWave">@foreach(range(0,4) as $line)<line x1="25" x2="735" y1="{{ 55 + ($line * 52) }}" y2="{{ 55 + ($line * 52) }}" stroke="#dbeafe"/>@endforeach<path class="segment-wave-path" d="M 35,285" stroke="#38bdf8"/><g id="collectionWavePoints"></g></svg></div>
+                <div class="sales-viz-pane" data-sales-pane="candle"><div class="candle-stage" id="collectionCandle"></div></div>
+                <div class="sales-viz-pane" data-sales-pane="content"><div id="collectionContent"></div></div>
+            </div>
+            <div class="modal-table-wrap"><table class="table mb-0"><thead><tr><th>Party</th><th>Location</th><th>Payments</th><th>Last Payment</th><th>Modes / Banks</th><th class="text-right">Total Amount</th></tr></thead><tbody id="collectionBody"></tbody></table></div>
         </div>
     </div></div>
 </div>
@@ -652,6 +672,63 @@ $('#dashboardFilterForm input[type="date"]').on('change', function(){
 });
 const collectionRows = @json(($collectionRows ?? collect())->values());
 function collectionMoney(n){return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
+const collectionPalette = ['#2563eb','#14b8a6','#f59e0b','#ec4899','#7c3aed','#22c55e','#ef4444','#0f766e','#0891b2','#db2777'];
+function escapeCollectionText(value){return $('<div>').text(value || '-').html();}
+function groupCollectionByParty(rows){
+    const grouped = new Map();
+    rows.forEach(row => {
+        const key = row.party || 'Cash / Walk-in';
+        if(!grouped.has(key)){
+            grouped.set(key, {party:key,state:row.state,district:row.district,city:row.city,amount:0,count:0,last_date:row.date,last_display_date:row.display_date,modes:new Set(),banks:new Set()});
+        }
+        const item = grouped.get(key);
+        item.amount += Number(row.amount) || 0;
+        item.count += 1;
+        if(row.date && (!item.last_date || row.date > item.last_date)){
+            item.last_date = row.date;
+            item.last_display_date = row.display_date;
+        }
+        if(row.mode && row.mode !== '-') item.modes.add(row.mode);
+        if(row.bank && row.bank !== '-') item.banks.add(row.bank);
+    });
+    return [...grouped.values()].map((row, index) => ({
+        ...row,
+        color: collectionPalette[index % collectionPalette.length],
+        modes_text: [...row.modes].join(', ') || '-',
+        banks_text: [...row.banks].join(', ') || '-',
+    })).sort((a,b) => b.amount - a.amount);
+}
+function renderCollectionCharts(groups, total){
+    const maxAmount = Math.max(1, ...groups.map(row => Math.abs(row.amount)));
+    let cursor = 0;
+    const pieParts = groups.map(row => {
+        const pct = total > 0 ? Math.abs(row.amount) / total * 100 : 0;
+        const part = `${row.color} ${cursor}% ${Math.min(100, cursor + pct)}%`;
+        cursor += pct;
+        return part;
+    });
+    $('#collectionChartTotal').text(collectionMoney(total));
+    $('#collectionPie').css('--pie-gradient', pieParts.length ? `conic-gradient(${pieParts.join(',')})` : 'conic-gradient(#e2e8f0 0 100%)');
+    $('#collectionPieCenter').html(`${total > 0 ? '100%' : '0%'}<br><span style="font-size:11px;color:#64748b">Collection</span>`);
+    $('#collectionLegend').html(groups.map(row => {
+        const pct = total > 0 ? Math.abs(row.amount) / total * 100 : 0;
+        return `<div class="category-legend-row" style="--c:${row.color};--w:${Math.min(100,pct)}%"><span class="category-dot"></span><div><b>${escapeCollectionText(row.party)}</b><div class="category-meter"><span></span></div></div><div class="text-right"><b>${pct.toFixed(2)}%</b><br><small>${collectionMoney(row.amount)}</small></div></div>`;
+    }).join('') || '<div class="text-muted">No collection found.</div>');
+    $('#collectionBar').html(groups.map(row => `<div class="bar-col" style="--c:${row.color};--h:${Math.max(8, Math.abs(row.amount) / maxAmount * 230)}px"><div class="bar-fill"></div><div class="chart-label">${escapeCollectionText(row.party).slice(0,18)}<br>${collectionMoney(row.amount)}</div></div>`).join(''));
+    $('#collectionCandle').html(groups.map(row => `<div class="candle-stick" style="--c:${row.color};--h:${Math.max(8, Math.abs(row.amount) / maxAmount * 210)}px;--wick:${Math.min(260, Math.max(8, Math.abs(row.amount) / maxAmount * 210) + 46)}px"><div class="candle-line"></div><div class="candle-body"></div><div class="chart-label">${escapeCollectionText(row.party).slice(0,18)}<br>${total > 0 ? (row.amount / total * 100).toFixed(1) : '0.0'}%</div></div>`).join(''));
+    const denominator = Math.max(1, groups.length - 1);
+    const points = groups.map((row,index) => `${35 + (index * (690 / denominator))},${285 - ((Math.abs(row.amount) / maxAmount) * 220)}`);
+    $('#collectionWave .segment-wave-path').attr('d', points.length ? `M ${points.join(' ')}` : 'M 35,285');
+    $('#collectionWavePoints').html(groups.map((row,index) => {
+        const x = 35 + (index * (690 / denominator));
+        const y = 285 - ((Math.abs(row.amount) / maxAmount) * 220);
+        return `<g><circle cx="${x}" cy="${y}" r="5" fill="${row.color}"/><text x="${x}" y="315" text-anchor="middle" font-size="11" fill="#475569">${escapeCollectionText(row.party).slice(0,10)}</text></g>`;
+    }).join(''));
+    $('#collectionContent').html(groups.map(row => `<div class="content-sales-row" style="--c:${row.color};--soft:${row.color}22"><div class="segment-icon"><i class="fas fa-user-tie"></i></div><div><b>${escapeCollectionText(row.party)}</b><br><small>${row.count.toLocaleString('en-IN')} payments | ${escapeCollectionText(row.city)}, ${escapeCollectionText(row.district)}, ${escapeCollectionText(row.state)}</small></div><strong>${collectionMoney(row.amount)}</strong></div>`).join('') || '<div class="text-muted">No collection found.</div>');
+    if (typeof replaySegmentAnimations === 'function') {
+        replaySegmentAnimations($('#collectionModal'));
+    }
+}
 function renderCollectionRows(){
     if(!$('#collectionBody').length) return;
     const filters = {};
@@ -664,20 +741,21 @@ function renderCollectionRows(){
         return Object.keys(filters).every(key => !filters[key] || row[key] === filters[key]);
     });
     const total = rows.reduce((sum,row) => sum + (Number(row.amount)||0), 0);
+    const groups = groupCollectionByParty(rows);
     $('#collectionTotal').text(collectionMoney(total));
     $('#collectionCount').text(rows.length.toLocaleString('en-IN'));
-    $('#collectionPartyCount').text(new Set(rows.map(row => row.party)).size.toLocaleString('en-IN'));
-    $('#collectionBody').html(rows.map(row => `
+    $('#collectionPartyCount').text(groups.length.toLocaleString('en-IN'));
+    renderCollectionCharts(groups, total);
+    $('#collectionBody').html(groups.map(row => `
         <tr>
-            <td>${row.display_date || '-'}</td>
             <td><b>${row.party || '-'}</b></td>
             <td>${row.city || '-'}<br><small>${row.district || '-'}, ${row.state || '-'}</small></td>
-            <td>${row.mode || '-'}</td>
-            <td>${row.reference || '-'}</td>
-            <td>${row.bank || '-'}</td>
+            <td>${row.count.toLocaleString('en-IN')}</td>
+            <td>${row.last_display_date || '-'}</td>
+            <td>${row.modes_text}<br><small>${row.banks_text}</small></td>
             <td class="text-right"><b>${collectionMoney(row.amount)}</b></td>
         </tr>
-    `).join('') || '<tr><td colspan="7" class="text-center text-muted py-4">No collection found for selected filters.</td></tr>');
+    `).join('') || '<tr><td colspan="6" class="text-center text-muted py-4">No collection found for selected filters.</td></tr>');
 }
 $('.collection-filter,.collection-date').on('change', renderCollectionRows);
 $('#collectionModal').on('shown.bs.modal', renderCollectionRows);
