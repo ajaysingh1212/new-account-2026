@@ -30,6 +30,15 @@
 .ops-card{background:#fff;border:1px solid #e7edf5;border-radius:14px;padding:16px;height:100%;box-shadow:0 10px 26px rgba(2,6,23,.06)}.ops-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.ops-kicker{font-size:11px;text-transform:uppercase;font-weight:850;color:#64748b;letter-spacing:.6px}.ops-amount{font-size:24px;font-weight:900;color:#0f172a}.product-row{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #eef2f7;padding:10px 0}.product-row:first-child{border-top:0}.product-name{font-weight:800;color:#172033}.tag-hot{display:inline-flex;align-items:center;gap:5px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;text-transform:uppercase}.tag-low{display:inline-flex;align-items:center;gap:5px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;text-transform:uppercase}.blink-alert{animation:blinkAlert 1s ease-in-out infinite}@keyframes blinkAlert{0%,100%{box-shadow:0 0 0 rgba(220,38,38,0)}50%{box-shadow:0 0 0 4px rgba(220,38,38,.16)}}.ageing-table th{font-size:11px;text-transform:uppercase;color:#64748b;border-top:0}.ageing-table td{vertical-align:middle}.view-detail-btn{border-radius:999px;font-weight:800}.due-action{white-space:nowrap}.modal-metric{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px}.modal-metric span{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:800}.modal-metric b{display:block;font-size:16px;color:#0f172a}
 .dash-card-button{border:0;text-align:left;width:100%;height:100%}.pro-modal .modal-content{border:0;border-radius:18px;overflow:hidden;box-shadow:0 26px 80px rgba(15,23,42,.28)}.pro-modal .modal-header{background:linear-gradient(135deg,#101827,#0f766e);color:#fff;border:0;padding:20px 24px}.pro-modal .modal-body{background:#f8fafc}.segment-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.segment-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;box-shadow:0 10px 24px rgba(15,23,42,.07)}.segment-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.segment-icon{width:40px;height:40px;border-radius:12px;background:#e0f2fe;color:#0369a1;display:flex;align-items:center;justify-content:center}.modal-table-wrap{max-height:340px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff}.quick-drawer-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.36);z-index:1040;display:none}.quick-drawer{position:fixed;top:0;right:-420px;width:min(420px,100vw);height:100vh;background:#fff;z-index:1041;box-shadow:-24px 0 60px rgba(15,23,42,.22);transition:right .24s ease;display:flex;flex-direction:column}.quick-drawer.open{right:0}.quick-drawer-backdrop.open{display:block}.quick-drawer-head{padding:20px 22px;background:#0f172a;color:#fff;display:flex;justify-content:space-between;align-items:center}.quick-drawer-body{padding:18px;overflow:auto}.quick-section-title{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:900;letter-spacing:.6px;margin:16px 0 8px}.quick-side-link{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #e5e7eb;border-radius:10px;color:#0f172a;font-weight:800;margin-bottom:8px}.quick-side-link i{width:24px;color:#0f766e}.quick-open-btn{border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);color:#fff;border-radius:10px;padding:10px 14px;font-weight:800}
 .cheque-preview-wrap{width:100%;max-width:720px;container-type:inline-size}.cheque-preview{background:#afece8;color:#16233c;border-radius:10px;position:relative;padding:clamp(14px,3.6cqi,26px) clamp(14px,4.4cqi,32px) clamp(10px,2.8cqi,20px);overflow:hidden;box-shadow:0 18px 40px rgba(15,23,42,.18)}.cheque-preview:before{content:"";position:absolute;inset:0;opacity:.10;background-image:repeating-radial-gradient(circle at 0% 50%,transparent 0 6px,#3c6f60 6px 7px,transparent 7px 13px),repeating-radial-gradient(circle at 100% 50%,transparent 0 6px,#3c6f60 6px 7px,transparent 7px 13px),repeating-radial-gradient(circle at 50% -20%,transparent 0 9px,#a4772c 9px 10px,transparent 10px 19px);background-size:120px 120px,120px 120px,240px 240px}.cheque-preview:after{content:"CHEQUE";position:absolute;top:42%;left:50%;transform:translate(-50%,-50%) rotate(-11deg);font-family:serif;font-size:clamp(26px,9cqi,64px);letter-spacing:.2em;color:#8a2f2f;opacity:.06;white-space:nowrap}.cheque-complete-stamp{position:absolute;right:28px;top:72px;z-index:2;transform:rotate(-12deg);border:3px solid #15803d;color:#15803d;background:rgba(255,255,255,.38);font-weight:900;letter-spacing:.12em;padding:8px 14px;border-radius:6px}.cheque-preview .bank-row{display:flex;justify-content:space-between;gap:16px;position:relative;z-index:1}.cheque-preview .bank-mark{display:flex;gap:12px;align-items:center}.cheque-preview .seal{width:46px;height:46px;border-radius:50%;border:1.6px solid #a4772c;display:flex;align-items:center;justify-content:center;font-family:serif;font-weight:700;color:#a4772c}.cheque-preview .bank-name{font-family:serif;font-weight:800;font-size:23px;line-height:1}.cheque-preview .bank-sub,.cheque-preview label,.cheque-preview .lbl,.cheque-preview .micr{font-family:monospace;text-transform:uppercase;color:#2b3b58;font-size:10px;letter-spacing:.08em}.cheque-preview .cheque-no{text-align:right;font-family:monospace}.cheque-preview .cheque-no .val{font-size:17px;font-weight:700;color:#8a2f2f}.cheque-preview .line{border-bottom:1px solid #16233c;min-height:28px;font-family:serif;font-style:italic;font-size:17px;color:#16233c;padding:3px 2px}.cheque-preview .row-date{display:flex;justify-content:flex-end;gap:10px;align-items:end;margin-top:6px;position:relative;z-index:1}.cheque-preview .row-pay,.cheque-preview .row-words{display:flex;align-items:end;gap:14px;margin-top:20px;position:relative;z-index:1}.cheque-preview .row-pay .line,.cheque-preview .row-words .line{flex:1}.cheque-preview .amount-box{border:1.4px solid #16233c;padding:6px 10px;background:rgba(255,255,255,.35);font-family:monospace;font-weight:700;color:#8a2f2f}.cheque-preview .row-bottom{display:flex;justify-content:space-between;gap:24px;margin-top:30px;position:relative;z-index:1}.cheque-preview .memo-block,.cheque-preview .sig-block{flex:1}.cheque-preview .micr{margin-top:20px;padding-top:12px;border-top:1px dashed rgba(22,35,60,.25);display:flex;justify-content:center;gap:10px;position:relative;z-index:1;flex-wrap:wrap}
+#collectionVizShell{background:linear-gradient(135deg,#ecfeff,#f0fdf4 52%,#fff7ed);border:1px solid #bae6fd;color:#0f172a;box-shadow:0 16px 36px rgba(14,116,144,.12)}
+#collectionVizShell .sales-viz-pane{min-height:330px}
+#collectionVizShell .category-pie-wrap{grid-template-columns:1fr}
+#collectionVizShell .category-pie:after{background:#f8fafc}
+#collectionVizShell .sales-viz-tab{background:rgba(255,255,255,.72);border-color:#bfdbfe;color:#0f172a}
+#collectionVizShell .sales-viz-tab.active{background:#0f766e;color:#fff;border-color:#0f766e}
+#collectionVizShell .bar-stage,#collectionVizShell .candle-stage,#collectionVizShell .wave-pro{background:rgba(255,255,255,.78);border:1px solid #dbeafe}
+.collection-payment-link{border:0;background:#e0f2fe;color:#075985;border-radius:999px;padding:5px 10px;font-weight:900;min-width:42px}
+.collection-payment-link:hover{background:#0ea5e9;color:#fff}
 </style>
 @include('admin.partials.segment-viz-styles')
 @endpush
@@ -425,7 +434,7 @@
                         <button type="button" class="sales-viz-tab text-primary" data-sales-viz="content"><i class="fas fa-list mr-1"></i>Content</button>
                     </div>
                 </div>
-                <div class="sales-viz-pane active" data-sales-pane="pie"><div class="category-pie-wrap"><div class="category-pie segment-pie" id="collectionPie" style="--pie-gradient:conic-gradient(#e2e8f0 0 100%)"><div class="category-pie-center text-white" id="collectionPieCenter">0%<br><span style="font-size:11px;color:#64748b">Collection</span></div></div><div class="category-legend" id="collectionLegend"></div></div></div>
+                <div class="sales-viz-pane active" data-sales-pane="pie"><div class="category-pie-wrap"><div class="category-pie segment-pie" id="collectionPie" style="--pie-gradient:conic-gradient(#e2e8f0 0 100%)"><div class="category-pie-center text-white" id="collectionPieCenter">0%<br><span style="font-size:11px;color:#64748b">Collection</span></div></div></div></div>
                 <div class="sales-viz-pane" data-sales-pane="bar"><div class="bar-stage segment-bars" id="collectionBar"></div></div>
                 <div class="sales-viz-pane" data-sales-pane="wave"><svg class="wave-pro" viewBox="0 0 760 330" preserveAspectRatio="none" id="collectionWave">@foreach(range(0,4) as $line)<line x1="25" x2="735" y1="{{ 55 + ($line * 52) }}" y2="{{ 55 + ($line * 52) }}" stroke="#dbeafe"/>@endforeach<path class="segment-wave-path" d="M 35,285" stroke="#38bdf8"/><g id="collectionWavePoints"></g></svg></div>
                 <div class="sales-viz-pane" data-sales-pane="candle"><div class="candle-stage" id="collectionCandle"></div></div>
@@ -436,6 +445,30 @@
     </div></div>
 </div>
 @endcan
+
+<div class="modal fade pro-modal" id="collectionPaymentDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div><h5 class="modal-title mb-0" id="collectionPaymentDetailTitle">Payment Details</h5><small id="collectionPaymentDetailSub">Selected party collection entries</small></div>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-4"><div class="modal-metric"><span>Total Amount</span><b id="collectionPaymentDetailTotal">Rs 0.00</b></div></div>
+                    <div class="col-md-4"><div class="modal-metric"><span>Payments</span><b id="collectionPaymentDetailCount">0</b></div></div>
+                    <div class="col-md-4"><div class="modal-metric"><span>Last Payment</span><b id="collectionPaymentDetailLast">-</b></div></div>
+                </div>
+                <div class="modal-table-wrap">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Date</th><th>Mode</th><th>Reference</th><th>Bank</th><th class="text-right">Amount</th></tr></thead>
+                        <tbody id="collectionPaymentDetailBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 
 <div class="modal fade pro-modal" id="salesDueModal" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
@@ -679,11 +712,12 @@ function groupCollectionByParty(rows){
     rows.forEach(row => {
         const key = row.party || 'Cash / Walk-in';
         if(!grouped.has(key)){
-            grouped.set(key, {party:key,state:row.state,district:row.district,city:row.city,amount:0,count:0,last_date:row.date,last_display_date:row.display_date,modes:new Set(),banks:new Set()});
+            grouped.set(key, {party:key,state:row.state,district:row.district,city:row.city,amount:0,count:0,last_date:row.date,last_display_date:row.display_date,modes:new Set(),banks:new Set(),payments:[]});
         }
         const item = grouped.get(key);
         item.amount += Number(row.amount) || 0;
         item.count += 1;
+        item.payments.push(row);
         if(row.date && (!item.last_date || row.date > item.last_date)){
             item.last_date = row.date;
             item.last_display_date = row.display_date;
@@ -696,6 +730,7 @@ function groupCollectionByParty(rows){
         color: collectionPalette[index % collectionPalette.length],
         modes_text: [...row.modes].join(', ') || '-',
         banks_text: [...row.banks].join(', ') || '-',
+        payments: row.payments.sort((a,b) => String(b.date || '').localeCompare(String(a.date || ''))),
     })).sort((a,b) => b.amount - a.amount);
 }
 function renderCollectionCharts(groups, total){
@@ -710,10 +745,6 @@ function renderCollectionCharts(groups, total){
     $('#collectionChartTotal').text(collectionMoney(total));
     $('#collectionPie').css('--pie-gradient', pieParts.length ? `conic-gradient(${pieParts.join(',')})` : 'conic-gradient(#e2e8f0 0 100%)');
     $('#collectionPieCenter').html(`${total > 0 ? '100%' : '0%'}<br><span style="font-size:11px;color:#64748b">Collection</span>`);
-    $('#collectionLegend').html(groups.map(row => {
-        const pct = total > 0 ? Math.abs(row.amount) / total * 100 : 0;
-        return `<div class="category-legend-row" style="--c:${row.color};--w:${Math.min(100,pct)}%"><span class="category-dot"></span><div><b>${escapeCollectionText(row.party)}</b><div class="category-meter"><span></span></div></div><div class="text-right"><b>${pct.toFixed(2)}%</b><br><small>${collectionMoney(row.amount)}</small></div></div>`;
-    }).join('') || '<div class="text-muted">No collection found.</div>');
     $('#collectionBar').html(groups.map(row => `<div class="bar-col" style="--c:${row.color};--h:${Math.max(8, Math.abs(row.amount) / maxAmount * 230)}px"><div class="bar-fill"></div><div class="chart-label">${escapeCollectionText(row.party).slice(0,18)}<br>${collectionMoney(row.amount)}</div></div>`).join(''));
     $('#collectionCandle').html(groups.map(row => `<div class="candle-stick" style="--c:${row.color};--h:${Math.max(8, Math.abs(row.amount) / maxAmount * 210)}px;--wick:${Math.min(260, Math.max(8, Math.abs(row.amount) / maxAmount * 210) + 46)}px"><div class="candle-line"></div><div class="candle-body"></div><div class="chart-label">${escapeCollectionText(row.party).slice(0,18)}<br>${total > 0 ? (row.amount / total * 100).toFixed(1) : '0.0'}%</div></div>`).join(''));
     const denominator = Math.max(1, groups.length - 1);
@@ -746,20 +777,41 @@ function renderCollectionRows(){
     $('#collectionCount').text(rows.length.toLocaleString('en-IN'));
     $('#collectionPartyCount').text(groups.length.toLocaleString('en-IN'));
     renderCollectionCharts(groups, total);
-    $('#collectionBody').html(groups.map(row => `
+    $('#collectionBody').html(groups.map((row, index) => `
         <tr>
             <td><b>${row.party || '-'}</b></td>
             <td>${row.city || '-'}<br><small>${row.district || '-'}, ${row.state || '-'}</small></td>
-            <td>${row.count.toLocaleString('en-IN')}</td>
+            <td><button type="button" class="collection-payment-link" data-party-index="${index}">${row.count.toLocaleString('en-IN')}</button></td>
             <td>${row.last_display_date || '-'}</td>
             <td>${row.modes_text}<br><small>${row.banks_text}</small></td>
             <td class="text-right"><b>${collectionMoney(row.amount)}</b></td>
         </tr>
     `).join('') || '<tr><td colspan="6" class="text-center text-muted py-4">No collection found for selected filters.</td></tr>');
+    $('#collectionModal').data('partyGroups', groups);
 }
 $('.collection-filter,.collection-date').on('change', renderCollectionRows);
 $('#collectionModal').on('shown.bs.modal', renderCollectionRows);
 renderCollectionRows();
+$(document).on('click','.collection-payment-link',function(){
+    const groups = $('#collectionModal').data('partyGroups') || [];
+    const group = groups[Number($(this).data('party-index'))];
+    if(!group) return;
+    $('#collectionPaymentDetailTitle').text(`${group.party} Payments`);
+    $('#collectionPaymentDetailSub').text(`${group.city || '-'}, ${group.district || '-'}, ${group.state || '-'}`);
+    $('#collectionPaymentDetailTotal').text(collectionMoney(group.amount));
+    $('#collectionPaymentDetailCount').text(group.count.toLocaleString('en-IN'));
+    $('#collectionPaymentDetailLast').text(group.last_display_date || '-');
+    $('#collectionPaymentDetailBody').html((group.payments || []).map(payment => `
+        <tr>
+            <td>${payment.display_date || '-'}</td>
+            <td>${payment.mode || '-'}</td>
+            <td>${payment.reference || '-'}</td>
+            <td>${payment.bank || '-'}</td>
+            <td class="text-right"><b>${collectionMoney(payment.amount)}</b></td>
+        </tr>
+    `).join('') || '<tr><td colspan="5" class="text-center text-muted py-4">No payment details found.</td></tr>');
+    $('#collectionPaymentDetailModal').modal('show');
+});
 $('#openQuickDrawer').on('click',function(){
     $('#quickDrawer,#quickDrawerBackdrop').addClass('open');
     $('#quickDrawer').attr('aria-hidden','false');
