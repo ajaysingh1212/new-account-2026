@@ -14,6 +14,7 @@ use App\Models\Expense;
 use App\Models\Item;
 use App\Models\Party;
 use App\Models\PartyPaymentAllocation;
+use App\Models\PartyPayment;
 use App\Models\PendingOrder;
 use App\Models\ProductCategory;
 use App\Models\PurchaseBill;
@@ -50,7 +51,7 @@ class DashboardController extends Controller
                 'purchases' => $this->scope(PurchaseBill::query(), $companyId)->whereBetween('billing_date', [$from, $to])->sum('grand_total'),
                 'estimates' => $this->scope(Estimate::query(), $companyId)->whereBetween('estimate_date', [$from, $to])->count(),
                 'estimate_amount' => $this->scope(Estimate::query(), $companyId)->whereBetween('estimate_date', [$from, $to])->sum('grand_total'),
-                'challans' => $this->scope(DeliveryChallan::query(), $companyId)->whereBetween('challan_date', [$from, $to])->count(),
+                'total_collection' => $this->scope(PartyPayment::query(), $companyId)->where('payment_type', 'payment_in')->whereBetween('payment_date', [$from, $to])->sum('total_amount'),
                 'pending_expenses' => $this->scope(Expense::query(), $companyId)->where('status', 'pending_approval')->count(),
             ];
             $recentLogs = AuditLog::with('user','company')
@@ -80,7 +81,7 @@ class DashboardController extends Controller
                 'low_stock' => (clone $itemQuery)->whereNotNull('low_stock_qty')->whereColumn('current_stock', '<=', 'low_stock_qty')->count(),
                 'estimates' => $visibility->scopeForUser(Estimate::query(), Estimate::class)->whereBetween('estimate_date', [$from, $to])->count(),
                 'estimate_amount' => $visibility->scopeForUser(Estimate::query(), Estimate::class)->whereBetween('estimate_date', [$from, $to])->sum('grand_total'),
-                'challans' => $visibility->scopeForUser(DeliveryChallan::query(), DeliveryChallan::class)->whereBetween('challan_date', [$from, $to])->count(),
+                'total_collection' => $visibility->scopeForUser(PartyPayment::query(), PartyPayment::class)->where('payment_type', 'payment_in')->whereBetween('payment_date', [$from, $to])->sum('total_amount'),
                 'pending_expenses' => $visibility->scopeForUser(Expense::query(), Expense::class)->where('status', 'pending_approval')->count(),
             ];
             $recentLogs = AuditLog::with('user')
@@ -217,8 +218,26 @@ class DashboardController extends Controller
             'Cash' => (float) ($stats['cash_balance'] ?? 0),
         ];
         $quickActions = $this->quickActions($user);
+        $collectionRows = ($user->isSuperAdmin()
+                ? $this->scope(PartyPayment::with('party'), $companyId)
+                : $visibility->scopeForUser(PartyPayment::with('party'), PartyPayment::class))
+            ->where('payment_type', 'payment_in')
+            ->whereBetween('payment_date', [$from, $to])
+            ->latest('payment_date')
+            ->get()
+            ->map(fn(PartyPayment $payment) => [
+                'party_id' => $payment->party_id,
+                'party' => $payment->party?->display_name ?: 'Walk-in / No Party',
+                'date' => $payment->payment_date?->format('Y-m-d'),
+                'date_label' => $payment->payment_date?->format('d M Y'),
+                'reference_no' => $payment->reference_no ?: '-',
+                'amount' => (float) $payment->total_amount,
+                'state' => $payment->party?->state ?: '',
+                'district' => $payment->party?->district ?: '',
+                'city' => $payment->party?->city ?: '',
+            ]);
 
-        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','estimateSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals','chequeRows','completedChequeRows'));
+        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','estimateSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals','chequeRows','completedChequeRows','collectionRows'));
     }
 
     private function dateRange(Request $request): array
@@ -231,6 +250,7 @@ class DashboardController extends Controller
             'yesterday' => [$period, $today->copy()->subDay()->toDateString(), $today->copy()->subDay()->toDateString()],
             'week', 'this_week' => ['week', $today->copy()->startOfWeek()->toDateString(), $today->copy()->endOfWeek()->toDateString()],
             'month', 'this_month' => ['month', $today->copy()->startOfMonth()->toDateString(), $today->copy()->endOfMonth()->toDateString()],
+            'last_month' => ['last_month', $today->copy()->subMonthNoOverflow()->startOfMonth()->toDateString(), $today->copy()->subMonthNoOverflow()->endOfMonth()->toDateString()],
             'three_months', 'last_3_months' => ['three_months', $today->copy()->subMonths(3)->startOfDay()->toDateString(), $today->toDateString()],
             'six_months' => [$period, $today->copy()->subMonths(6)->startOfDay()->toDateString(), $today->toDateString()],
             'nine_months' => [$period, $today->copy()->subMonths(9)->startOfDay()->toDateString(), $today->toDateString()],

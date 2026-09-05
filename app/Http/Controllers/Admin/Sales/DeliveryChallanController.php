@@ -112,7 +112,10 @@ class DeliveryChallanController extends Controller
     {
         $visibility->authorizeManage($deliveryChallan);
         abort_if($deliveryChallan->status === 'cancelled', 422, 'Cancelled challan cannot be converted.');
-        abort_if($deliveryChallan->converted_sales_invoice_id, 422, 'Delivery challan already converted to sale.');
+        if ($deliveryChallan->converted_sales_invoice_id) {
+            return redirect()->route('admin.sales.show', $deliveryChallan->converted_sales_invoice_id)
+                ->with('info', 'Delivery challan already converted to this sale.');
+        }
 
         $deliveryChallan->load(['party', 'items.item']);
         $companyId = $deliveryChallan->company_id;
@@ -184,9 +187,8 @@ class DeliveryChallanController extends Controller
             'selected_units.*' => ['nullable','string'],
         ]);
 
-        DB::transaction(function () use ($request, $deliveryChallan, $accounting, $data, $serialUnits) {
+        DB::transaction(function () use ($deliveryChallan, $accounting, $data) {
             $deliveryChallan->load(['items.item.bomMaterials.rawItem', 'party']);
-            $unitPool = $serialUnits->unitPool($deliveryChallan->company_id, 'delivery_challan', $deliveryChallan->id);
 
             $invoice = SalesInvoice::create([
                 'company_id' => $deliveryChallan->company_id,
@@ -208,6 +210,7 @@ class DeliveryChallanController extends Controller
                 'terms' => $data['terms'] ?? $deliveryChallan->terms,
                 'status' => 'posted',
                 'created_by' => auth()->id(),
+                'source_delivery_challan_id' => $deliveryChallan->id,
             ]);
 
             $subtotal = $tax = $lineDiscountTotal = $selectedGrossTotal = $challanGrossTotal = 0;
@@ -218,8 +221,7 @@ class DeliveryChallanController extends Controller
                     continue;
                 }
 
-                $requestedUnits = json_decode($request->selected_units[$i] ?? '[]', true) ?: [];
-                $selectedUnits = $serialUnits->reconcile($requestedUnits, $unitPool[$item->id] ?? [], min((int) $line->quantity, count($requestedUnits)), $serialUnits->isGpsItem($item));
+                $selectedUnits = collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit))->values()->all();
                 $selectedQty = count($selectedUnits);
                 abort_if($selectedQty > (int) $line->quantity, 422, "{$item->name} ke selected units challan quantity se zyada hain.");
                 $challanGrossTotal += (float) $line->line_total;
@@ -259,27 +261,6 @@ class DeliveryChallanController extends Controller
                     'selected_units' => $selectedUnits,
                 ]);
                 $invoiceHasLines = true;
-                $newUnits = collect($selectedUnits)
-                    ->reject(fn($unit) => in_array($unit['key'] ?? null, collect($line->selected_units ?? [])->pluck('key')->all(), true))
-                    ->values()
-                    ->all();
-                if (count($newUnits) > 0) {
-                    $accounting->moveStock($item, [
-                        'party_id' => $invoice->party_id,
-                        'movement_date' => $invoice->billing_date,
-                        'movement_type' => 'delivery_challan_conversion',
-                        'direction' => 'out',
-                        'quantity' => count($newUnits),
-                        'unit_price' => $item->purchase_price,
-                        'total_value' => count($newUnits) * (float) $item->purchase_price,
-                        'reference_type' => SalesInvoice::class,
-                        'reference_id' => $invoice->id,
-                        'reference_no' => $invoice->invoice_no,
-                        'description' => 'Additional stock out while converting delivery challan.',
-                        'movement_units' => $newUnits,
-                    ]);
-                }
-
                 $subtotal += $net;
                 $tax += $lineTax;
                 $lineDiscountTotal += $lineDiscount;
@@ -318,7 +299,7 @@ class DeliveryChallanController extends Controller
             ]);
         });
 
-        return redirect()->route('admin.delivery-challans.show', $deliveryChallan)->with('success', 'Delivery challan converted. Pending items moved to Pending Orders.');
+        return redirect()->route('admin.delivery-challans.show', $deliveryChallan)->with('success', 'Delivery challan converted to sale.');
     }
 
     public function cancel(DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility, AccountingService $accounting)

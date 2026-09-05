@@ -13,7 +13,7 @@ class SalesInvoice extends Model
         'company_id','party_id','cost_center_id','sub_cost_center_id','sale_type','invoice_no',
         'billing_date','po_date','reference_no','phone','billing_address','shipping_address','subtotal',
         'discount_amount','tax_amount','grand_total','total_weight','notes','terms','attachment','status','created_by',
-        'inter_company_transfer','inter_company_target_company_ids',
+        'source_delivery_challan_id','source_pending_order_id','inter_company_transfer','inter_company_target_company_ids',
     ];
 
     protected $casts = [
@@ -28,4 +28,6 @@ class SalesInvoice extends Model
     public function items() { return $this->hasMany(SalesInvoiceItem::class); }
     public function returns() { return $this->hasMany(SalesReturn::class, 'sales_invoice_id'); }
     public function creator() { return $this->belongsTo(User::class, 'created_by'); }
+    public function sourceDeliveryChallan() { return $this->belongsTo(DeliveryChallan::class, 'source_delivery_challan_id'); }
+    public function sourcePendingOrder() { return $this->belongsTo(PendingOrder::class, 'source_pending_order_id'); }
 }

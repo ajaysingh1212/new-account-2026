@@ -241,6 +241,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
     });
     Route::middleware('permission:delivery_challans.view')->group(function () {
         Route::get('pending-orders', [PendingOrderController::class, 'index'])->name('pending-orders.index');
+        Route::post('pending-orders/{pendingOrder}/convert', [PendingOrderController::class, 'convert'])->middleware('permission:delivery_challans.edit')->name('pending-orders.convert');
         Route::get('delivery-challans/{deliveryChallan}/print', [DeliveryChallanController::class, 'print'])->middleware('permission:delivery_challans.print')->name('delivery-challans.print');
         Route::get('delivery-challans/{deliveryChallan}/convert', [DeliveryChallanController::class, 'convertForm'])->middleware('permission:delivery_challans.edit')->name('delivery-challans.convert-form');
         Route::post('delivery-challans/{deliveryChallan}/convert', [DeliveryChallanController::class, 'convert'])->middleware('permission:delivery_challans.edit')->name('delivery-challans.convert');

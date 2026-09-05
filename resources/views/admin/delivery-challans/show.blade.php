@@ -42,10 +42,10 @@
         </div>
     </div>
     <div class="card-body">
-        <p><b>Party:</b> {{ $deliveryChallan->party?->display_name ?: 'Walk-in' }} | <b>Date:</b> {{ $deliveryChallan->challan_date?->format('d M Y') }} | <b>Status:</b> {{ ucfirst($deliveryChallan->status) }}</p>
-        @if($deliveryChallan->convertedInvoice)<p><b>Converted Sale:</b> <a href="{{ route('admin.sales.show', $deliveryChallan->convertedInvoice) }}">{{ $deliveryChallan->convertedInvoice->invoice_no }}</a></p>@endif
+        <p><b>Party:</b> {{ $deliveryChallan->party?->display_name ?: 'Walk-in' }} | <b>Date:</b> {{ $deliveryChallan->challan_date?->format('d M Y') }} | <b>Status:</b> {{ $deliveryChallan->convertedInvoice ? 'Converted to Sales' : 'Not Converted' }}</p>
+        @if($deliveryChallan->convertedInvoice)<p><b>Sales Invoice:</b> <a href="{{ route('admin.sales.show', $deliveryChallan->convertedInvoice) }}">{{ $deliveryChallan->convertedInvoice->invoice_no }}</a></p>@endif
         <p><b>Dispatch:</b> {{ $deliveryChallan->dispatch_through ?: '-' }} | <b>Vehicle:</b> {{ $deliveryChallan->vehicle_no ?: '-' }} | <b>LR:</b> {{ $deliveryChallan->lr_no ?: '-' }}</p>
-        <table class="table"><thead><tr><th>Item</th><th>Qty</th><th>Unit</th><th>Price</th><th>Total</th></tr></thead><tbody>@foreach($deliveryChallan->items as $line)<tr><td>{{ $line->item?->name }}</td><td>{{ $line->quantity }}</td><td>{{ $line->unit }}</td><td>Rs {{ number_format((float)$line->unit_price,2) }}</td><td>Rs {{ number_format((float)$line->line_total,2) }}</td></tr>@endforeach</tbody></table>
+        <table class="table"><thead><tr><th>Item</th><th>Serials</th><th>Qty</th><th>Unit</th><th>Price</th><th>Total</th></tr></thead><tbody>@foreach($deliveryChallan->items as $line)<tr><td>{{ $line->item?->name }}</td><td>@foreach(($line->selected_units ?? []) as $unit)<span class="badge badge-info mr-1">{{ $unit['serial_no'] ?? $unit['vts_sim'] ?? $unit['key'] ?? 'Serial' }}</span>@endforeach</td><td>{{ $line->quantity }}</td><td>{{ $line->unit }}</td><td>Rs {{ number_format((float)$line->unit_price,2) }}</td><td>Rs {{ number_format((float)$line->line_total,2) }}</td></tr>@endforeach</tbody></table>
     </div>
 </div>
 @endsection

@@ -416,7 +416,7 @@ class ProductionBatchController extends Controller
                     'reference_type' => ProductionBatch::class,
                     'reference_id' => $productionBatch->id,
                     'reference_no' => $productionBatch->batch_no,
-                    'movement_units' => $this->productionMovementUnits($productionBatch, $productionBatch->units_data ?? []),
+                    'movement_units' => $this->productionMovementUnits($productionBatch, $this->activeProductionUnits($productionBatch)),
                     'force' => true,
                     'description' => 'Production batch reverted - finished goods removed.',
                 ]);
@@ -443,20 +443,26 @@ class ProductionBatchController extends Controller
             }
 
             $oldValues = $productionBatch->toArray();
+            $revertedAt = now();
             $revertedByName = auth()->user()?->name ?? 'System';
-            $revertedUnits = collect($productionBatch->units_data ?? [])->map(function ($unit) use ($revertedByName) {
+            $revertedUnits = collect($productionBatch->units_data ?? [])->map(function ($unit) use ($revertedAt, $revertedByName) {
                 if (!is_array($unit)) {
                     return $unit;
                 }
 
                 return array_merge($unit, [
-                    'reverted_at' => now()->toDateTimeString(),
+                    'reverted_at' => $revertedAt->toDateTimeString(),
                     'reverted_by' => auth()->id(),
                     'reverted_by_name' => $revertedByName,
                 ]);
             })->values()->all();
 
-            $productionBatch->update(['status' => 'reverted', 'units_data' => $revertedUnits]);
+            $productionBatch->update([
+                'status' => 'reverted',
+                'reverted_at' => $revertedAt,
+                'reverted_by' => auth()->id(),
+                'units_data' => $revertedUnits,
+            ]);
             $this->logUpdate($productionBatch, $oldValues, $productionBatch->fresh()->toArray());
         });
 
@@ -560,10 +566,17 @@ class ProductionBatchController extends Controller
             }
 
             $oldValues = $batch->toArray();
-            $units[$unitIndex]['reverted_at'] = now()->toDateTimeString();
+            $revertedAt = now();
+            $units[$unitIndex]['reverted_at'] = $revertedAt->toDateTimeString();
             $units[$unitIndex]['reverted_by'] = auth()->id();
             $units[$unitIndex]['reverted_by_name'] = auth()->user()?->name ?? 'System';
-            $batch->update(['units_data' => $units]);
+            $allUnitsReverted = collect($units)->filter(fn($unit) => is_array($unit))->every(fn($unit) => !empty($unit['reverted_at']));
+            $batch->update(array_filter([
+                'units_data' => $units,
+                'status' => $allUnitsReverted ? 'reverted' : $batch->status,
+                'reverted_at' => $allUnitsReverted ? $revertedAt : null,
+                'reverted_by' => $allUnitsReverted ? auth()->id() : null,
+            ], fn($value) => $value !== null));
             $this->logUpdate($batch, $oldValues, $batch->fresh()->toArray());
         });
 
@@ -627,6 +640,10 @@ class ProductionBatchController extends Controller
                 'production_consumption_reversal',
                 'production_output',
                 'production_output_reversal',
+                'production_batch_revert_raw',
+                'production_batch_revert_output',
+                'production_serial_revert_raw',
+                'production_serial_revert_output',
             ])
             ->get()
             ->groupBy('item_id')
@@ -637,6 +654,10 @@ class ProductionBatchController extends Controller
                         'production_consumption_reversal' => -1,
                         'production_output' => 1,
                         'production_output_reversal' => -1,
+                        'production_batch_revert_raw' => -1,
+                        'production_batch_revert_output' => -1,
+                        'production_serial_revert_raw' => -1,
+                        'production_serial_revert_output' => -1,
                         default => 0,
                     };
 
@@ -649,6 +670,10 @@ class ProductionBatchController extends Controller
                         'production_consumption_reversal' => -1,
                         'production_output' => 1,
                         'production_output_reversal' => -1,
+                        'production_batch_revert_raw' => -1,
+                        'production_batch_revert_output' => -1,
+                        'production_serial_revert_raw' => -1,
+                        'production_serial_revert_output' => -1,
                         default => 0,
                     };
 
@@ -680,6 +705,13 @@ class ProductionBatchController extends Controller
                 ]);
             })
             ->values()
+            ->all();
+    }
+
+    private function activeProductionUnits(ProductionBatch $batch): array
+    {
+        return collect($batch->units_data ?? [])
+            ->filter(fn($unit) => is_array($unit) && empty($unit['reverted_at']))
             ->all();
     }
 

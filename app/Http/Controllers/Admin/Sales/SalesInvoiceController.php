@@ -268,7 +268,7 @@ class SalesInvoiceController extends Controller
     public function show(SalesInvoice $sale, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($sale);
-        $sale->load(['party','items.item','returns.items.item','returns.creator']);
+        $sale->load(['party','items.item','returns.items.item','returns.creator','sourceDeliveryChallan','sourcePendingOrder']);
         $auditLogs = AuditLog::with(['user','company'])
             ->where('model', SalesInvoice::class)
             ->where('model_id', $sale->id)
@@ -1184,4 +1184,3 @@ class SalesInvoiceController extends Controller
         ];
     }
 }
-

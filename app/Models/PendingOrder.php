@@ -11,11 +11,13 @@ class PendingOrder extends Model
         'item_id','pending_date','quantity','unit','unit_price','discount_type',
         'discount_value','discount_amount','tax_percent','tax_amount','line_total',
         'cost_amount','profit_amount','profit_percent','status','raw_materials',
+        'converted_sales_invoice_id','converted_at',
     ];
 
     protected $casts = [
         'pending_date' => 'date',
         'raw_materials' => 'array',
+        'converted_at' => 'datetime',
     ];
 
     public function company() { return $this->belongsTo(Company::class); }
@@ -23,4 +25,5 @@ class PendingOrder extends Model
     public function deliveryChallan() { return $this->belongsTo(DeliveryChallan::class); }
     public function deliveryChallanItem() { return $this->belongsTo(DeliveryChallanItem::class); }
     public function item() { return $this->belongsTo(Item::class); }
+    public function convertedInvoice() { return $this->belongsTo(SalesInvoice::class, 'converted_sales_invoice_id'); }
 }

@@ -17,6 +17,8 @@ class ProductionBatch extends Model
         'notes',
         'units_data',   // JSON: per-unit serial / batch / sale_price details
         'status',
+        'reverted_at',
+        'reverted_by',
         'created_by',
     ];
 
@@ -26,8 +28,10 @@ class ProductionBatch extends Model
         'cost_per_unit'     => 'decimal:2',
         'quantity'          => 'decimal:3',
         'units_data'        => 'array',
+        'reverted_at'       => 'datetime',
     ];
 
     public function finishedItem() { return $this->belongsTo(Item::class, 'finished_item_id'); }
     public function creator()      { return $this->belongsTo(User::class, 'created_by'); }
+    public function revertedBy()   { return $this->belongsTo(User::class, 'reverted_by'); }
 }

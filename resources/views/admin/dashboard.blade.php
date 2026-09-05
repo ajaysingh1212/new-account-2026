@@ -51,13 +51,13 @@
     if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase','value'=>'Rs '.number_format($stats['purchases'] ?? 0,2),'icon'=>'fa-shopping-cart','accent'=>'#ec4899','modal'=>'purchaseSegmentModal'];
     if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase Due','value'=>'Rs '.number_format($stats['purchase_due'] ?? 0,2),'icon'=>'fa-file-circle-exclamation','accent'=>'#f59e0b','target'=>'purchaseDueBox'];
     if ($user->can('reports.transaction')) $cards[] = ['label'=>'Service Amount','value'=>'Rs '.number_format($stats['service_amount'] ?? 0,2),'icon'=>'fa-concierge-bell','accent'=>'#0ea5e9','modal'=>'serviceModal'];
+    if ($user->can('party_payments.view')) $cards[] = ['label'=>'Total Collection','value'=>'Rs '.number_format($stats['total_collection'] ?? 0,2),'icon'=>'fa-hand-holding-usd','accent'=>'#16a34a','modal'=>'collectionModal'];
     if ($user->can('banking.view')) $cards[] = ['label'=>'Cheque Clearing','html'=>'Rs '.number_format($stats['cheque_paid'] ?? 0,2).'<br><small style="color:#64748b;font-weight:800">Upcoming clear Rs '.number_format($stats['cheque_clearing_due'] ?? 0,2).'</small>','icon'=>'fa-money-check-alt','accent'=>'#16a34a','modal'=>'chequeClearingModal'];
     if ($user->can('banking.view')) $cards[] = ['label'=>'Completed Cheques','value'=>'Rs '.number_format($stats['cheque_completed'] ?? 0,2),'icon'=>'fa-check-double','accent'=>'#0f766e','modal'=>'completedChequeModal'];
     if ($user->can('stocks.view')) $cards[] = ['label'=>'Low Stock','value'=>$stats['low_stock'] ?? 0,'icon'=>'fa-exclamation-triangle','accent'=>'#ef4444'];
     if ($user->can('banking.view')) $cards[] = ['label'=>'Bank Balance','value'=>'Rs '.number_format($stats['bank_balance'] ?? 0,2),'icon'=>'fa-university','accent'=>'#06b6d4'];
     if ($user->can('estimates.view')) $cards[] = ['label'=>'Estimates','value'=>'Rs '.number_format($stats['estimate_amount'] ?? 0,2),'icon'=>'fa-file-contract','accent'=>'#4338ca','modal'=>'estimateSegmentModal'];
     if ($user->can('delivery_challans.view')) $cards[] = ['label'=>'Pending Sales','value'=>'Rs '.number_format($stats['pending_sales'] ?? 0,2),'icon'=>'fa-hourglass-half','accent'=>'#f97316','url'=>route('admin.pending-orders.index', ['from_date' => $from, 'to_date' => $to])];
-    if ($user->can('delivery_challans.view')) $cards[] = ['label'=>'Challans','value'=>$stats['challans'] ?? 0,'icon'=>'fa-truck','accent'=>'#0f766e'];
     if ($user->can('expenses.view')) $cards[] = ['label'=>'Pending Expenses','value'=>$stats['pending_expenses'] ?? 0,'icon'=>'fa-clipboard-check','accent'=>'#10b981'];
     if ($user->can('reports.transaction')) $cards[] = ['label'=>'Total Profit (on Cost)','html'=>'Rs '.number_format($stats['total_profit'] ?? 0,2).'<br><small style="color:#64748b;font-weight:800">On Sale '.number_format($stats['total_profit_percent_on_sale'] ?? 0,2).'% | On Cost '.number_format($stats['total_profit_percent'] ?? 0,2).'%</small>','icon'=>'fa-chart-line','accent'=>'#0f766e','modal'=>'profitSegmentModal'];
     $sales = max(0, (float)($mix['Sales'] ?? 0)); $purchase = max(0, (float)($mix['Purchase'] ?? 0)); $bank = max(0, (float)($mix['Bank'] ?? 0)); $cash = max(0, (float)($mix['Cash'] ?? 0));
@@ -90,7 +90,7 @@
         <div class="col-md-{{ $user->isSuperAdmin() ? '8' : '10' }} form-group mb-md-0">
             <label>Date Filter</label>
             <div class="period-tabs">
-                @foreach(['today'=>'Today','yesterday'=>'Yesterday','week'=>'Week','month'=>'Month','three_months'=>'3 Month','six_months'=>'6 Month','nine_months'=>'9 Month','year'=>'1 Year','all'=>'All','custom'=>'Custom Date'] as $value => $label)
+                @foreach(['today'=>'Today','week'=>'This Week','month'=>'This Month','last_month'=>'Last Month','yesterday'=>'Yesterday','three_months'=>'3 Month','six_months'=>'6 Month','nine_months'=>'9 Month','year'=>'1 Year','all'=>'All','custom'=>'Custom Date'] as $value => $label)
                     <button type="button" data-period="{{ $value }}" class="period-tab {{ $period === $value ? 'active' : '' }}">{{ $label }}</button>
                 @endforeach
             </div>
@@ -603,8 +603,66 @@
     </div>
 </div>
 
+<div class="modal fade pro-modal" id="collectionModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div><h5 class="modal-title mb-0">Total Collection</h5><small>Payment In collection for {{ $from }} to {{ $to }}</small></div>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body">
+                <div class="row mb-3">
+                    <div class="col-md-3"><select id="collectionParty" class="form-control"><option value="">All Parties</option></select></div>
+                    <div class="col-md-2"><select id="collectionState" class="form-control"><option value="">All States</option></select></div>
+                    <div class="col-md-2"><select id="collectionDistrict" class="form-control"><option value="">All Districts</option></select></div>
+                    <div class="col-md-2"><select id="collectionCity" class="form-control"><option value="">All Cities</option></select></div>
+                    <div class="col-md-3 d-flex" style="gap:8px"><input type="date" id="collectionFrom" class="form-control" value="{{ $from }}"><input type="date" id="collectionTo" class="form-control" value="{{ $to }}"></div>
+                </div>
+                <div class="modal-metric mb-3"><span>Filtered Collection</span><b id="collectionFilteredTotal">Rs 0.00</b></div>
+                <div class="modal-table-wrap">
+                    <table class="table table-sm mb-0">
+                        <thead><tr><th>Party</th><th>Payment Date</th><th>Reference</th><th>Amount</th><th>State</th><th>District</th><th>City</th></tr></thead>
+                        <tbody id="collectionRows"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 @push('scripts')
 <script>
+const collectionData = @json($collectionRows ?? []);
+function dashMoney(n){return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function fillCollectionOptions(){
+    const fields = [['collectionParty','party'],['collectionState','state'],['collectionDistrict','district'],['collectionCity','city']];
+    fields.forEach(([id,key]) => {
+        const select = document.getElementById(id);
+        if(!select || select.options.length > 1) return;
+        [...new Set(collectionData.map(row => row[key]).filter(Boolean))].sort().forEach(value => {
+            const option = document.createElement('option');
+            option.value = value;
+            option.textContent = value;
+            select.appendChild(option);
+        });
+    });
+}
+function renderCollectionRows(){
+    const party = $('#collectionParty').val(), state = $('#collectionState').val(), district = $('#collectionDistrict').val(), city = $('#collectionCity').val();
+    const from = $('#collectionFrom').val(), to = $('#collectionTo').val();
+    const rows = collectionData.filter(row =>
+        (!party || row.party === party) &&
+        (!state || row.state === state) &&
+        (!district || row.district === district) &&
+        (!city || row.city === city) &&
+        (!from || row.date >= from) &&
+        (!to || row.date <= to)
+    );
+    $('#collectionFilteredTotal').text(dashMoney(rows.reduce((sum,row)=>sum + Number(row.amount || 0), 0)));
+    $('#collectionRows').html(rows.length ? rows.map(row => `<tr><td>${row.party || '-'}</td><td>${row.date_label || '-'}</td><td>${row.reference_no || '-'}</td><td>${dashMoney(row.amount)}</td><td>${row.state || '-'}</td><td>${row.district || '-'}</td><td>${row.city || '-'}</td></tr>`).join('') : '<tr><td colspan="7" class="text-center text-muted py-4">No Payment In records for selected filters.</td></tr>');
+}
+$('#collectionModal').on('shown.bs.modal', function(){fillCollectionOptions();renderCollectionRows();});
+$('#collectionParty,#collectionState,#collectionDistrict,#collectionCity,#collectionFrom,#collectionTo').on('change input', renderCollectionRows);
 $('.period-tab').on('click', function(){
     const period = $(this).data('period');
     $('#dashboardPeriod').val(period);
@@ -650,7 +708,7 @@ $('#serviceFilter').on('change', function(){
         $(this).toggle(!value || service === value);
     });
 });
-function chequeMoney(n){return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function chequeMoney(n){return dashMoney(n)}
 function chequeText(v){return v || '-'}
 $(document).on('click','.cheque-detail-btn',async function(){
     const url = $(this).data('url');
