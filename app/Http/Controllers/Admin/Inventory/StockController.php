@@ -168,10 +168,10 @@ class StockController extends Controller
 
     public function adjustRawMaterial(Request $request, Item $item, EntryVisibilityService $visibility)
     {
-        $user = auth()->user();
+        $user = auth()->user()?->fresh();
         abort_unless($user && ($user->isSuperAdmin() || $user->isAdmin()), 403, 'Admin access required.');
 
-        $visibility->authorizeManage($item);
+        abort_unless($user->isSuperAdmin() || (int) $item->company_id === (int) $user->current_company_id, 403);
         abort_unless(optional($item->productType)->nature === 'raw_material', 422, 'Only raw material stock can be adjusted manually.');
 
         $data = $request->validate([

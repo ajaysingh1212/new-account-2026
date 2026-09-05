@@ -355,7 +355,7 @@ class PartyPaymentController extends Controller
         $bankBalance = $isIn
             ? (float) $account->current_balance + (float) $payment->total_amount
             : (float) $account->current_balance - (float) $payment->total_amount;
-        abort_if(!$isIn && $bankBalance < 0, 422, 'Insufficient balance. Selected cheque bank account me itna balance nahi hai.');
+        abort_if(!$isIn && $account->account_type !== 'cash' && $bankBalance < 0, 422, 'Insufficient balance. Selected bank account me itna balance nahi hai.');
 
         $chequeDescription = $chequeLeaf
             ? "Cheque {$chequeLeaf->cheque_no} issued. Clear date {$chequeLeaf->clearance_due_date?->format('d M Y')}."
