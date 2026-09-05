@@ -151,6 +151,54 @@ class PartyOutstandingServiceTest extends TestCase
         $this->assertFalse($rows->contains(fn(array $row) => $row['invoice'] === 'S-SETTLED'));
     }
 
+    public function test_rounded_zero_due_bills_are_hidden_from_ageing_rows(): void
+    {
+        [$user, $party] = $this->context();
+        $this->actingAs($user);
+
+        $sale = SalesInvoice::create([
+            'company_id' => $party->company_id,
+            'party_id' => $party->id,
+            'sale_type' => 'credit',
+            'invoice_no' => 'S-ROUND-SETTLED',
+            'billing_date' => '2026-06-18',
+            'grand_total' => 1000.004,
+            'created_by' => $user->id,
+        ]);
+        $bank = BankAccount::create([
+            'company_id' => $party->company_id,
+            'account_code' => 'B-003',
+            'account_name' => 'Main Bank 3',
+            'created_by' => $user->id,
+        ]);
+        $payment = PartyPayment::create([
+            'company_id' => $party->company_id,
+            'party_id' => $party->id,
+            'bank_account_id' => $bank->id,
+            'payment_date' => '2026-06-20',
+            'payment_type' => 'payment_in',
+            'amount' => 1000,
+            'total_amount' => 1000,
+            'created_by' => $user->id,
+        ]);
+        PartyPaymentAllocation::create([
+            'party_payment_id' => $payment->id,
+            'company_id' => $party->company_id,
+            'party_id' => $party->id,
+            'bill_type' => 'sales',
+            'bill_model' => SalesInvoice::class,
+            'bill_id' => $sale->id,
+            'bill_no' => $sale->invoice_no,
+            'bill_date' => $sale->billing_date,
+            'bill_total' => $sale->grand_total,
+            'amount' => 1000,
+        ]);
+
+        $rows = app(PartyOutstandingService::class)->billRows(app(EntryVisibilityService::class), $party->id, '2026-07-08');
+
+        $this->assertFalse($rows->contains(fn(array $row) => $row['invoice'] === 'S-ROUND-SETTLED'));
+    }
+
     public function test_ageing_party_print_includes_opening_balance_due(): void
     {
         [$user, $party] = $this->context();

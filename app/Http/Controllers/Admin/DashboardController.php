@@ -403,6 +403,7 @@ class DashboardController extends Controller
                     ])->values(),
                 ];
             })
+            ->filter(fn(array $row) => round((float) $row['due'], 2) > 0)
             ->values();
     }
 

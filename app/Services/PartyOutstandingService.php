@@ -42,7 +42,7 @@ class PartyOutstandingService
 
         return $this->openingRows($visibility, $partyId, $toDate, $kind, $asOf, $companyId)
             ->merge($rows)
-            ->filter(fn(array $row) => $row['due'] > 0)
+            ->filter(fn(array $row) => round((float) $row['due'], 2) > 0)
             ->sortByDesc('date')
             ->values();
     }
@@ -193,6 +193,8 @@ class PartyOutstandingService
             $returned = (float) ($returns[$bill->id] ?? 0);
             $effectiveTotal = max(0, (float) $bill->grand_total - $returned);
 
+            $due = round(max(0, $effectiveTotal - $paid), 2);
+
             return [
                 'kind' => $kind,
                 'party_id' => $bill->party_id,
@@ -204,7 +206,7 @@ class PartyOutstandingService
                 'returned' => $returned,
                 'effective_total' => $effectiveTotal,
                 'paid' => $paid,
-                'due' => max(0, $effectiveTotal - $paid),
+                'due' => $due,
                 'bill_id' => $bill->id,
                 'model' => $model,
                 'history' => ($histories[$bill->id] ?? collect())->map(fn($allocation) => [
