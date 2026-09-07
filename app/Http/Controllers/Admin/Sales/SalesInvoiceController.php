@@ -794,6 +794,11 @@ class SalesInvoiceController extends Controller
 
             foreach ($invoice->items as $line) {
                 $targetItem = $this->targetItemForSaleLine($line->item, $targetCompanyId);
+                $movementUnits = collect($line->selected_units ?? [])
+                    ->filter(fn($unit) => is_array($unit))
+                    ->map(fn($unit) => array_merge($unit, ['item_id' => $targetItem->id]))
+                    ->values()
+                    ->all();
                 // The auto purchase is the other side of this inter-company
                 // sale, so it must carry the same commercial values as the
                 // source sale. Using the target/source item's purchase price
@@ -811,7 +816,7 @@ class SalesInvoiceController extends Controller
                     'tax_percent' => $line->tax_percent,
                     'tax_amount' => $line->tax_amount,
                     'line_total' => $line->line_total,
-                    'selected_units' => $line->selected_units,
+                    'selected_units' => $movementUnits,
                 ]);
 
                 $movement = $accounting->moveStock($targetItem, [
@@ -826,7 +831,7 @@ class SalesInvoiceController extends Controller
                     'reference_id' => $purchase->id,
                     'reference_no' => $purchase->invoice_no,
                     'description' => 'Auto purchase stock in from inter-company sale.',
-                    'movement_units' => $line->selected_units ?? [],
+                    'movement_units' => $movementUnits,
                 ]);
                 $this->syncInterCompanyVisibilityForEntry($request, $targetItem, $targetCompanyId);
                 if ($movement) {
@@ -1096,7 +1101,7 @@ class SalesInvoiceController extends Controller
             'status' => 'active',
         ]);
 
-        return $item;
+        return $item->fresh(['productType']);
     }
 
     private function nextInterCompanyPurchaseNo(int $targetCompanyId, SalesInvoice $invoice): string

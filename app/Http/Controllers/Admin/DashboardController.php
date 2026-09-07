@@ -219,22 +219,32 @@ class DashboardController extends Controller
         ];
         $quickActions = $this->quickActions($user);
         $collectionRows = ($user->isSuperAdmin()
-                ? $this->scope(PartyPayment::with('party'), $companyId)
-                : $visibility->scopeForUser(PartyPayment::with('party'), PartyPayment::class))
+                ? $this->scope(PartyPayment::with(['party','bankAccount','allocations']), $companyId)
+                    : $visibility->scopeForUser(PartyPayment::with(['party','bankAccount','allocations']), PartyPayment::class))
             ->where('payment_type', 'payment_in')
             ->whereBetween('payment_date', [$from, $to])
             ->latest('payment_date')
             ->get()
             ->map(fn(PartyPayment $payment) => [
+                'id' => $payment->id,
                 'party_id' => $payment->party_id,
                 'party' => $payment->party?->display_name ?: 'Walk-in / No Party',
                 'date' => $payment->payment_date?->format('Y-m-d'),
                 'date_label' => $payment->payment_date?->format('d M Y'),
                 'reference_no' => $payment->reference_no ?: '-',
+                'mode' => $payment->payment_mode ?: '-',
+                'bank' => $payment->bankAccount?->account_name ?: '-',
                 'amount' => (float) $payment->total_amount,
                 'state' => $payment->party?->state ?: '',
                 'district' => $payment->party?->district ?: '',
                 'city' => $payment->party?->city ?: '',
+                'allocations' => $payment->allocations->map(fn(PartyPaymentAllocation $allocation) => [
+                    'bill_no' => $allocation->bill_no ?: '-',
+                    'bill_type' => $allocation->bill_type ?: '-',
+                    'bill_date' => $allocation->bill_date?->format('d M Y') ?: '-',
+                    'bill_total' => (float) $allocation->bill_total,
+                    'amount' => (float) $allocation->amount,
+                ])->values()->all(),
             ]);
 
         return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','estimateSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals','chequeRows','completedChequeRows','collectionRows'));

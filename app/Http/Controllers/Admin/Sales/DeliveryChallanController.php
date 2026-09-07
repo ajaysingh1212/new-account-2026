@@ -71,17 +71,24 @@ class DeliveryChallanController extends Controller
     {
         $visibility->authorizeManage($deliveryChallan);
         abort_if($deliveryChallan->status === 'cancelled', 422, 'Cancelled challan cannot be edited.');
-        abort_if($deliveryChallan->converted_sales_invoice_id, 422, 'Converted challan cannot be edited.');
         $deliveryChallan->load('items');
 
-        return view('admin.delivery-challans.edit', array_merge($this->formData($deliveryChallan), compact('deliveryChallan')));
+        return view('admin.delivery-challans.edit', array_merge($this->formData($deliveryChallan), [
+            'deliveryChallan' => $deliveryChallan,
+            'visibilityOnly' => (bool) $deliveryChallan->converted_sales_invoice_id,
+        ]));
     }
 
     public function update(Request $request, DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility, AccountingService $accounting)
     {
         $visibility->authorizeManage($deliveryChallan);
         abort_if($deliveryChallan->status === 'cancelled', 422, 'Cancelled challan cannot be edited.');
-        abort_if($deliveryChallan->converted_sales_invoice_id, 422, 'Converted challan cannot be edited.');
+        if ($deliveryChallan->converted_sales_invoice_id) {
+            $visibility->syncFromRequest($request, $deliveryChallan);
+
+            return redirect()->route('admin.delivery-challans.show', $deliveryChallan)
+                ->with('success', 'Entry visibility updated. Converted challan details are locked.');
+        }
         $data = $this->validated($request);
 
         DB::transaction(function () use ($request, $deliveryChallan, $data, $visibility, $accounting) {
@@ -139,9 +146,13 @@ class DeliveryChallanController extends Controller
             ];
         })->values();
 
+        $sourceItemIds = $deliveryChallan->items->pluck('item_id')->filter()->unique()->all();
         $activeItems = Item::where('company_id', $companyId)
             ->where('status', 'active')
-            ->whereHas('productType', fn($q) => $q->where('nature', 'finished_goods'))
+            ->where(function ($query) use ($sourceItemIds) {
+                $query->whereIn('id', $sourceItemIds)
+                    ->orWhereHas('productType', fn($q) => $q->where('nature', 'finished_goods'));
+            })
             ->orderBy('name')
             ->get();
 
@@ -225,23 +236,20 @@ class DeliveryChallanController extends Controller
                 $selectedQty = count($selectedUnits);
                 abort_if($selectedQty > (int) $line->quantity, 422, "{$item->name} ke selected units challan quantity se zyada hain.");
                 $challanGrossTotal += (float) $line->line_total;
-                $pendingQty = max(0, (float) $line->quantity - $selectedQty);
-                if ($pendingQty > 0) {
-                    $this->createPendingOrder($deliveryChallan, $line, $pendingQty);
-                }
-                if ($selectedQty <= 0) {
+                abort_if(
+                    $item->track_stock && $selectedQty !== (int) $line->quantity,
+                    422,
+                    "{$item->name} ke challan serial incomplete hain. Delivery challan banate waqt stock already out ho chuka hai, isliye convert se pehle challan serial data sahi karein."
+                );
+
+                $invoiceQty = $item->track_stock ? $selectedQty : (float) $line->quantity;
+                if ($invoiceQty <= 0) {
                     continue;
                 }
 
                 $lineDiscount = (float) ($line->discount_amount ?? 0);
                 $lineTax = (float) ($line->tax_amount ?? 0);
                 $gross = (float) $line->line_total;
-                if ($selectedQty < (float) $line->quantity) {
-                    $ratio = $selectedQty / (float) $line->quantity;
-                    $lineDiscount = round($lineDiscount * $ratio, 2);
-                    $lineTax = round($lineTax * $ratio, 2);
-                    $gross = round($gross * $ratio, 2);
-                }
                 $net = max(0, $gross - $lineTax);
                 $selectedGrossTotal += $gross;
 
@@ -249,7 +257,7 @@ class DeliveryChallanController extends Controller
                     'sales_invoice_id' => $invoice->id,
                     'item_id' => $line->item_id,
                     'description' => $line->description,
-                    'quantity' => $selectedQty,
+                    'quantity' => $invoiceQty,
                     'unit' => $line->unit,
                     'unit_price' => $line->unit_price,
                     'discount_type' => $line->discount_type,

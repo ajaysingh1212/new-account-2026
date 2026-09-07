@@ -31,9 +31,9 @@
                     <td><span class="badge-active">{{ ucfirst($challan->status) }}</span>@if($challan->convertedInvoice)<div><span class="badge badge-success mt-1">Converted</span></div>@endif</td>
                     <td>
                         <a href="{{ route('admin.delivery-challans.show', $challan) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a>
-                        @if($canManage && $challan->status !== 'cancelled' && !$challan->convertedInvoice && auth()->user()->can('delivery_challans.edit'))
-                            <a href="{{ route('admin.delivery-challans.convert-form', $challan) }}" class="btn btn-success btn-sm" title="Convert to Sale"><i class="fas fa-sync"></i></a>
-                            <a href="{{ route('admin.delivery-challans.edit', $challan) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>
+                        @if($canManage && $challan->status !== 'cancelled' && auth()->user()->can('delivery_challans.edit'))
+                            @if(!$challan->convertedInvoice)<a href="{{ route('admin.delivery-challans.convert-form', $challan) }}" class="btn btn-success btn-sm" title="Convert to Sale"><i class="fas fa-sync"></i></a>@endif
+                            <a href="{{ route('admin.delivery-challans.edit', $challan) }}" class="btn btn-warning btn-sm" title="{{ $challan->convertedInvoice ? 'Edit Entry Visibility' : 'Edit' }}"><i class="fas fa-edit"></i></a>
                         @endif
                         @can('delivery_challans.print')<a href="{{ route('admin.delivery-challans.print', $challan) }}" class="btn btn-secondary btn-sm" target="_blank"><i class="fas fa-print"></i></a>@endcan
                     </td>

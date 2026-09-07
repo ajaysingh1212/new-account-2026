@@ -40,7 +40,7 @@ class PartyPaymentCrudTest extends TestCase
         $response->assertRedirect(route('admin.party-payments.index', ['type' => 'payment_in']));
 
         $party = $party->fresh();
-        $this->assertSame(1200.0, (float) $party->opening_balance);
+        $this->assertSame(0.0, (float) $party->opening_balance);
         $this->assertSame(0.0, (float) $party->current_balance);
 
         $adjustment = PartyOpeningBalanceAdjustment::first();

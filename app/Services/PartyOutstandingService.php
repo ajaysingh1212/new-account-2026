@@ -262,7 +262,17 @@ class PartyOutstandingService
                             ->whereDate('payment_date', '<=', $toDate);
                     })
                     ->sum('amount');
-                $due = max(0, $effectiveOpening - $paid);
+                $storedOpeningTotal = (float) PartyPaymentAllocation::where('company_id', $party->company_id)
+                    ->where('party_id', $party->id)
+                    ->where('bill_type', 'opening_balance')
+                    ->whereHas('payment', function ($query) use ($side, $toDate) {
+                        $query->where('payment_type', $side === 'receivable' ? 'payment_in' : 'payment_out')
+                            ->whereDate('payment_date', '<=', $toDate);
+                    })
+                    ->max('bill_total');
+                $openingWasReduced = $storedOpeningTotal > $effectiveOpening;
+                $openingTotal = $openingWasReduced ? $storedOpeningTotal : $effectiveOpening;
+                $due = $openingWasReduced ? $effectiveOpening : max(0, $effectiveOpening - $paid);
                 $date = $party->opening_balance_date ?: now();
 
                 return [
@@ -272,9 +282,9 @@ class PartyOutstandingService
                     'invoice' => 'Opening Balance',
                     'date' => $date,
                     'age' => (int) floor($date->copy()->startOfDay()->diffInDays($asOf)),
-                    'total' => $effectiveOpening,
+                    'total' => $openingTotal,
                     'returned' => 0.0,
-                    'effective_total' => $effectiveOpening,
+                    'effective_total' => $openingTotal,
                     'paid' => $paid,
                     'due' => $due,
                     'bill_id' => null,

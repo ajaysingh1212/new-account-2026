@@ -30,6 +30,7 @@
 .ops-card{background:#fff;border:1px solid #e7edf5;border-radius:14px;padding:16px;height:100%;box-shadow:0 10px 26px rgba(2,6,23,.06)}.ops-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:12px}.ops-kicker{font-size:11px;text-transform:uppercase;font-weight:850;color:#64748b;letter-spacing:.6px}.ops-amount{font-size:24px;font-weight:900;color:#0f172a}.product-row{display:flex;justify-content:space-between;gap:10px;border-top:1px solid #eef2f7;padding:10px 0}.product-row:first-child{border-top:0}.product-name{font-weight:800;color:#172033}.tag-hot{display:inline-flex;align-items:center;gap:5px;background:#fff7ed;color:#c2410c;border:1px solid #fed7aa;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;text-transform:uppercase}.tag-low{display:inline-flex;align-items:center;gap:5px;background:#fef2f2;color:#b91c1c;border:1px solid #fecaca;border-radius:999px;padding:2px 8px;font-size:10px;font-weight:900;text-transform:uppercase}.blink-alert{animation:blinkAlert 1s ease-in-out infinite}@keyframes blinkAlert{0%,100%{box-shadow:0 0 0 rgba(220,38,38,0)}50%{box-shadow:0 0 0 4px rgba(220,38,38,.16)}}.ageing-table th{font-size:11px;text-transform:uppercase;color:#64748b;border-top:0}.ageing-table td{vertical-align:middle}.view-detail-btn{border-radius:999px;font-weight:800}.due-action{white-space:nowrap}.modal-metric{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:10px}.modal-metric span{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:800}.modal-metric b{display:block;font-size:16px;color:#0f172a}
 .dash-card-button{border:0;text-align:left;width:100%;height:100%}.pro-modal .modal-content{border:0;border-radius:18px;overflow:hidden;box-shadow:0 26px 80px rgba(15,23,42,.28)}.pro-modal .modal-header{background:linear-gradient(135deg,#101827,#0f766e);color:#fff;border:0;padding:20px 24px}.pro-modal .modal-body{background:#f8fafc}.segment-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px}.segment-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:14px;box-shadow:0 10px 24px rgba(15,23,42,.07)}.segment-top{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}.segment-icon{width:40px;height:40px;border-radius:12px;background:#e0f2fe;color:#0369a1;display:flex;align-items:center;justify-content:center}.modal-table-wrap{max-height:340px;overflow:auto;border:1px solid #e2e8f0;border-radius:12px;background:#fff}.quick-drawer-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.36);z-index:1040;display:none}.quick-drawer{position:fixed;top:0;right:-420px;width:min(420px,100vw);height:100vh;background:#fff;z-index:1041;box-shadow:-24px 0 60px rgba(15,23,42,.22);transition:right .24s ease;display:flex;flex-direction:column}.quick-drawer.open{right:0}.quick-drawer-backdrop.open{display:block}.quick-drawer-head{padding:20px 22px;background:#0f172a;color:#fff;display:flex;justify-content:space-between;align-items:center}.quick-drawer-body{padding:18px;overflow:auto}.quick-section-title{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:900;letter-spacing:.6px;margin:16px 0 8px}.quick-side-link{display:flex;align-items:center;gap:12px;padding:12px;border:1px solid #e5e7eb;border-radius:10px;color:#0f172a;font-weight:800;margin-bottom:8px}.quick-side-link i{width:24px;color:#0f766e}.quick-open-btn{border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);color:#fff;border-radius:10px;padding:10px 14px;font-weight:800}
 .cheque-preview-wrap{width:100%;max-width:720px;container-type:inline-size}.cheque-preview{background:#afece8;color:#16233c;border-radius:10px;position:relative;padding:clamp(14px,3.6cqi,26px) clamp(14px,4.4cqi,32px) clamp(10px,2.8cqi,20px);overflow:hidden;box-shadow:0 18px 40px rgba(15,23,42,.18)}.cheque-preview:before{content:"";position:absolute;inset:0;opacity:.10;background-image:repeating-radial-gradient(circle at 0% 50%,transparent 0 6px,#3c6f60 6px 7px,transparent 7px 13px),repeating-radial-gradient(circle at 100% 50%,transparent 0 6px,#3c6f60 6px 7px,transparent 7px 13px),repeating-radial-gradient(circle at 50% -20%,transparent 0 9px,#a4772c 9px 10px,transparent 10px 19px);background-size:120px 120px,120px 120px,240px 240px}.cheque-preview:after{content:"CHEQUE";position:absolute;top:42%;left:50%;transform:translate(-50%,-50%) rotate(-11deg);font-family:serif;font-size:clamp(26px,9cqi,64px);letter-spacing:.2em;color:#8a2f2f;opacity:.06;white-space:nowrap}.cheque-complete-stamp{position:absolute;right:28px;top:72px;z-index:2;transform:rotate(-12deg);border:3px solid #15803d;color:#15803d;background:rgba(255,255,255,.38);font-weight:900;letter-spacing:.12em;padding:8px 14px;border-radius:6px}.cheque-preview .bank-row{display:flex;justify-content:space-between;gap:16px;position:relative;z-index:1}.cheque-preview .bank-mark{display:flex;gap:12px;align-items:center}.cheque-preview .seal{width:46px;height:46px;border-radius:50%;border:1.6px solid #a4772c;display:flex;align-items:center;justify-content:center;font-family:serif;font-weight:700;color:#a4772c}.cheque-preview .bank-name{font-family:serif;font-weight:800;font-size:23px;line-height:1}.cheque-preview .bank-sub,.cheque-preview label,.cheque-preview .lbl,.cheque-preview .micr{font-family:monospace;text-transform:uppercase;color:#2b3b58;font-size:10px;letter-spacing:.08em}.cheque-preview .cheque-no{text-align:right;font-family:monospace}.cheque-preview .cheque-no .val{font-size:17px;font-weight:700;color:#8a2f2f}.cheque-preview .line{border-bottom:1px solid #16233c;min-height:28px;font-family:serif;font-style:italic;font-size:17px;color:#16233c;padding:3px 2px}.cheque-preview .row-date{display:flex;justify-content:flex-end;gap:10px;align-items:end;margin-top:6px;position:relative;z-index:1}.cheque-preview .row-pay,.cheque-preview .row-words{display:flex;align-items:end;gap:14px;margin-top:20px;position:relative;z-index:1}.cheque-preview .row-pay .line,.cheque-preview .row-words .line{flex:1}.cheque-preview .amount-box{border:1.4px solid #16233c;padding:6px 10px;background:rgba(255,255,255,.35);font-family:monospace;font-weight:700;color:#8a2f2f}.cheque-preview .row-bottom{display:flex;justify-content:space-between;gap:24px;margin-top:30px;position:relative;z-index:1}.cheque-preview .memo-block,.cheque-preview .sig-block{flex:1}.cheque-preview .micr{margin-top:20px;padding-top:12px;border-top:1px dashed rgba(22,35,60,.25);display:flex;justify-content:center;gap:10px;position:relative;z-index:1;flex-wrap:wrap}
+.collection-action-btn{border:1px solid rgba(255,255,255,.45);background:rgba(255,255,255,.16);color:#fff;border-radius:9px;padding:7px 10px;font-weight:850}.collection-action-btn:hover{background:#fff;color:#0f766e}.collection-viz-shell{background:linear-gradient(135deg,#ecfeff,#f0fdf4 52%,#fff7ed);border:1px solid #bae6fd;border-radius:16px;padding:18px;box-shadow:0 16px 36px rgba(14,116,144,.12)}.collection-viz-shell .sales-viz-pane{min-height:330px}.collection-viz-shell .category-pie-wrap{grid-template-columns:1fr}.collection-viz-shell .category-pie:after{background:#f8fafc}.collection-viz-shell .sales-viz-tab{background:rgba(255,255,255,.72);border-color:#bfdbfe;color:#0f172a}.collection-viz-shell .sales-viz-tab.active{background:#0f766e;color:#fff;border-color:#0f766e}.collection-viz-shell .bar-stage,.collection-viz-shell .candle-stage,.collection-viz-shell .wave-pro{background:rgba(255,255,255,.78);border:1px solid #dbeafe}.collection-payment-link{border:0;background:#e0f2fe;color:#075985;border-radius:999px;padding:5px 10px;font-weight:900;min-width:42px}.collection-payment-link:hover{background:#0ea5e9;color:#fff}.collection-chart-tip{position:fixed;z-index:2000;pointer-events:none;background:#0f172a;color:#fff;border-radius:10px;padding:8px 10px;font-size:12px;box-shadow:0 12px 30px rgba(15,23,42,.25);display:none}.collection-chart-hover{cursor:pointer;transition:transform .16s ease,filter .16s ease}.collection-chart-hover:hover{filter:brightness(1.07) drop-shadow(0 8px 12px rgba(14,116,144,.22));transform:translateY(-2px)}#collectionModal.collection-fullscreen .modal-dialog{width:100vw;max-width:100vw;height:100vh;margin:0}#collectionModal.collection-fullscreen .modal-content{min-height:100vh;border-radius:0}#collectionModal.collection-fullscreen .modal-body{height:calc(100vh - 78px);overflow:auto}
 </style>
 @include('admin.partials.segment-viz-styles')
 @endpush
@@ -51,7 +52,7 @@
     if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase','value'=>'Rs '.number_format($stats['purchases'] ?? 0,2),'icon'=>'fa-shopping-cart','accent'=>'#ec4899','modal'=>'purchaseSegmentModal'];
     if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase Due','value'=>'Rs '.number_format($stats['purchase_due'] ?? 0,2),'icon'=>'fa-file-circle-exclamation','accent'=>'#f59e0b','target'=>'purchaseDueBox'];
     if ($user->can('reports.transaction')) $cards[] = ['label'=>'Service Amount','value'=>'Rs '.number_format($stats['service_amount'] ?? 0,2),'icon'=>'fa-concierge-bell','accent'=>'#0ea5e9','modal'=>'serviceModal'];
-    if ($user->can('party_payments.view')) $cards[] = ['label'=>'Total Collection','value'=>'Rs '.number_format($stats['total_collection'] ?? 0,2),'icon'=>'fa-hand-holding-usd','accent'=>'#16a34a','modal'=>'collectionModal'];
+    if ($user->isSuperAdmin() || $user->isAdmin() || $user->can('party_payments.view')) $cards[] = ['label'=>'Total Collection','value'=>'Rs '.number_format($stats['total_collection'] ?? 0,2),'icon'=>'fa-hand-holding-usd','accent'=>'#16a34a','modal'=>'collectionModal'];
     if ($user->can('banking.view')) $cards[] = ['label'=>'Cheque Clearing','html'=>'Rs '.number_format($stats['cheque_paid'] ?? 0,2).'<br><small style="color:#64748b;font-weight:800">Upcoming clear Rs '.number_format($stats['cheque_clearing_due'] ?? 0,2).'</small>','icon'=>'fa-money-check-alt','accent'=>'#16a34a','modal'=>'chequeClearingModal'];
     if ($user->can('banking.view')) $cards[] = ['label'=>'Completed Cheques','value'=>'Rs '.number_format($stats['cheque_completed'] ?? 0,2),'icon'=>'fa-check-double','accent'=>'#0f766e','modal'=>'completedChequeModal'];
     if ($user->can('stocks.view')) $cards[] = ['label'=>'Low Stock','value'=>$stats['low_stock'] ?? 0,'icon'=>'fa-exclamation-triangle','accent'=>'#ef4444'];
@@ -618,10 +619,17 @@
                     <div class="col-md-2"><select id="collectionCity" class="form-control"><option value="">All Cities</option></select></div>
                     <div class="col-md-3 d-flex" style="gap:8px"><input type="date" id="collectionFrom" class="form-control" value="{{ $from }}"><input type="date" id="collectionTo" class="form-control" value="{{ $to }}"></div>
                 </div>
-                <div class="modal-metric mb-3"><span>Filtered Collection</span><b id="collectionFilteredTotal">Rs 0.00</b></div>
+                <div class="row mb-3 align-items-end">
+                    <div class="col-md-4"><div class="modal-metric"><span>Filtered Collection</span><b id="collectionFilteredTotal">Rs 0.00</b></div></div>
+                    <div class="col-md-3"><label class="small font-weight-bold">View</label><select id="collectionChartType" class="form-control"><option value="pie">Pie Chart</option><option value="bar">Bar Chart</option><option value="candle">Candle Chart</option><option value="wave">Wave Chart</option><option value="table">Table Only</option></select></div>
+                </div>
+                <div class="collection-viz-shell mb-3" id="collectionVizShell"><canvas id="collectionChart" height="120"></canvas></div>
+                <div class="modal-table-wrap mb-3">
+                    <table class="table table-sm mb-0"><thead><tr><th>Party</th><th>Payments</th><th>Total</th><th>Details</th></tr></thead><tbody id="collectionPartyRows"></tbody></table>
+                </div>
                 <div class="modal-table-wrap">
                     <table class="table table-sm mb-0">
-                        <thead><tr><th>Party</th><th>Payment Date</th><th>Reference</th><th>Amount</th><th>State</th><th>District</th><th>City</th></tr></thead>
+                        <thead><tr><th>Party</th><th>Payment Date</th><th>Reference</th><th>Amount</th><th>State</th><th>District</th><th>City</th><th>Bills</th></tr></thead>
                         <tbody id="collectionRows"></tbody>
                     </table>
                 </div>
@@ -630,10 +638,26 @@
     </div>
 </div>
 
+<div class="modal fade pro-modal" id="collectionPaymentDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable" role="document"><div class="modal-content">
+        <div class="modal-header"><div><h5 class="modal-title mb-0" id="collectionDetailTitle">Payment Details</h5><small id="collectionDetailSub"></small></div><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+        <div class="modal-body"><div class="modal-table-wrap"><table class="table table-sm mb-0"><thead><tr><th>Date</th><th>Bill</th><th>Type</th><th>Bill Total</th><th>Received</th></tr></thead><tbody id="collectionDetailRows"></tbody></table></div></div>
+    </div></div>
+</div>
+
 @push('scripts')
 <script>
 const collectionData = @json($collectionRows ?? []);
+let collectionChart;
 function dashMoney(n){return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function collectionFilteredRows(){
+    const party = $('#collectionParty').val(), state = $('#collectionState').val(), district = $('#collectionDistrict').val(), city = $('#collectionCity').val();
+    const from = $('#collectionFrom').val(), to = $('#collectionTo').val();
+    return collectionData.filter(row => (!party || row.party === party) && (!state || row.state === state) && (!district || row.district === district) && (!city || row.city === city) && (!from || row.date >= from) && (!to || row.date <= to));
+}
+function collectionGroups(rows){
+    return Object.values(rows.reduce((groups,row) => { const key=row.party||'Walk-in / No Party'; groups[key] ??= {party:key,amount:0,rows:[]}; groups[key].amount += Number(row.amount||0); groups[key].rows.push(row); return groups; }, {})).sort((a,b)=>b.amount-a.amount);
+}
 function fillCollectionOptions(){
     const fields = [['collectionParty','party'],['collectionState','state'],['collectionDistrict','district'],['collectionCity','city']];
     fields.forEach(([id,key]) => {
@@ -648,21 +672,32 @@ function fillCollectionOptions(){
     });
 }
 function renderCollectionRows(){
-    const party = $('#collectionParty').val(), state = $('#collectionState').val(), district = $('#collectionDistrict').val(), city = $('#collectionCity').val();
-    const from = $('#collectionFrom').val(), to = $('#collectionTo').val();
-    const rows = collectionData.filter(row =>
-        (!party || row.party === party) &&
-        (!state || row.state === state) &&
-        (!district || row.district === district) &&
-        (!city || row.city === city) &&
-        (!from || row.date >= from) &&
-        (!to || row.date <= to)
-    );
+    const rows = collectionFilteredRows();
     $('#collectionFilteredTotal').text(dashMoney(rows.reduce((sum,row)=>sum + Number(row.amount || 0), 0)));
-    $('#collectionRows').html(rows.length ? rows.map(row => `<tr><td>${row.party || '-'}</td><td>${row.date_label || '-'}</td><td>${row.reference_no || '-'}</td><td>${dashMoney(row.amount)}</td><td>${row.state || '-'}</td><td>${row.district || '-'}</td><td>${row.city || '-'}</td></tr>`).join('') : '<tr><td colspan="7" class="text-center text-muted py-4">No Payment In records for selected filters.</td></tr>');
+    const groups = collectionGroups(rows);
+    $('#collectionPartyRows').html(groups.length ? groups.map(group => `<tr><td>${group.party}</td><td><button class="collection-payment-link collection-party-detail" data-party="${group.party}">${group.rows.length}</button></td><td>${dashMoney(group.amount)}</td><td><button class="btn btn-sm btn-outline-primary collection-party-detail" data-party="${group.party}">Open</button></td></tr>`).join('') : '<tr><td colspan="4" class="text-center text-muted py-4">No collection for selected filters.</td></tr>');
+    $('#collectionRows').html(rows.length ? rows.map(row => `<tr><td>${row.party || '-'}</td><td>${row.date_label || '-'}</td><td>${row.reference_no || '-'}</td><td>${dashMoney(row.amount)}</td><td>${row.state || '-'}</td><td>${row.district || '-'}</td><td>${row.city || '-'}</td><td>${(row.allocations||[]).map(a=>`${a.bill_no} (${dashMoney(a.amount)})`).join('<br>') || '-'}</td></tr>`).join('') : '<tr><td colspan="8" class="text-center text-muted py-4">No Payment In records for selected filters.</td></tr>');
+    renderCollectionChart(groups);
+}
+function renderCollectionChart(groups){
+    const canvas=document.getElementById('collectionChart'), shell=document.getElementById('collectionVizShell'), type=$('#collectionChartType').val();
+    if(collectionChart){collectionChart.destroy();collectionChart=null;}
+    shell.style.display=type==='table'?'none':'block'; if(type==='table') return;
+    const labels=groups.map(g=>g.party), values=groups.map(g=>g.amount), colors=['#0f766e','#2563eb','#f59e0b','#dc2626','#8b5cf6','#0891b2','#db2777'];
+    const ctx=canvas.getContext('2d'), width=canvas.clientWidth||700, height=240; canvas.width=width; canvas.height=height; ctx.clearRect(0,0,width,height);
+    if(type==='pie'){
+        const total=values.reduce((a,b)=>a+b,0)||1, cx=width/2, cy=height/2, radius=Math.min(95,height/2-12), ring=[]; let start=-Math.PI/2;
+        values.forEach((value,i)=>{const end=start+(value/total)*Math.PI*2;ctx.beginPath();ctx.moveTo(cx,cy);ctx.arc(cx,cy,radius,start,end);ctx.fillStyle=colors[i%colors.length];ctx.fill();ring.push([labels[i],colors[i%colors.length]]);start=end;});
+    } else {
+        const max=Math.max(...values,1), pad=32, step=Math.max(1,(width-pad*2)/Math.max(values.length,1));
+        values.forEach((value,i)=>{const x=pad+i*step+5, h=(value/max)*(height-55), y=height-28-h; ctx.fillStyle=colors[i%colors.length]; if(type==='bar'||type==='candle'){ctx.fillRect(x,y,Math.max(10,step-10),h); if(type==='candle'){ctx.strokeStyle='#111827';ctx.beginPath();ctx.moveTo(x+Math.max(5,(step-10)/2),y-8);ctx.lineTo(x+Math.max(5,(step-10)/2),height-28);ctx.stroke();}} else {ctx.strokeStyle=colors[i%colors.length];ctx.lineWidth=4;ctx.lineTo(x,height-28-h);ctx.stroke();} ctx.fillStyle='#334155';ctx.font='11px sans-serif';ctx.fillText(String(labels[i]).slice(0,16),x,height-8);});
+        if(type==='wave'){ctx.beginPath();values.forEach((value,i)=>{const x=pad+i*step+step/2,y=height-28-(value/max)*(height-55);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.strokeStyle='#0f766e';ctx.lineWidth=4;ctx.stroke();}
+    }
 }
 $('#collectionModal').on('shown.bs.modal', function(){fillCollectionOptions();renderCollectionRows();});
 $('#collectionParty,#collectionState,#collectionDistrict,#collectionCity,#collectionFrom,#collectionTo').on('change input', renderCollectionRows);
+$('#collectionChartType').on('change', renderCollectionRows);
+$(document).on('click','.collection-party-detail',function(){const party=$(this).data('party'), rows=collectionFilteredRows().filter(row=>row.party===party); $('#collectionDetailTitle').text(party+' - Payment Details'); $('#collectionDetailSub').text(rows.length+' payment(s), '+dashMoney(rows.reduce((s,r)=>s+Number(r.amount||0),0))); $('#collectionDetailRows').html(rows.flatMap(row=>(row.allocations&&row.allocations.length?row.allocations:[{bill_no:'Unallocated / Advance',bill_type:'-',bill_date:row.date_label,bill_total:0,amount:row.amount}]).map(a=>`<tr><td>${row.date_label||'-'}</td><td>${a.bill_no||'-'}</td><td>${a.bill_type||'-'}</td><td>${dashMoney(a.bill_total)}</td><td>${dashMoney(a.amount)}</td></tr>`)).join('')); $('#collectionPaymentDetailModal').modal('show');});
 $('.period-tab').on('click', function(){
     const period = $(this).data('period');
     $('#dashboardPeriod').val(period);

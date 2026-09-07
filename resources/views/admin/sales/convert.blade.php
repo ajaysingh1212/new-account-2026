@@ -4,8 +4,11 @@
 @php
     $lineData = collect($lineData ?? []);
     $isDeliveryChallan = ($sourceType ?? '') === 'delivery_challan';
+    $isPendingOrder = ($sourceType ?? '') === 'pending_order';
     $sourceNo = $source->estimate_no ?? $source->challan_no ?? $source->reference_no ?? '';
+    $sourceNo = $sourceNo ?: ($source->deliveryChallan->challan_no ?? '');
     $sourceDate = $source->estimate_date ?? $source->challan_date ?? now();
+    $sourceDate = $source->pending_date ?? $sourceDate;
 @endphp
 @push('styles')
 <style>
@@ -99,7 +102,7 @@
     <div class="convert-section">
         <div class="d-flex justify-content-between align-items-center mb-2">
             <div class="convert-title mb-0">Final Items</div>
-            <small class="text-muted">Select final quantity, then choose serials from production stock.</small>
+            <small class="text-muted">{{ $isDeliveryChallan ? 'DC ke already dispatched serials invoice me direct jayenge.' : 'Select final quantity, then choose serials from production stock.' }}</small>
         </div>
         <div class="table-responsive">
             <table class="table convert-table" id="lineTable">
@@ -112,7 +115,7 @@
                 @forelse($lineData as $line)
                     <tr>
                         <td data-label="Item">
-                            <select name="item_id[]" class="form-control item-select" required>
+                            <select name="item_id[]" class="form-control item-select" required {{ $isPendingOrder ? 'disabled' : '' }}>
                                 <option value="">Select item</option>
                                 @foreach($items as $item)
                                     <option value="{{ $item->id }}"
@@ -127,21 +130,22 @@
                                     </option>
                                 @endforeach
                             </select>
+                            @if($isPendingOrder)<input type="hidden" name="item_id[]" value="{{ $line['item_id'] }}">@endif
                             <div class="line-meta mt-1">
                                 <span class="stock-badge stock-ok">Stock: <span class="stock-text">{{ number_format((float) ($line['current_stock'] ?? 0), 3) }}</span></span>
                             </div>
                         </td>
-                        <td data-label="Description"><input name="description[]" class="form-control" value="{{ old('description.' . $loop->index, $line['description'] ?? '') }}"></td>
-                        <td data-label="{{ $isDeliveryChallan ? 'Challan Qty' : 'Qty' }}"><input type="number" step="1" min="1" name="quantity[]" class="form-control line-qty" value="{{ old('quantity.' . $loop->index, $line['quantity'] ?? 1) }}" required {{ $isDeliveryChallan ? 'readonly' : '' }}></td>
+                        <td data-label="Description"><input name="description[]" class="form-control" value="{{ old('description.' . $loop->index, $line['description'] ?? '') }}" {{ $isPendingOrder ? 'readonly' : '' }}></td>
+                        <td data-label="{{ $isDeliveryChallan ? 'Challan Qty' : 'Qty' }}"><input type="number" step="1" min="1" name="quantity[]" class="form-control line-qty" value="{{ old('quantity.' . $loop->index, $line['quantity'] ?? 1) }}" required {{ ($isDeliveryChallan || $isPendingOrder) ? 'readonly' : '' }}></td>
                         <td data-label="Serials">
-                            <button type="button" class="btn btn-outline-info btn-sm choose-units">
+                            <button type="button" class="btn btn-outline-info btn-sm choose-units" {{ $isDeliveryChallan ? 'disabled' : '' }}>
                                 <i class="fas fa-barcode mr-1"></i> Units (<span class="unit-count">0</span>)
                             </button>
                             <input type="hidden" name="selected_units[]" class="selected-units-json" value='@json($line["selected_units"] ?? [])'>
-                            @if($isDeliveryChallan)<small class="text-muted d-block">Invoice qty selected units se banegi.</small>@endif
+                            @if($isDeliveryChallan)<small class="text-muted d-block">DC me selected units direct invoice me jayenge.</small>@endif
                             <div class="selected-units mt-1"></div>
                         </td>
-                        <td data-label="Unit"><input name="unit[]" class="form-control" value="{{ old('unit.' . $loop->index, $line['unit'] ?? '') }}"></td>
+                        <td data-label="Unit"><input name="unit[]" class="form-control" value="{{ old('unit.' . $loop->index, $line['unit'] ?? '') }}" {{ $isPendingOrder ? 'readonly' : '' }}></td>
                         <td data-label="Price"><input type="number" step="0.01" name="unit_price[]" class="form-control" value="{{ old('unit_price.' . $loop->index, $line['unit_price'] ?? 0) }}" required></td>
                         <td data-label="Disc">
                             <select name="discount_type[]" class="form-control">
@@ -158,7 +162,7 @@
                         </td>
                         <td data-label="Tax %"><input type="number" step="0.01" name="tax_percent[]" class="form-control" value="{{ old('tax_percent.' . $loop->index, $line['tax_percent'] ?? 18) }}"></td>
                         <td data-label="Weight"><span class="line-weight">0.000</span> kg</td>
-                        <td data-label="Action"><button type="button" class="btn btn-danger btn-sm remove-row"><i class="fas fa-trash"></i></button></td>
+                        <td data-label="Action">@unless($isDeliveryChallan || $isPendingOrder)<button type="button" class="btn btn-danger btn-sm remove-row"><i class="fas fa-trash"></i></button>@endunless</td>
                     </tr>
                 @empty
                     <tr>
@@ -205,7 +209,7 @@
                 </tbody>
             </table>
         </div>
-        <button type="button" id="addLine" class="btn btn-outline-primary btn-sm"><i class="fas fa-plus mr-1"></i> Add Row</button>
+        @unless($isDeliveryChallan || $isPendingOrder)<button type="button" id="addLine" class="btn btn-outline-primary btn-sm"><i class="fas fa-plus mr-1"></i> Add Row</button>@endunless
     </div>
 
     <div class="convert-section">
@@ -294,7 +298,7 @@ function recalc(){
         const $row = $(this);
         const challanQty = parseFloat($row.find('[name="quantity[]"]').val()) || 0;
         const units = rowUnits($row);
-        const qty = @json($isDeliveryChallan) ? units.length : challanQty;
+        const qty = challanQty;
         const price = parseFloat($row.find('[name="unit_price[]"]').val()) || 0;
         const discType = $row.find('[name="discount_type[]"]').val();
         const discValue = parseFloat($row.find('[name="discount_value[]"]').val()) || 0;
@@ -336,6 +340,16 @@ function addLine(data){
         $row.find('[name="tax_percent[]"]').val(data.tax_percent || 18);
         setRowUnits($row, data.selected_units || []);
     }
+    if (@json($isDeliveryChallan)) {
+        $row.find('[name="quantity[]"]').prop('readonly', true);
+        $row.find('.choose-units').prop('disabled', true);
+        $row.find('.remove-row').remove();
+    }
+    if (@json($isPendingOrder)) {
+        $row.find('.item-select').prop('disabled', true).after(`<input type="hidden" name="item_id[]" value="${data?.item_id || ''}">`);
+        $row.find('[name="description[]"],[name="quantity[]"],[name="unit[]"]').prop('readonly', true);
+        $row.find('.remove-row').remove();
+    }
     recalc();
 }
 
@@ -361,13 +375,15 @@ $(document).on('submit', '#convertForm', function(){
         const qty = parseInt($(this).find('[name="quantity[]"]').val()) || 0;
         const units = rowUnits($(this));
         if (@json($isDeliveryChallan)) {
+            if (units.length !== qty) ok = false;
+        } else if (@json($isPendingOrder)) {
             if (units.length > qty) ok = false;
         } else if (qty > 0 && units.length !== qty) {
             ok = false;
         }
     });
     if (!ok) {
-        alert(@json($isDeliveryChallan ? 'Selected serial/unit challan quantity se zyada nahi ho sakte.' : 'Har line ke liye quantity ke barabar serial/unit select karein.'));
+        alert(@json($isDeliveryChallan ? 'DC ke selected serial/unit quantity ke barabar hone chahiye.' : ($isPendingOrder ? 'Selected serial/unit quantity se zyada nahi ho sakte.' : 'Har line ke liye quantity ke barabar serial/unit select karein.')));
         return false;
     }
 });

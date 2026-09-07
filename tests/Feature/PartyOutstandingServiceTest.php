@@ -165,6 +165,49 @@ class PartyOutstandingServiceTest extends TestCase
         $this->assertEquals(5000.00, $response->viewData('totals')['due']);
     }
 
+    public function test_ageing_keeps_legacy_opening_balance_due_after_partial_payment(): void
+    {
+        [$user, $party] = $this->context();
+        $party->update(['opening_balance' => 1000.00, 'opening_balance_type' => 'receivable', 'opening_balance_date' => '2026-06-01']);
+        $this->actingAs($user);
+
+        $bank = BankAccount::create([
+            'company_id' => $party->company_id,
+            'account_code' => 'B-OB',
+            'account_name' => 'Opening Bank',
+            'created_by' => $user->id,
+        ]);
+        $payment = PartyPayment::create([
+            'company_id' => $party->company_id,
+            'party_id' => $party->id,
+            'bank_account_id' => $bank->id,
+            'payment_date' => '2026-06-20',
+            'payment_type' => 'payment_in',
+            'amount' => 800,
+            'total_amount' => 800,
+            'created_by' => $user->id,
+        ]);
+        PartyPaymentAllocation::create([
+            'party_payment_id' => $payment->id,
+            'company_id' => $party->company_id,
+            'party_id' => $party->id,
+            'bill_type' => 'opening_balance',
+            'bill_model' => Party::class,
+            'bill_id' => $party->id,
+            'bill_no' => 'Opening Balance',
+            'bill_date' => $party->opening_balance_date,
+            'bill_total' => 1000,
+            'amount' => 800,
+        ]);
+
+        $rows = app(PartyOutstandingService::class)->billRows(app(EntryVisibilityService::class), $party->id, '2026-07-08', 'receivable');
+        $openingRow = $rows->firstWhere('invoice', 'Opening Balance');
+
+        $this->assertSame(1000.0, (float) $openingRow['total']);
+        $this->assertSame(800.0, (float) $openingRow['paid']);
+        $this->assertSame(200.0, (float) $openingRow['due']);
+    }
+
     private function context(): array
     {
         $user = User::factory()->create(['user_type' => 'super_admin']);

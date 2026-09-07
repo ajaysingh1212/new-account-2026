@@ -32,6 +32,7 @@ class PartyOpeningBalancePaymentTest extends TestCase
 
         $response->assertRedirect(route('admin.party-payments.index', ['type' => 'payment_in']));
         $this->assertSame(-600.0, (float) $party->fresh()->current_balance);
+        $this->assertSame(600.0, (float) $party->fresh()->opening_balance);
         $this->assertSame(500.0, (float) $account->fresh()->current_balance);
         $this->assertDatabaseHas('party_payment_allocations', [
             'party_id' => $party->id,
@@ -54,6 +55,7 @@ class PartyOpeningBalancePaymentTest extends TestCase
     public function test_opening_balance_payment_cannot_exceed_remaining_amount(): void
     {
         [$user, $company, $party, $account] = $this->paymentContext('payable', 1000);
+        $account->update(['current_balance' => 1000]);
         $this->actingAs($user)->withoutMiddleware()->post(route('admin.party-payments.store'), [
             'payment_type' => 'payment_out',
             'party_id' => $party->id,
@@ -67,7 +69,8 @@ class PartyOpeningBalancePaymentTest extends TestCase
         ])->assertRedirect(route('admin.party-payments.index', ['type' => 'payment_out']));
 
         $this->assertSame(200.0, (float) $party->fresh()->current_balance);
-        $this->assertSame(-700.0, (float) $account->fresh()->current_balance);
+        $this->assertSame(200.0, (float) $party->fresh()->opening_balance);
+        $this->assertSame(200.0, (float) $account->fresh()->current_balance);
 
         $this->actingAs($user)->withoutMiddleware()->post(route('admin.party-payments.store'), [
             'payment_type' => 'payment_out',
@@ -82,7 +85,7 @@ class PartyOpeningBalancePaymentTest extends TestCase
         ])->assertStatus(422);
 
         $this->assertSame(1, PartyPayment::count());
-        $this->assertSame(-700.0, (float) $account->fresh()->current_balance);
+        $this->assertSame(200.0, (float) $account->fresh()->current_balance);
         $this->assertSame(200.0, (float) $party->fresh()->current_balance);
     }
 
