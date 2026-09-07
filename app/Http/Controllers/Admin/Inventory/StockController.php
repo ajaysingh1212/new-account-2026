@@ -28,12 +28,15 @@ class StockController extends Controller
         $companyAdmin = auth()->user()?->isSuperAdmin() || auth()->user()?->isAdmin();
 
         $companyId = auth()->user()->current_company_id;
+        $serialsByItem = $this->currentSerialsByItem();
+        $serialItemIds = $this->serialTrackedItemIds($companyId);
         $incomingByItem = PurchaseEstimateItem::whereHas('purchaseEstimate', fn($q) => $q->where('company_id',$companyId)->where('status','transit'))
             ->selectRaw('item_id, SUM(quantity) as incoming_qty')->groupBy('item_id')->pluck('incoming_qty','item_id');
         $items = $visibility->scopeForUser(
             Item::with('productType')
-                ->where(function ($q) use ($incomingByItem) {
+                ->where(function ($q) use ($incomingByItem, $serialItemIds) {
                     $q->where('current_stock', '>', 0)
+                        ->orWhereIn('id', $serialItemIds)
                         ->orWhereIn('id', $incomingByItem->keys())
                         ->orWhereHas('productType', fn($type) => $type->where('nature', 'raw_material'));
                 })
@@ -43,8 +46,6 @@ class StockController extends Controller
             Item::class
         )->get();
 
-        $serialsByItem = $this->currentSerialsByItem();
-        $serialItemIds = $this->serialTrackedItemIds($companyId);
         if ($serialSearch !== '') {
             $term = mb_strtolower($serialSearch);
             $items = $items->filter(function (Item $item) use ($serialsByItem, $term) {

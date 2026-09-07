@@ -105,7 +105,7 @@ class SalesInvoiceController extends Controller
                     $expected = (float) ($sourceLine?->quantity ?? $line->quantity);
                     $movements = StockMovement::where('reference_type', PurchaseBill::class)->where('reference_id', $purchase->id)->where('item_id', $line->item_id)->get();
                     $posted = (float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity');
-                    $missingUnits = $this->missingInterCompanyUnits($line, $movements);
+                    $missingUnits = $this->missingInterCompanyUnits($line, $movements, (int) $purchase->company_id);
                     $missing = round(max(0, $expected - $posted, count($missingUnits)), 3);
                     if ($missing <= 0 || !$line->item) {
                         continue;
@@ -365,7 +365,7 @@ class SalesInvoiceController extends Controller
                     $movements = StockMovement::where('reference_type', PurchaseBill::class)->where('reference_id', $purchase->id)->where('item_id', $line->item_id)->get();
                     $posted = (float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity');
                     $sourceLine = $invoice->items->first(fn($candidate) => $candidate->item?->item_code === $line->item?->item_code);
-                    $missingUnits = $this->missingInterCompanyUnits($line, $movements);
+                    $missingUnits = $this->missingInterCompanyUnits($line, $movements, $targetCompanyId);
                     $missing += max(0, (float) ($sourceLine?->quantity ?? $line->quantity) - $posted, count($missingUnits));
                 }
             }
@@ -373,8 +373,19 @@ class SalesInvoiceController extends Controller
         })->values();
     }
 
-    private function missingInterCompanyUnits(PurchaseBillItem $line, $movements): array
+    private function missingInterCompanyUnits(PurchaseBillItem $line, $movements, ?int $companyId = null): array
     {
+        if ($companyId) {
+            $serialUnits = app(SerialUnitService::class);
+            $activeIdentities = collect($serialUnits->currentStockUnitsByItem($companyId, (int) $line->item_id)[$line->item_id] ?? [])
+                ->map(fn($unit) => $serialUnits->unitIdentity($unit, (int) $line->item_id))
+                ->filter()->flip();
+
+            return collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit))
+                ->reject(fn($unit) => $activeIdentities->has($serialUnits->unitIdentity($unit, (int) $line->item_id)))
+                ->values()->all();
+        }
+
         $incoming = $movements->where('direction', 'in')->flatMap(fn($movement) => $movement->movement_units ?? [])->map(fn($unit) => is_array($unit) ? ($unit['key'] ?? $unit['serial_no'] ?? $unit['vts_sim'] ?? null) : null)->filter()->values()->all();
         return collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit))->reject(function ($unit) use ($incoming) {
             $key = $unit['key'] ?? $unit['serial_no'] ?? $unit['vts_sim'] ?? null;
