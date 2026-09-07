@@ -161,6 +161,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
     });
     Route::middleware('permission:purchase.view')->group(function () {
         Route::get('purchases/{purchase}/print', [PurchaseBillController::class, 'print'])->middleware('permission:purchase.print')->name('purchases.print');
+        Route::post('purchases/{purchase}/repair-inter-company-stock', [PurchaseBillController::class, 'repairInterCompanyStock'])->middleware('permission:purchase.edit')->name('purchases.repair-inter-company-stock');
         Route::resource('purchases', PurchaseBillController::class)->only(['create','store'])->middleware('permission:purchase.create');
         Route::resource('purchases', PurchaseBillController::class)->only(['edit','update'])->middleware('permission:purchase.edit');
         Route::resource('purchases', PurchaseBillController::class)->only(['index','show']);

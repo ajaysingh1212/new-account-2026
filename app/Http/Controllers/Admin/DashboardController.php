@@ -247,7 +247,9 @@ class DashboardController extends Controller
                 ])->values()->all(),
             ]);
 
-        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','estimateSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals','chequeRows','completedChequeRows','collectionRows'));
+        $companyName = $companyId ? Company::find($companyId)?->name : 'All Companies';
+
+        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','companyName','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','estimateSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals','chequeRows','completedChequeRows','collectionRows'));
     }
 
     private function dateRange(Request $request): array

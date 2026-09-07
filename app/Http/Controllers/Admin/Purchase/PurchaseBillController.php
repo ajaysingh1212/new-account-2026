@@ -11,6 +11,7 @@ use App\Models\Party;
 use App\Models\PartyAdvanceAllocation;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseBillItem;
+use App\Models\StockMovement;
 use App\Models\SubCostCenter;
 use App\Models\TermsTemplate;
 use App\Services\AccountingService;
@@ -209,7 +210,52 @@ class PurchaseBillController extends Controller
             ->where('model_id', $purchase->id)
             ->latest('created_at')
             ->get();
-        return view('admin.purchases.show', ['bill' => $purchase, 'auditLogs' => $auditLogs]);
+        $stockGapRows = $purchase->source_sales_invoice_id ? $this->stockGapRows($purchase) : collect();
+
+        return view('admin.purchases.show', ['bill' => $purchase, 'auditLogs' => $auditLogs, 'stockGapRows' => $stockGapRows]);
+    }
+
+    public function repairInterCompanyStock(Request $request, PurchaseBill $purchase, EntryVisibilityService $visibility, AccountingService $accounting)
+    {
+        $visibility->authorizeManage($purchase);
+        abort_unless($purchase->source_sales_invoice_id, 422, 'Only auto inter-company purchases can be repaired.');
+        $lineIds = collect($request->input('line_ids', []))->map(fn($id) => (int) $id)->filter()->values();
+        abort_if($lineIds->isEmpty(), 422, 'Select at least one missing stock item.');
+
+        $repaired = 0;
+        DB::transaction(function () use ($purchase, $lineIds, $accounting, &$repaired) {
+            $purchase->load(['items.item']);
+            foreach ($purchase->items->whereIn('id', $lineIds) as $line) {
+                if (!$line->item) {
+                    continue;
+                }
+                $movements = StockMovement::where('reference_type', PurchaseBill::class)
+                    ->where('reference_id', $purchase->id)->where('item_id', $line->item_id)->get();
+                $posted = (float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity');
+                $missingUnits = $this->missingUnits($line, $movements);
+                $missing = round(max(0, (float) $line->quantity - $posted, count($missingUnits)), 3);
+                if ($missing <= 0) {
+                    continue;
+                }
+                $accounting->moveStock($line->item, [
+                    'party_id' => $purchase->party_id,
+                    'movement_date' => $purchase->billing_date,
+                    'movement_type' => 'inter_company_purchase_repair',
+                    'direction' => 'in',
+                    'quantity' => $missing,
+                    'unit_price' => $line->unit_price,
+                    'total_value' => $missing * (float) $line->unit_price,
+                    'reference_type' => PurchaseBill::class,
+                    'reference_id' => $purchase->id,
+                    'reference_no' => $purchase->invoice_no,
+                    'description' => 'Missing auto inter-company purchase stock repaired.',
+                    'movement_units' => $missingUnits,
+                ]);
+                $repaired++;
+            }
+        });
+
+        return back()->with('success', $repaired ? "{$repaired} stock item(s) repaired successfully." : 'No stock gap was found.');
     }
 
     public function print(PurchaseBill $purchase, EntryVisibilityService $visibility)
@@ -244,6 +290,33 @@ class PurchaseBillController extends Controller
                 ->orderBy('title')
                 ->get(),
         ];
+    }
+
+    private function stockGapRows(PurchaseBill $purchase)
+    {
+        return $purchase->items->map(function (PurchaseBillItem $line) use ($purchase) {
+            $movements = StockMovement::where('reference_type', PurchaseBill::class)
+                ->where('reference_id', $purchase->id)->where('item_id', $line->item_id)->get();
+            $posted = (float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity');
+            $missingUnits = $this->missingUnits($line, $movements);
+            $missing = round(max(0, (float) $line->quantity - $posted, count($missingUnits)), 3);
+            return [
+                'line_id' => $line->id,
+                'item' => $line->item?->name ?: 'Unknown item',
+                'expected' => (float) $line->quantity,
+                'posted' => max(0, $posted),
+                'missing' => $missing,
+            ];
+        })->filter(fn($row) => $row['missing'] > 0)->values();
+    }
+
+    private function missingUnits(PurchaseBillItem $line, $movements): array
+    {
+        $incoming = $movements->where('direction', 'in')->flatMap(fn($movement) => $movement->movement_units ?? [])->map(fn($unit) => is_array($unit) ? ($unit['key'] ?? $unit['serial_no'] ?? $unit['vts_sim'] ?? null) : null)->filter()->values()->all();
+        return collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit))->reject(function ($unit) use ($incoming) {
+            $key = $unit['key'] ?? $unit['serial_no'] ?? $unit['vts_sim'] ?? null;
+            return $key && in_array($key, $incoming, true);
+        })->values()->all();
     }
 
     private function validated(Request $request): array

@@ -608,8 +608,8 @@
     <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
         <div class="modal-content">
             <div class="modal-header">
-                <div><h5 class="modal-title mb-0">Total Collection</h5><small>Payment In collection for {{ $from }} to {{ $to }}</small></div>
-                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+                <div><h5 class="modal-title mb-0">Total Collection</h5><small>{{ $companyName }} | Payment In | {{ $from }} to {{ $to }}</small></div>
+                <div class="d-flex align-items-center" style="gap:8px"><button type="button" class="collection-action-btn" id="collectionFullscreen"><i class="fas fa-expand mr-1"></i>Full width</button><button type="button" class="collection-action-btn" id="collectionPdf"><i class="fas fa-file-pdf mr-1"></i>Download PDF</button><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
             </div>
             <div class="modal-body">
                 <div class="row mb-3">
@@ -621,7 +621,7 @@
                 </div>
                 <div class="row mb-3 align-items-end">
                     <div class="col-md-4"><div class="modal-metric"><span>Filtered Collection</span><b id="collectionFilteredTotal">Rs 0.00</b></div></div>
-                    <div class="col-md-3"><label class="small font-weight-bold">View</label><select id="collectionChartType" class="form-control"><option value="pie">Pie Chart</option><option value="bar">Bar Chart</option><option value="candle">Candle Chart</option><option value="wave">Wave Chart</option><option value="table">Table Only</option></select></div>
+                    <div class="col-md-8"><label class="small font-weight-bold d-block">View</label><div class="sales-viz-tabs collection-chart-tabs"><button type="button" class="sales-viz-tab active collection-chart-tab" data-chart="pie"><i class="fas fa-chart-pie mr-1"></i>Pie</button><button type="button" class="sales-viz-tab collection-chart-tab" data-chart="bar"><i class="fas fa-chart-bar mr-1"></i>Bar</button><button type="button" class="sales-viz-tab collection-chart-tab" data-chart="candle"><i class="fas fa-chart-simple mr-1"></i>Candle</button><button type="button" class="sales-viz-tab collection-chart-tab" data-chart="wave"><i class="fas fa-water mr-1"></i>Wave</button><button type="button" class="sales-viz-tab collection-chart-tab" data-chart="table"><i class="fas fa-table mr-1"></i>Table</button></div></div>
                 </div>
                 <div class="collection-viz-shell mb-3" id="collectionVizShell"><canvas id="collectionChart" height="120"></canvas></div>
                 <div class="modal-table-wrap mb-3">
@@ -648,7 +648,9 @@
 @push('scripts')
 <script>
 const collectionData = @json($collectionRows ?? []);
+const collectionCompanyName = @json($companyName ?? 'Company');
 let collectionChart;
+let collectionChartType = 'pie';
 function dashMoney(n){return 'Rs '+(Number(n)||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2})}
 function collectionFilteredRows(){
     const party = $('#collectionParty').val(), state = $('#collectionState').val(), district = $('#collectionDistrict').val(), city = $('#collectionCity').val();
@@ -680,7 +682,7 @@ function renderCollectionRows(){
     renderCollectionChart(groups);
 }
 function renderCollectionChart(groups){
-    const canvas=document.getElementById('collectionChart'), shell=document.getElementById('collectionVizShell'), type=$('#collectionChartType').val();
+    const canvas=document.getElementById('collectionChart'), shell=document.getElementById('collectionVizShell'), type=collectionChartType;
     if(collectionChart){collectionChart.destroy();collectionChart=null;}
     shell.style.display=type==='table'?'none':'block'; if(type==='table') return;
     const labels=groups.map(g=>g.party), values=groups.map(g=>g.amount), colors=['#0f766e','#2563eb','#f59e0b','#dc2626','#8b5cf6','#0891b2','#db2777'];
@@ -696,7 +698,9 @@ function renderCollectionChart(groups){
 }
 $('#collectionModal').on('shown.bs.modal', function(){fillCollectionOptions();renderCollectionRows();});
 $('#collectionParty,#collectionState,#collectionDistrict,#collectionCity,#collectionFrom,#collectionTo').on('change input', renderCollectionRows);
-$('#collectionChartType').on('change', renderCollectionRows);
+$(document).on('click','.collection-chart-tab',function(){collectionChartType=$(this).data('chart');$('.collection-chart-tab').removeClass('active');$(this).addClass('active');renderCollectionRows();});
+$('#collectionFullscreen').on('click',function(){$('#collectionModal').toggleClass('collection-fullscreen');$(this).html($('#collectionModal').hasClass('collection-fullscreen')?'<i class="fas fa-compress mr-1"></i>Exit full width':'<i class="fas fa-expand mr-1"></i>Full width');renderCollectionRows();});
+$('#collectionPdf').on('click',function(){const content=document.querySelector('#collectionModal .modal-body').cloneNode(true);const canvas=content.querySelector('#collectionChart');if(canvas){const image=document.createElement('img');image.src=document.getElementById('collectionChart').toDataURL('image/png');image.style='width:100%;max-height:320px;object-fit:contain';canvas.replaceWith(image);}content.querySelectorAll('button,input,select').forEach(el=>el.remove());const win=window.open('','_blank','width=1200,height=900');if(!win)return;win.document.write(`<html><head><title>Total Collection - ${collectionCompanyName}</title><style>body{font-family:Arial;color:#172033;padding:28px}h1{margin:0 0 4px;color:#0f766e}h3{margin:0 0 22px;color:#64748b;font-weight:400}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{border:1px solid #dbe4f0;padding:8px;text-align:left;font-size:12px}th{background:#ecfeff;color:#075985}.modal-table-wrap{overflow:visible}.collection-viz-shell{border:1px solid #bae6fd;padding:12px;margin-bottom:18px}footer{position:fixed;bottom:10px;width:calc(100% - 56px);border-top:1px solid #dbe4f0;padding-top:8px;color:#64748b;font-size:11px}</style></head><body><h1>Total Collection</h1><h3>${collectionCompanyName} | {{ $from }} to {{ $to }}</h3>${content.innerHTML}<footer>Generated from {{ config('app.name') }} | ${new Date().toLocaleString('en-IN')}</footer></body></html>`);win.document.close();win.focus();setTimeout(()=>win.print(),300);});
 $(document).on('click','.collection-party-detail',function(){const party=$(this).data('party'), rows=collectionFilteredRows().filter(row=>row.party===party); $('#collectionDetailTitle').text(party+' - Payment Details'); $('#collectionDetailSub').text(rows.length+' payment(s), '+dashMoney(rows.reduce((s,r)=>s+Number(r.amount||0),0))); $('#collectionDetailRows').html(rows.flatMap(row=>(row.allocations&&row.allocations.length?row.allocations:[{bill_no:'Unallocated / Advance',bill_type:'-',bill_date:row.date_label,bill_total:0,amount:row.amount}]).map(a=>`<tr><td>${row.date_label||'-'}</td><td>${a.bill_no||'-'}</td><td>${a.bill_type||'-'}</td><td>${dashMoney(a.bill_total)}</td><td>${dashMoney(a.amount)}</td></tr>`)).join('')); $('#collectionPaymentDetailModal').modal('show');});
 $('.period-tab').on('click', function(){
     const period = $(this).data('period');

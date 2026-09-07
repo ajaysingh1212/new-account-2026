@@ -22,9 +22,7 @@
                     @endif
                 @endcan
                 @can('delivery_challans.edit')
-                    @if(!$deliveryChallan->convertedInvoice && $deliveryChallan->status !== 'converted')
-                        <a href="{{ route('admin.delivery-challans.edit', $deliveryChallan) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit mr-1"></i> Edit</a>
-                    @endif
+                    <a href="{{ route('admin.delivery-challans.edit', $deliveryChallan) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit mr-1"></i> {{ $deliveryChallan->convertedInvoice ? 'Edit Entry Visibility' : 'Edit' }}</a>
                 @endcan
             @endif
             @if($canManage)
