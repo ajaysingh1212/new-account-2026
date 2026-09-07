@@ -126,7 +126,7 @@ class SalesInvoiceController extends Controller
                     if ($missing <= 0 || !$line->item) {
                         continue;
                     }
-                    $accounting->moveStock($line->item, [
+                    $movement = $accounting->moveStock($line->item, [
                         'party_id' => $purchase->party_id,
                         'movement_date' => $purchase->billing_date,
                         'movement_type' => 'inter_company_purchase_repair',
@@ -139,8 +139,11 @@ class SalesInvoiceController extends Controller
                         'reference_no' => $purchase->invoice_no,
                         'description' => 'Missing auto inter-company purchase stock repaired from source sale.',
                         'movement_units' => $missingUnits,
+                        'force' => true,
                     ]);
-                    $repaired++;
+                    if ($movement) {
+                        $repaired++;
+                    }
                 }
             }
         });
@@ -394,6 +397,7 @@ class SalesInvoiceController extends Controller
                         $tokens = collect($this->interCompanyUnitTokens($unit));
                         $active = collect($activeUnits)->first(fn($candidate) => $tokens->intersect($this->interCompanyUnitTokens($candidate))->isNotEmpty());
                         $everMoved = $movementUnits->contains(fn($candidate) => is_array($candidate) && $tokens->intersect($this->interCompanyUnitTokens($candidate))->isNotEmpty());
+                        $audit = $this->interCompanyUnitAudit($line, $unit, $targetCompanyId);
                         $details[] = [
                             'line_id' => $line->id,
                             'item' => $line->item?->name ?: 'Unknown item',
@@ -405,6 +409,8 @@ class SalesInvoiceController extends Controller
                             'buyer_code' => $unit['buyer_code'] ?? null,
                             'key' => $unit['key'] ?? null,
                             'last_movement' => $active['last_movement_type'] ?? null,
+                            'locations' => $audit['locations'],
+                            'history' => $audit['history'],
                         ];
                     }
                 }
@@ -438,6 +444,33 @@ class SalesInvoiceController extends Controller
         return collect(['serial_no', 'vts_sim', 'buyer_code', 'sku', 'key'])
             ->map(fn($field) => !empty($unit[$field]) ? strtolower(trim((string) $unit[$field])) : null)
             ->filter()->unique()->values()->all();
+    }
+
+    private function interCompanyUnitAudit(PurchaseBillItem $line, array $unit, int $targetCompanyId): array
+    {
+        $tokens = collect($this->interCompanyUnitTokens($unit));
+        $itemIds = Item::query()
+            ->when($line->item?->item_code, fn($query) => $query->where('item_code', $line->item->item_code), fn($query) => $query->whereKey($line->item_id))
+            ->pluck('id');
+        $serials = app(SerialUnitService::class);
+        $movements = StockMovement::with('item')->whereIn('item_id', $itemIds)->orderByDesc('id')->get();
+        $matched = $movements->filter(function ($movement) use ($serials, $tokens) {
+            return collect($serials->movementUnits($movement))->contains(fn($candidate) => is_array($candidate) && $tokens->intersect($this->interCompanyUnitTokens($candidate))->isNotEmpty());
+        });
+        $locations = $matched->groupBy('company_id')->map(function ($rows, $companyId) {
+            $net = (float) $rows->where('direction', 'in')->sum('quantity') - (float) $rows->where('direction', 'out')->sum('quantity');
+            return ['company' => Company::find($companyId)?->name ?: 'Company '.$companyId, 'net' => round($net, 3)];
+        })->filter(fn($row) => $row['net'] > 0)->values()->all();
+        $history = $matched->take(8)->map(fn($movement) => [
+            'company' => Company::find($movement->company_id)?->name ?: 'Company '.$movement->company_id,
+            'type' => $movement->movement_type,
+            'direction' => $movement->direction,
+            'date' => $movement->movement_date?->format('d M Y'),
+            'reference' => $movement->reference_no,
+            'by' => $movement->creator?->name,
+        ])->values()->all();
+
+        return ['locations' => $locations, 'history' => $history];
     }
 
     private function formData(?SalesInvoice $invoice = null): array
