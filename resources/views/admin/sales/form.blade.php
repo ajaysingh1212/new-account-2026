@@ -204,6 +204,15 @@
             </div>
         </div>
         @endif
+        @if($isEdit && ($interCompanyStockStatus ?? collect())->isNotEmpty())
+        <div class="mt-3 p-3 border rounded" style="background:#f8fafc">
+            <div class="d-flex justify-content-between align-items-center flex-wrap" style="gap:10px">
+                <div><strong><i class="fas fa-warehouse mr-1 text-primary"></i> Auto-purchase stock status</strong><br><small class="text-muted">Har merged company ka stock independently verify kiya gaya hai.</small></div>
+                @if($interCompanyStockStatus->sum('missing') > 0)<button type="button" class="btn btn-warning btn-sm" data-toggle="modal" data-target="#sourceSaleStockRepairModal"><i class="fas fa-wrench mr-1"></i>Review & add missing stock</button>@endif
+            </div>
+            <div class="table-responsive mt-2"><table class="table table-sm mb-0"><thead><tr><th>Target company</th><th>Auto purchase</th><th>Stock status</th></tr></thead><tbody>@foreach($interCompanyStockStatus as $status)<tr><td>{{ $status['company'] }}</td><td>{{ $status['purchase'] ?: 'Not created' }}</td><td class="{{ $status['missing'] > 0 ? 'text-danger font-weight-bold' : 'text-success font-weight-bold' }}">{{ $status['missing'] > 0 ? 'Missing '.number_format($status['missing'],3).' unit(s)' : 'Added in stock' }}</td></tr>@endforeach</tbody></table></div>
+        </div>
+        @endif
     </div>
 
     {{-- ── Line Items ── --}}
@@ -273,6 +282,18 @@
     </div>
 </div>
 </form>
+
+@if($isEdit && ($interCompanyStockStatus ?? collect())->sum('missing') > 0)
+<div class="modal fade" id="sourceSaleStockRepairModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-md modal-dialog-centered" role="document"><div class="modal-content">
+        <div class="modal-header bg-warning"><h5 class="modal-title"><i class="fas fa-wrench mr-1"></i> Repair target-company stock</h5><button type="button" class="close" data-dismiss="modal"><span>&times;</span></button></div>
+        <form method="POST" action="{{ route('admin.sales.repair-inter-company-stock', $invoice) }}">@csrf
+            <div class="modal-body"><p>System target company ke auto-purchase movements ko purchase quantity ke against compare karega. Sirf missing net quantity/serial add honge; existing stock duplicate nahi hoga.</p><ul class="mb-0">@foreach($interCompanyStockStatus->where('missing','>',0) as $status)<li><strong>{{ $status['company'] }}</strong>: {{ number_format($status['missing'],3) }} unit(s) missing</li>@endforeach</ul></div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button><button class="btn btn-warning"><i class="fas fa-check mr-1"></i> Update stock</button></div>
+        </form>
+    </div></div>
+</div>
+@endif
 
 {{-- ── Unit serial drawer ── --}}
 <div class="unit-backdrop" id="unitBackdrop"></div>

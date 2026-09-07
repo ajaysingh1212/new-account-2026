@@ -83,7 +83,53 @@ class SalesInvoiceController extends Controller
         return view('admin.sales.edit', array_merge($this->formData($sale), [
             'invoice' => $sale,
             'advanceApplications' => $advanceApplications,
+            'interCompanyStockStatus' => $this->interCompanyStockStatus($sale),
         ]));
+    }
+
+    public function repairInterCompanyStock(SalesInvoice $sale, EntryVisibilityService $visibility, AccountingService $accounting, Request $request)
+    {
+        $visibility->authorizeManage($sale);
+        abort_unless($sale->inter_company_transfer, 422, 'Auto purchase is not enabled for this sale.');
+        $repaired = 0;
+
+        DB::transaction(function () use ($sale, $accounting, &$repaired) {
+            $sale->load(['items.item']);
+            foreach (array_map('intval', $sale->inter_company_target_company_ids ?? []) as $targetCompanyId) {
+                $purchase = PurchaseBill::with(['items.item'])->where('company_id', $targetCompanyId)->where('source_sales_invoice_id', $sale->id)->first();
+                if (!$purchase) {
+                    continue;
+                }
+                foreach ($purchase->items as $line) {
+                    $sourceLine = $sale->items->first(fn($candidate) => $candidate->item?->item_code === $line->item?->item_code);
+                    $expected = (float) ($sourceLine?->quantity ?? $line->quantity);
+                    $movements = StockMovement::where('reference_type', PurchaseBill::class)->where('reference_id', $purchase->id)->where('item_id', $line->item_id)->get();
+                    $posted = (float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity');
+                    $missingUnits = $this->missingInterCompanyUnits($line, $movements);
+                    $missing = round(max(0, $expected - $posted, count($missingUnits)), 3);
+                    if ($missing <= 0 || !$line->item) {
+                        continue;
+                    }
+                    $accounting->moveStock($line->item, [
+                        'party_id' => $purchase->party_id,
+                        'movement_date' => $purchase->billing_date,
+                        'movement_type' => 'inter_company_purchase_repair',
+                        'direction' => 'in',
+                        'quantity' => $missing,
+                        'unit_price' => $line->unit_price,
+                        'total_value' => $missing * (float) $line->unit_price,
+                        'reference_type' => PurchaseBill::class,
+                        'reference_id' => $purchase->id,
+                        'reference_no' => $purchase->invoice_no,
+                        'description' => 'Missing auto inter-company purchase stock repaired from source sale.',
+                        'movement_units' => $missingUnits,
+                    ]);
+                    $repaired++;
+                }
+            }
+        });
+
+        return back()->with('success', $repaired ? "{$repaired} target-company stock item(s) repaired." : 'Target-company stock is already reconciled.');
     }
 
     public function store(Request $request, AccountingService $accounting, EntryVisibilityService $visibility, PartyAdvanceService $advances)
@@ -300,6 +346,40 @@ class SalesInvoiceController extends Controller
             'company' => $sale->company,
             'detail' => $profits->invoiceDetail($sale),
         ]);
+    }
+
+    private function interCompanyStockStatus(SalesInvoice $invoice)
+    {
+        if (!$invoice->inter_company_transfer) {
+            return collect();
+        }
+        $invoice->loadMissing(['items.item']);
+        return collect(array_map('intval', $invoice->inter_company_target_company_ids ?? []))->map(function (int $targetCompanyId) use ($invoice) {
+            $company = Company::find($targetCompanyId);
+            $purchase = PurchaseBill::with(['items.item'])->where('company_id', $targetCompanyId)->where('source_sales_invoice_id', $invoice->id)->first();
+            $missing = 0;
+            if (!$purchase) {
+                $missing = (float) $invoice->items->sum('quantity');
+            } else {
+                foreach ($purchase->items as $line) {
+                    $movements = StockMovement::where('reference_type', PurchaseBill::class)->where('reference_id', $purchase->id)->where('item_id', $line->item_id)->get();
+                    $posted = (float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity');
+                    $sourceLine = $invoice->items->first(fn($candidate) => $candidate->item?->item_code === $line->item?->item_code);
+                    $missingUnits = $this->missingInterCompanyUnits($line, $movements);
+                    $missing += max(0, (float) ($sourceLine?->quantity ?? $line->quantity) - $posted, count($missingUnits));
+                }
+            }
+            return ['company_id' => $targetCompanyId, 'company' => $company?->name ?: 'Target company', 'purchase' => $purchase?->invoice_no, 'missing' => round($missing, 3)];
+        })->values();
+    }
+
+    private function missingInterCompanyUnits(PurchaseBillItem $line, $movements): array
+    {
+        $incoming = $movements->where('direction', 'in')->flatMap(fn($movement) => $movement->movement_units ?? [])->map(fn($unit) => is_array($unit) ? ($unit['key'] ?? $unit['serial_no'] ?? $unit['vts_sim'] ?? null) : null)->filter()->values()->all();
+        return collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit))->reject(function ($unit) use ($incoming) {
+            $key = $unit['key'] ?? $unit['serial_no'] ?? $unit['vts_sim'] ?? null;
+            return $key && in_array($key, $incoming, true);
+        })->values()->all();
     }
 
     private function formData(?SalesInvoice $invoice = null): array
@@ -925,14 +1005,28 @@ class SalesInvoiceController extends Controller
                 continue;
             }
 
+            // Reverse the actual net posting, not the bill quantity. Older broken
+            // records may contain only a reversal movement; posting another out
+            // movement would make the target stock look negative forever.
+            $movements = StockMovement::where('reference_type', PurchaseBill::class)
+                ->where('reference_id', $purchase->id)
+                ->where('item_id', $line->item_id)
+                ->get();
+            $net = round((float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity'), 3);
+            if (abs($net) < 0.0005) {
+                continue;
+            }
+            $direction = $net > 0 ? 'out' : 'in';
+            $quantity = abs($net);
+
             $accounting->moveStock($line->item, [
                 'party_id' => $purchase->party_id,
                 'movement_date' => now()->toDateString(),
                 'movement_type' => 'inter_company_purchase_reversal',
-                'direction' => 'out',
-                'quantity' => (float) $line->quantity,
+                'direction' => $direction,
+                'quantity' => $quantity,
                 'unit_price' => $line->unit_price,
-                'total_value' => $line->line_total,
+                'total_value' => $quantity * (float) $line->unit_price,
                 'reference_type' => PurchaseBill::class,
                 'reference_id' => $purchase->id,
                 'reference_no' => $purchase->invoice_no,

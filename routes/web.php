@@ -210,6 +210,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
     Route::middleware('permission:sales.view')->group(function () {
         Route::get('sales/{sale}/print', [SalesInvoiceController::class, 'print'])->middleware('permission:sales.print')->name('sales.print');
         Route::get('sales/{sale}/detail-pdf', [SalesInvoiceController::class, 'detailPdf'])->middleware('permission:sales.print')->name('sales.detail-pdf');
+        Route::post('sales/{sale}/repair-inter-company-stock', [SalesInvoiceController::class, 'repairInterCompanyStock'])->middleware('permission:sales.edit')->name('sales.repair-inter-company-stock');
         Route::resource('sales', SalesInvoiceController::class)->only(['create','store'])->middleware('permission:sales.create');
         Route::resource('sales', SalesInvoiceController::class)->only(['edit','update'])->middleware('permission:sales.edit');
         Route::resource('sales', SalesInvoiceController::class)->only(['index','show']);
