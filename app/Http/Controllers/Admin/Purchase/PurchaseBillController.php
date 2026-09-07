@@ -232,9 +232,11 @@ class PurchaseBillController extends Controller
                 }
                 $movements = StockMovement::where('reference_type', PurchaseBill::class)
                     ->where('reference_id', $purchase->id)->where('item_id', $line->item_id)->get();
-                $posted = (float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity');
                 $missingUnits = $this->missingUnits($line, $movements, (int) $purchase->company_id);
-                $missing = round(max(0, (float) $line->quantity - $posted, count($missingUnits)), 3);
+                $hasSerialUnits = collect($line->selected_units ?? [])->contains(fn($unit) => is_array($unit) && $this->interCompanyUnitToken($unit));
+                $missing = $hasSerialUnits
+                    ? count($missingUnits)
+                    : round(max(0, (float) $line->quantity - ((float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity'))), 3);
                 if ($missing <= 0) {
                     continue;
                 }
@@ -298,9 +300,14 @@ class PurchaseBillController extends Controller
         return $purchase->items->map(function (PurchaseBillItem $line) use ($purchase) {
             $movements = StockMovement::where('reference_type', PurchaseBill::class)
                 ->where('reference_id', $purchase->id)->where('item_id', $line->item_id)->get();
-            $posted = (float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity');
             $missingUnits = $this->missingUnits($line, $movements, (int) $purchase->company_id);
-            $missing = round(max(0, (float) $line->quantity - $posted, count($missingUnits)), 3);
+            $hasSerialUnits = collect($line->selected_units ?? [])->contains(fn($unit) => is_array($unit) && $this->interCompanyUnitToken($unit));
+            $posted = $hasSerialUnits
+                ? max(0, (float) $line->quantity - count($missingUnits))
+                : (float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity');
+            $missing = $hasSerialUnits
+                ? count($missingUnits)
+                : round(max(0, (float) $line->quantity - $posted), 3);
             return [
                 'line_id' => $line->id,
                 'item' => $line->item?->name ?: 'Unknown item',
@@ -316,11 +323,11 @@ class PurchaseBillController extends Controller
         if ($companyId) {
             $serialUnits = app(SerialUnitService::class);
             $activeIdentities = collect($serialUnits->currentStockUnitsByItem($companyId, (int) $line->item_id)[$line->item_id] ?? [])
-                ->map(fn($unit) => $serialUnits->unitIdentity($unit, (int) $line->item_id))
+                ->map(fn($unit) => $this->interCompanyUnitToken($unit))
                 ->filter()->flip();
 
             return collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit))
-                ->reject(fn($unit) => $activeIdentities->has($serialUnits->unitIdentity($unit, (int) $line->item_id)))
+                ->reject(fn($unit) => $activeIdentities->has($this->interCompanyUnitToken($unit)))
                 ->values()->all();
         }
 
@@ -329,6 +336,17 @@ class PurchaseBillController extends Controller
             $key = $unit['key'] ?? $unit['serial_no'] ?? $unit['vts_sim'] ?? null;
             return $key && in_array($key, $incoming, true);
         })->values()->all();
+    }
+
+    private function interCompanyUnitToken(array $unit): ?string
+    {
+        foreach (['serial_no', 'vts_sim', 'buyer_code', 'sku', 'key'] as $field) {
+            if (!empty($unit[$field])) {
+                return strtolower(trim((string) $unit[$field]));
+            }
+        }
+
+        return null;
     }
 
     private function validated(Request $request): array

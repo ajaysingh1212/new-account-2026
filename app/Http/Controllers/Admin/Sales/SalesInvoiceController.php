@@ -104,9 +104,11 @@ class SalesInvoiceController extends Controller
                     $sourceLine = $sale->items->first(fn($candidate) => $candidate->item?->item_code === $line->item?->item_code);
                     $expected = (float) ($sourceLine?->quantity ?? $line->quantity);
                     $movements = StockMovement::where('reference_type', PurchaseBill::class)->where('reference_id', $purchase->id)->where('item_id', $line->item_id)->get();
-                    $posted = (float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity');
                     $missingUnits = $this->missingInterCompanyUnits($line, $movements, (int) $purchase->company_id);
-                    $missing = round(max(0, $expected - $posted, count($missingUnits)), 3);
+                    $hasSerialUnits = collect($line->selected_units ?? [])->contains(fn($unit) => is_array($unit) && $this->interCompanyUnitToken($unit));
+                    $missing = $hasSerialUnits
+                        ? count($missingUnits)
+                        : round(max(0, $expected - ((float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity'))), 3);
                     if ($missing <= 0 || !$line->item) {
                         continue;
                     }
@@ -363,10 +365,13 @@ class SalesInvoiceController extends Controller
             } else {
                 foreach ($purchase->items as $line) {
                     $movements = StockMovement::where('reference_type', PurchaseBill::class)->where('reference_id', $purchase->id)->where('item_id', $line->item_id)->get();
-                    $posted = (float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity');
                     $sourceLine = $invoice->items->first(fn($candidate) => $candidate->item?->item_code === $line->item?->item_code);
                     $missingUnits = $this->missingInterCompanyUnits($line, $movements, $targetCompanyId);
-                    $missing += max(0, (float) ($sourceLine?->quantity ?? $line->quantity) - $posted, count($missingUnits));
+                    $expected = (float) ($sourceLine?->quantity ?? $line->quantity);
+                    $hasSerialUnits = collect($line->selected_units ?? [])->contains(fn($unit) => is_array($unit) && $this->interCompanyUnitToken($unit));
+                    $missing += $hasSerialUnits
+                        ? count($missingUnits)
+                        : max(0, $expected - ((float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity')));
                 }
             }
             return ['company_id' => $targetCompanyId, 'company' => $company?->name ?: 'Target company', 'purchase' => $purchase?->invoice_no, 'missing' => round($missing, 3)];
@@ -378,11 +383,11 @@ class SalesInvoiceController extends Controller
         if ($companyId) {
             $serialUnits = app(SerialUnitService::class);
             $activeIdentities = collect($serialUnits->currentStockUnitsByItem($companyId, (int) $line->item_id)[$line->item_id] ?? [])
-                ->map(fn($unit) => $serialUnits->unitIdentity($unit, (int) $line->item_id))
+                ->map(fn($unit) => $this->interCompanyUnitToken($unit))
                 ->filter()->flip();
 
             return collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit))
-                ->reject(fn($unit) => $activeIdentities->has($serialUnits->unitIdentity($unit, (int) $line->item_id)))
+                ->reject(fn($unit) => $activeIdentities->has($this->interCompanyUnitToken($unit)))
                 ->values()->all();
         }
 
@@ -391,6 +396,17 @@ class SalesInvoiceController extends Controller
             $key = $unit['key'] ?? $unit['serial_no'] ?? $unit['vts_sim'] ?? null;
             return $key && in_array($key, $incoming, true);
         })->values()->all();
+    }
+
+    private function interCompanyUnitToken(array $unit): ?string
+    {
+        foreach (['serial_no', 'vts_sim', 'buyer_code', 'sku', 'key'] as $field) {
+            if (!empty($unit[$field])) {
+                return strtolower(trim((string) $unit[$field]));
+            }
+        }
+
+        return null;
     }
 
     private function formData(?SalesInvoice $invoice = null): array
