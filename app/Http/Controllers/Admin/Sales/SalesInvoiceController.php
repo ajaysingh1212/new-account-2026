@@ -93,18 +93,32 @@ class SalesInvoiceController extends Controller
         abort_unless($sale->inter_company_transfer, 422, 'Auto purchase is not enabled for this sale.');
         $repaired = 0;
 
-        DB::transaction(function () use ($sale, $accounting, &$repaired) {
+        $requestedTargets = collect($request->input('target_company_ids', []))->map(fn($id) => (int) $id)->filter()->values();
+        $requestedLines = collect($request->input('line_ids', []))->map(fn($id) => (int) $id)->filter()->values();
+        $requestedUnitToken = $request->input('unit_token');
+
+        DB::transaction(function () use ($sale, $accounting, &$repaired, $requestedTargets, $requestedLines, $requestedUnitToken) {
             $sale->load(['items.item']);
             foreach (array_map('intval', $sale->inter_company_target_company_ids ?? []) as $targetCompanyId) {
+                if ($requestedTargets->isNotEmpty() && !$requestedTargets->contains($targetCompanyId)) {
+                    continue;
+                }
                 $purchase = PurchaseBill::with(['items.item'])->where('company_id', $targetCompanyId)->where('source_sales_invoice_id', $sale->id)->first();
                 if (!$purchase) {
                     continue;
                 }
                 foreach ($purchase->items as $line) {
+                    if ($requestedLines->isNotEmpty() && !$requestedLines->contains((int) $line->id)) {
+                        continue;
+                    }
                     $sourceLine = $sale->items->first(fn($candidate) => $candidate->item?->item_code === $line->item?->item_code);
                     $expected = (float) ($sourceLine?->quantity ?? $line->quantity);
                     $movements = StockMovement::where('reference_type', PurchaseBill::class)->where('reference_id', $purchase->id)->where('item_id', $line->item_id)->get();
                     $missingUnits = $this->missingInterCompanyUnits($line, $movements, (int) $purchase->company_id);
+                    if ($requestedUnitToken) {
+                        $requestedUnitToken = strtolower(trim((string) $requestedUnitToken));
+                        $missingUnits = collect($missingUnits)->filter(fn($unit) => collect($this->interCompanyUnitTokens($unit))->contains($requestedUnitToken))->values()->all();
+                    }
                     $hasSerialUnits = collect($line->selected_units ?? [])->contains(fn($unit) => is_array($unit) && !empty($this->interCompanyUnitTokens($unit)));
                     $missing = $hasSerialUnits
                         ? count($missingUnits)
@@ -360,6 +374,7 @@ class SalesInvoiceController extends Controller
             $company = Company::find($targetCompanyId);
             $purchase = PurchaseBill::with(['items.item'])->where('company_id', $targetCompanyId)->where('source_sales_invoice_id', $invoice->id)->first();
             $missing = 0;
+            $details = [];
             if (!$purchase) {
                 $missing = (float) $invoice->items->sum('quantity');
             } else {
@@ -372,9 +387,29 @@ class SalesInvoiceController extends Controller
                     $missing += $hasSerialUnits
                         ? count($missingUnits)
                         : max(0, $expected - ((float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity')));
+
+                    $activeUnits = app(SerialUnitService::class)->currentStockUnitsByItem($targetCompanyId, (int) $line->item_id)[$line->item_id] ?? [];
+                    $movementUnits = collect($movements)->flatMap(fn($movement) => $movement->movement_units ?? []);
+                    foreach (collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit))->values() as $unit) {
+                        $tokens = collect($this->interCompanyUnitTokens($unit));
+                        $active = collect($activeUnits)->first(fn($candidate) => $tokens->intersect($this->interCompanyUnitTokens($candidate))->isNotEmpty());
+                        $everMoved = $movementUnits->contains(fn($candidate) => is_array($candidate) && $tokens->intersect($this->interCompanyUnitTokens($candidate))->isNotEmpty());
+                        $details[] = [
+                            'line_id' => $line->id,
+                            'item' => $line->item?->name ?: 'Unknown item',
+                            'status' => $active ? 'added' : 'missing',
+                            'reason' => $active ? 'Active stock balance found.' : ($everMoved ? 'Movement exists, but this serial is currently out/reversed in target stock.' : 'No matching inbound stock movement found.'),
+                            'serial_no' => $unit['serial_no'] ?? null,
+                            'sku' => $unit['sku'] ?? null,
+                            'vts_sim' => $unit['vts_sim'] ?? null,
+                            'buyer_code' => $unit['buyer_code'] ?? null,
+                            'key' => $unit['key'] ?? null,
+                            'last_movement' => $active['last_movement_type'] ?? null,
+                        ];
+                    }
                 }
             }
-            return ['company_id' => $targetCompanyId, 'company' => $company?->name ?: 'Target company', 'purchase' => $purchase?->invoice_no, 'missing' => round($missing, 3)];
+            return ['company_id' => $targetCompanyId, 'company' => $company?->name ?: 'Target company', 'purchase' => $purchase?->invoice_no, 'missing' => round($missing, 3), 'details' => $details ?? []];
         })->values();
     }
 

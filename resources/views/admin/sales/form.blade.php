@@ -210,7 +210,7 @@
                 <div><strong><i class="fas fa-warehouse mr-1 text-primary"></i> Auto-purchase stock status</strong><br><small class="text-muted">Har merged company ka stock independently verify kiya gaya hai.</small></div>
                 @if($interCompanyStockStatus->sum('missing') > 0)<button type="button" class="btn btn-warning btn-sm" data-toggle="modal" data-target="#sourceSaleStockRepairModal"><i class="fas fa-wrench mr-1"></i>Review & add missing stock</button>@endif
             </div>
-            <div class="table-responsive mt-2"><table class="table table-sm mb-0"><thead><tr><th>Target company</th><th>Auto purchase</th><th>Stock status</th></tr></thead><tbody>@foreach($interCompanyStockStatus as $status)<tr><td>{{ $status['company'] }}</td><td>{{ $status['purchase'] ?: 'Not created' }}</td><td class="{{ $status['missing'] > 0 ? 'text-danger font-weight-bold' : 'text-success font-weight-bold' }}">{{ $status['missing'] > 0 ? 'Missing '.number_format($status['missing'],3).' unit(s)' : 'Added in stock' }}</td></tr>@endforeach</tbody></table></div>
+            <div class="table-responsive mt-2"><table class="table table-sm mb-0"><thead><tr><th>Target company</th><th>Auto purchase</th><th>Stock status</th><th>Details</th></tr></thead><tbody>@foreach($interCompanyStockStatus as $status)<tr><td>{{ $status['company'] }}</td><td>{{ $status['purchase'] ?: 'Not created' }}</td><td class="{{ $status['missing'] > 0 ? 'text-danger font-weight-bold' : 'text-success font-weight-bold' }}">{{ $status['missing'] > 0 ? 'Missing '.number_format($status['missing'],3).' unit(s)' : 'Added in stock' }}</td><td><button type="button" class="btn btn-outline-primary btn-sm" data-toggle="modal" data-target="#stockDetailsModal{{ $status['company_id'] }}"><i class="fas fa-list mr-1"></i>Details</button></td></tr>@endforeach</tbody></table></div>
         </div>
         @endif
     </div>
@@ -293,6 +293,26 @@
         </form>
     </div></div>
 </div>
+@endif
+
+@if($isEdit && ($interCompanyStockStatus ?? collect())->isNotEmpty())
+@foreach($interCompanyStockStatus as $status)
+<div class="modal fade" id="stockDetailsModal{{ $status['company_id'] }}" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" role="document"><div class="modal-content">
+        <div class="modal-header bg-primary text-white"><h5 class="modal-title"><i class="fas fa-boxes mr-1"></i> Stock details: {{ $status['company'] }}</h5><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+        <div class="modal-body">
+            <div class="table-responsive"><table class="table table-sm table-bordered mb-0"><thead><tr><th>Item</th><th>Serial no.</th><th>SKU</th><th>SIM / VTS</th><th>Status</th><th>Reason / last movement</th><th>Action</th></tr></thead><tbody>
+            @forelse($status['details'] ?? [] as $detail)
+                <tr><td>{{ $detail['item'] }}</td><td>{{ $detail['serial_no'] ?: '-' }}</td><td>{{ $detail['sku'] ?: '-' }}</td><td>{{ $detail['vts_sim'] ?: ($detail['buyer_code'] ?: '-') }}</td><td class="{{ $detail['status'] === 'added' ? 'text-success font-weight-bold' : 'text-danger font-weight-bold' }}">{{ $detail['status'] === 'added' ? 'Added in stock' : 'Missing' }}</td><td>{{ $detail['reason'] }} @if($detail['last_movement'])<br><small>Last: {{ $detail['last_movement'] }}</small>@endif</td><td>@if($detail['status'] !== 'added')<form method="POST" action="{{ route('admin.sales.repair-inter-company-stock', $invoice) }}" class="d-inline">@csrf<input type="hidden" name="target_company_ids[]" value="{{ $status['company_id'] }}"><input type="hidden" name="line_ids[]" value="{{ $detail['line_id'] }}"><input type="hidden" name="unit_token" value="{{ $detail['serial_no'] ?: ($detail['vts_sim'] ?: ($detail['buyer_code'] ?: ($detail['sku'] ?: $detail['key']))) }}"><button class="btn btn-warning btn-sm"><i class="fas fa-wrench mr-1"></i>Add</button></form>@else<span class="text-success"><i class="fas fa-check"></i></span>@endif</td></tr>
+            @empty
+                <tr><td colspan="7" class="text-center text-muted">No serial detail available for this auto purchase.</td></tr>
+            @endforelse
+            </tbody></table></div>
+        </div>
+        <div class="modal-footer"><button type="button" class="btn btn-secondary" data-dismiss="modal">Close</button></div>
+    </div></div>
+</div>
+@endforeach
 @endif
 
 {{-- ── Unit serial drawer ── --}}
