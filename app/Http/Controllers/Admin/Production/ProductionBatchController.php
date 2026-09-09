@@ -8,13 +8,13 @@ use App\Models\Buyer;
 use App\Models\Item;
 use App\Models\Party;
 use App\Models\ProductionBatch;
-use App\Models\SalesInvoiceItem;
 use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\AccountingService;
 use App\Services\CrmIdentifierPropagationService;
 use App\Services\EntryVisibilityService;
 use App\Services\SerialUnitService;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
@@ -23,9 +23,10 @@ class ProductionBatchController extends Controller
     public function index(EntryVisibilityService $visibility)
     {
         $batches = $visibility->scopeForUser(
-            ProductionBatch::with(['finishedItem','creator'])->latest(),
+            ProductionBatch::with(['finishedItem', 'creator'])->latest(),
             ProductionBatch::class
         )->get();
+
         return view('admin.production.index', compact('batches'));
     }
 
@@ -34,9 +35,9 @@ class ProductionBatchController extends Controller
         $companyId = auth()->user()->current_company_id;
 
         $finishedItems = Item::with([
-                'productType',
-                'bomMaterials.rawItem'
-            ])
+            'productType',
+            'bomMaterials.rawItem',
+        ])
             ->where('company_id', $companyId)
             ->where('status', 'active')
             ->whereHas('productType', function ($q) {
@@ -45,27 +46,25 @@ class ProductionBatchController extends Controller
             ->orderBy('name')
             ->get();
 
-
-
         // Build a rich JSON structure for the frontend wizard
-        $itemsData = $finishedItems->keyBy('id')->map(fn($item) => [
-            'id'               => $item->id,
-            'name'             => $item->name,
-            'item_code'        => $item->item_code,
-            'hsn_code'         => $item->hsn_code,
-            'sale_price'       => (float) $item->sale_price,
+        $itemsData = $finishedItems->keyBy('id')->map(fn ($item) => [
+            'id' => $item->id,
+            'name' => $item->name,
+            'item_code' => $item->item_code,
+            'hsn_code' => $item->hsn_code,
+            'sale_price' => (float) $item->sale_price,
             'sale_gst_percent' => (float) $item->sale_gst_percent,
-            'requires_gps'      => $this->isGpsItem($item),
-            'bom'              => $item->bomMaterials->map(fn($bom) => [
-                'raw_item_id'      => $bom->raw_item_id,
-                'line_type'        => $bom->line_type ?? 'raw_material',
-                'name'             => $bom->rawItem?->name ?? 'Unknown',
-                'unit'             => $bom->rawItem?->unit ?? 'PCS',
-                'qty_per_unit'     => (float) $bom->qty_per_unit,
-                'purchase_price'   => (float) ($bom->rawItem?->purchase_price ?? 0),
-                'purchase_gst'     => (float) ($bom->rawItem?->purchase_gst_percent ?? 0),
-                'current_stock'    => (float) ($bom->rawItem?->current_stock ?? 0),
-                'low_stock_qty'    => (float) ($bom->rawItem?->low_stock_qty ?? 0),
+            'requires_gps' => $this->isGpsItem($item),
+            'bom' => $item->bomMaterials->map(fn ($bom) => [
+                'raw_item_id' => $bom->raw_item_id,
+                'line_type' => $bom->line_type ?? 'raw_material',
+                'name' => $bom->rawItem?->name ?? 'Unknown',
+                'unit' => $bom->rawItem?->unit ?? 'PCS',
+                'qty_per_unit' => (float) $bom->qty_per_unit,
+                'purchase_price' => (float) ($bom->rawItem?->purchase_price ?? 0),
+                'purchase_gst' => (float) ($bom->rawItem?->purchase_gst_percent ?? 0),
+                'current_stock' => (float) ($bom->rawItem?->current_stock ?? 0),
+                'low_stock_qty' => (float) ($bom->rawItem?->low_stock_qty ?? 0),
             ])->values(),
         ]);
 
@@ -75,15 +74,15 @@ class ProductionBatchController extends Controller
             $parties = Party::where('company_id', $companyId)
                 ->where('status', 'active')
                 ->orderBy('display_name')
-                ->get(['id','display_name']);
+                ->get(['id', 'display_name']);
         }
 
         return view('admin.production.create', [
             'finishedItems' => $finishedItems,
-            'itemsData'     => $itemsData,
-            'parties'       => $parties,
-            'buyers'        => Buyer::where('company_id', $companyId)->where('status', 'active')->orderBy('name')->get(),
-            'batchNo'       => $this->nextNo(),
+            'itemsData' => $itemsData,
+            'parties' => $parties,
+            'buyers' => Buyer::where('company_id', $companyId)->where('status', 'active')->orderBy('name')->get(),
+            'batchNo' => $this->nextNo(),
         ]);
     }
 
@@ -92,7 +91,7 @@ class ProductionBatchController extends Controller
         $visibility->authorizeView($productionBatch);
         $productionBatch->load(['finishedItem', 'creator']);
 
-        $auditLogs = AuditLog::with(['user','company'])
+        $auditLogs = AuditLog::with(['user', 'company'])
             ->where('model', ProductionBatch::class)
             ->where('model_id', $productionBatch->id)
             ->latest('created_at')
@@ -116,33 +115,37 @@ class ProductionBatchController extends Controller
     public function store(Request $request, AccountingService $accounting, EntryVisibilityService $visibility)
     {
         $data = $request->validate([
-            'finished_item_id' => ['required','exists:items,id'],
-            'batch_no'         => ['nullable','max:30'],
-            'production_date'  => ['required','date'],
-            'quantity'         => ['required','numeric','min:0.001'],
-            'notes'            => ['nullable','string'],
+            'finished_item_id' => ['required', 'exists:items,id'],
+            'batch_no' => ['nullable', 'max:30'],
+            'production_date' => ['required', 'date'],
+            'quantity' => ['required', 'numeric', 'min:0.001'],
+            'notes' => ['nullable', 'string'],
             // Per-unit fields (arrays)
-            'unit_serial.*'    => ['nullable','string','max:100'],
-            'unit_buyer_id.*'  => ['nullable','exists:buyers,id'],
-            'unit_buyer_code.*'=> ['nullable','string','max:100'],
-            'unit_batch.*'     => ['nullable','string','max:100'],
-            'unit_vts_sim.*'   => ['nullable','string','max:100'],
-            'unit_sale_price.*'=> ['nullable','numeric','min:0'],
-            'unit_gst.*'       => ['nullable','numeric','min:0'],
-            'unit_warehouse.*' => ['nullable','string','max:255'],
-            'unit_notes.*'     => ['nullable','string','max:500'],
+            'unit_serial.*' => ['nullable', 'string', 'max:100'],
+            'unit_buyer_id.*' => ['nullable', 'exists:buyers,id'],
+            'unit_buyer_code.*' => ['nullable', 'string', 'max:100'],
+            'unit_batch.*' => ['nullable', 'string', 'max:100'],
+            'unit_vts_sim.*' => ['nullable', 'string', 'max:100'],
+            'unit_sale_price.*' => ['nullable', 'numeric', 'min:0'],
+            'unit_gst.*' => ['nullable', 'numeric', 'min:0'],
+            'unit_warehouse.*' => ['nullable', 'string', 'max:255'],
+            'unit_notes.*' => ['nullable', 'string', 'max:500'],
         ]);
 
         DB::transaction(function () use ($request, $data, $accounting, $visibility) {
             $finished = Item::with('bomMaterials.rawItem')->lockForUpdate()->findOrFail($data['finished_item_id']);
             $this->ensureTrackStock($finished);
-            $qty      = (float) $data['quantity'];
-            $rawCost  = 0;
+            $qty = (float) $data['quantity'];
+            // Use one batch number throughout this posting.  Apart from avoiding
+            // a second sequence lookup, this gives generated serials a stable
+            // document prefix when a CRM entry produces more than one unit.
+            $batchNo = $data['batch_no'] ?: $this->nextNo();
+            $rawCost = 0;
             $requiresGps = $this->isGpsItem($finished);
 
             // 1. Consume raw materials & validate stock
             foreach ($finished->bomMaterials as $bom) {
-                $raw  = Item::lockForUpdate()->findOrFail($bom->raw_item_id);
+                $raw = Item::lockForUpdate()->findOrFail($bom->raw_item_id);
                 $need = (float) $bom->qty_per_unit * $qty;
                 $unitCost = $this->bomUnitCost($bom, $raw);
                 $value = $need * $unitCost;
@@ -159,14 +162,14 @@ class ProductionBatchController extends Controller
                 );
 
                 $accounting->moveStock($raw, [
-                    'movement_date'  => $data['production_date'],
-                    'movement_type'  => 'production_consumption',
-                    'direction'      => 'out',
-                    'quantity'       => $need,
-                    'unit_price'     => $unitCost,
-                    'total_value'    => $value,
-                    'reference_no'   => $data['batch_no'] ?: $this->nextNo(),
-                    'description'    => "Consumed for production of {$finished->name}",
+                    'movement_date' => $data['production_date'],
+                    'movement_type' => 'production_consumption',
+                    'direction' => 'out',
+                    'quantity' => $need,
+                    'unit_price' => $unitCost,
+                    'total_value' => $value,
+                    'reference_no' => $batchNo,
+                    'description' => "Consumed for production of {$finished->name}",
                 ]);
             }
 
@@ -176,17 +179,24 @@ class ProductionBatchController extends Controller
             for ($i = 0; $i < $unitCount; $i++) {
                 $vtsSim = trim((string) $request->input("unit_vts_sim.{$i}", ''));
                 abort_if($requiresGps && $vtsSim === '', 422, 'VTS/SIM number is required for every GPS finished goods unit.');
+                // A CRM quantity represents physical finished-good units.  The
+                // form labels this field "Auto or manual", so never leave the
+                // automatic case without an identity.  Blank serials previously
+                // made bulk CRM output appear as stock without its serial units.
+                $serialNo = trim((string) $request->input("unit_serial.{$i}", ''));
                 $unitsData[] = [
-                    'buyer_id'   => $request->input("unit_buyer_id.{$i}"),
-                    'buyer_code' => $request->input("unit_buyer_code.{$i}") ?: 'BC-AUTO-' . str_pad((string) ($i + 1), 3, '0', STR_PAD_LEFT),
-                    'serial_no'  => $request->input("unit_serial.{$i}"),
-                    'batch_no'   => $request->input("unit_batch.{$i}"),
-                    'vts_sim'    => $vtsSim ?: null,
+                    'buyer_id' => $request->input("unit_buyer_id.{$i}"),
+                    'buyer_code' => $request->input("unit_buyer_code.{$i}") ?: 'BC-AUTO-'.str_pad((string) ($i + 1), 3, '0', STR_PAD_LEFT),
+                    'serial_no' => $serialNo !== ''
+                        ? $serialNo
+                        : $this->generatedUnitSerial($batchNo, $i),
+                    'batch_no' => $request->input("unit_batch.{$i}"),
+                    'vts_sim' => $vtsSim ?: null,
                     'sale_price' => $request->input("unit_sale_price.{$i}"),
-                    'gst'        => $request->input("unit_gst.{$i}"),
-                    'sale_mode'  => $request->input("unit_sale_mode.{$i}", 'exclusive'),
-                    'warehouse'  => $request->input("unit_warehouse.{$i}"),
-                    'notes'      => $request->input("unit_notes.{$i}"),
+                    'gst' => $request->input("unit_gst.{$i}"),
+                    'sale_mode' => $request->input("unit_sale_mode.{$i}", 'exclusive'),
+                    'warehouse' => $request->input("unit_warehouse.{$i}"),
+                    'notes' => $request->input("unit_notes.{$i}"),
                 ];
             }
 
@@ -194,35 +204,35 @@ class ProductionBatchController extends Controller
 
             // 3. Create production batch record
             $batch = ProductionBatch::create([
-                'company_id'        => auth()->user()->current_company_id,
-                'finished_item_id'  => $finished->id,
-                'batch_no'          => $data['batch_no'] ?: $this->nextNo(),
-                'production_date'   => $data['production_date'],
-                'quantity'          => $qty,
+                'company_id' => auth()->user()->current_company_id,
+                'finished_item_id' => $finished->id,
+                'batch_no' => $batchNo,
+                'production_date' => $data['production_date'],
+                'quantity' => $qty,
                 'raw_material_cost' => $rawCost,
-                'cost_per_unit'     => $qty > 0 ? $rawCost / $qty : 0,
-                'notes'             => $data['notes'] ?? null,
-                'units_data'        => $unitsData ?: null,
-                'status'            => 'posted',
-                'created_by'        => auth()->id(),
+                'cost_per_unit' => $qty > 0 ? $rawCost / $qty : 0,
+                'notes' => $data['notes'] ?? null,
+                'units_data' => $unitsData ?: null,
+                'status' => 'posted',
+                'created_by' => auth()->id(),
             ]);
 
             $visibility->syncFromRequest($request, $batch);
 
             // 4. Add finished goods to stock (only here, not on item creation)
             $accounting->moveStock($finished, [
-                'movement_date'  => $batch->production_date,
-                'movement_type'  => 'production_output',
-                'direction'      => 'in',
-                'quantity'       => $qty,
-                'unit_price'     => $batch->cost_per_unit,
-                'total_value'    => $rawCost,
+                'movement_date' => $batch->production_date,
+                'movement_type' => 'production_output',
+                'direction' => 'in',
+                'quantity' => $qty,
+                'unit_price' => $batch->cost_per_unit,
+                'total_value' => $rawCost,
                 'reference_type' => ProductionBatch::class,
-                'reference_id'   => $batch->id,
-                'reference_no'   => $batch->batch_no,
-                'movement_units'  => $this->productionMovementUnits($batch, $unitsData),
-                'force'          => true,
-                'description'    => "Finished goods produced — {$batch->batch_no}",
+                'reference_id' => $batch->id,
+                'reference_no' => $batch->batch_no,
+                'movement_units' => $this->productionMovementUnits($batch, $unitsData),
+                'force' => true,
+                'description' => "Finished goods produced — {$batch->batch_no}",
             ]);
         });
 
@@ -237,23 +247,23 @@ class ProductionBatchController extends Controller
         abort_if($productionBatch->status === 'reverted', 422, 'Reverted production batch cannot be edited.');
 
         $data = $request->validate([
-            'batch_no' => ['required','max:30'],
-            'production_date' => ['required','date'],
-            'quantity' => ['required','numeric','min:0.001'],
-            'notes' => ['nullable','string'],
-            'finished_item_sku' => ['nullable','string','max:255'],
-            'propagation_targets' => ['nullable','array'],
-            'propagation_targets.*' => ['string','max:100'],
-            'unit_buyer_code.*' => ['nullable','string','max:100'],
-            'unit_buyer_id.*' => ['nullable','exists:buyers,id'],
-            'unit_serial.*' => ['nullable','string','max:100'],
-            'unit_batch.*' => ['nullable','string','max:100'],
-            'unit_vts_sim.*' => ['nullable','string','max:100'],
-            'unit_sale_price.*' => ['nullable','numeric','min:0'],
-            'unit_gst.*' => ['nullable','numeric','min:0'],
-            'unit_sale_mode.*' => ['nullable','in:exclusive,inclusive'],
-            'unit_warehouse.*' => ['nullable','string','max:255'],
-            'unit_notes.*' => ['nullable','string','max:500'],
+            'batch_no' => ['required', 'max:30'],
+            'production_date' => ['required', 'date'],
+            'quantity' => ['required', 'numeric', 'min:0.001'],
+            'notes' => ['nullable', 'string'],
+            'finished_item_sku' => ['nullable', 'string', 'max:255'],
+            'propagation_targets' => ['nullable', 'array'],
+            'propagation_targets.*' => ['string', 'max:100'],
+            'unit_buyer_code.*' => ['nullable', 'string', 'max:100'],
+            'unit_buyer_id.*' => ['nullable', 'exists:buyers,id'],
+            'unit_serial.*' => ['nullable', 'string', 'max:100'],
+            'unit_batch.*' => ['nullable', 'string', 'max:100'],
+            'unit_vts_sim.*' => ['nullable', 'string', 'max:100'],
+            'unit_sale_price.*' => ['nullable', 'numeric', 'min:0'],
+            'unit_gst.*' => ['nullable', 'numeric', 'min:0'],
+            'unit_sale_mode.*' => ['nullable', 'in:exclusive,inclusive'],
+            'unit_warehouse.*' => ['nullable', 'string', 'max:255'],
+            'unit_notes.*' => ['nullable', 'string', 'max:500'],
         ]);
 
         DB::transaction(function () use ($request, $data, $productionBatch, $accounting, $visibility, $propagation) {
@@ -262,7 +272,7 @@ class ProductionBatchController extends Controller
             $oldUnits = $productionBatch->units_data ?? [];
             $oldSku = $productionBatch->finishedItem?->sku;
             $soldKeys = collect($this->soldUnitKeys($productionBatch->company_id))
-                ->filter(fn($key) => str_starts_with($key, $productionBatch->id . '-'))
+                ->filter(fn ($key) => str_starts_with($key, $productionBatch->id.'-'))
                 ->values();
 
             abort_if($soldKeys->count() > (int) $data['quantity'], 422, 'Quantity cannot be less than already sold units.');
@@ -370,10 +380,10 @@ class ProductionBatchController extends Controller
         $visibility->authorizeView($productionBatch);
         abort_if($productionBatch->status === 'reverted', 422, 'Reverted production batch cannot be edited.');
         $data = $request->validate([
-            'quantity' => ['required','integer','min:1'],
-            'finished_item_sku' => ['nullable','string','max:255'],
-            'unit_serial.*' => ['nullable','string','max:100'],
-            'unit_vts_sim.*' => ['nullable','string','max:100'],
+            'quantity' => ['required', 'integer', 'min:1'],
+            'finished_item_sku' => ['nullable', 'string', 'max:255'],
+            'unit_serial.*' => ['nullable', 'string', 'max:100'],
+            'unit_vts_sim.*' => ['nullable', 'string', 'max:100'],
         ]);
 
         $productionBatch->load('finishedItem');
@@ -395,14 +405,14 @@ class ProductionBatchController extends Controller
             abort_if($productionBatch->status === 'reverted', 422, 'Production batch is already reverted.');
 
             $soldKeys = collect($this->soldUnitKeys($productionBatch->company_id))
-                ->filter(fn($key) => str_starts_with($key, $productionBatch->id . '-'))
+                ->filter(fn ($key) => str_starts_with($key, $productionBatch->id.'-'))
                 ->values();
 
             abort_if($soldKeys->isNotEmpty(), 422, 'This batch has sold finished-goods units. Reverse the related sale first.');
 
             $netMovements = $this->netProductionMovementsForBatch($productionBatch);
 
-            $finishedNet = $netMovements->first(fn($row) => (int) $row['item_id'] === (int) $productionBatch->finished_item_id);
+            $finishedNet = $netMovements->first(fn ($row) => (int) $row['item_id'] === (int) $productionBatch->finished_item_id);
             if ($finishedNet && $finishedNet['quantity'] > 0) {
                 $finished = Item::lockForUpdate()->findOrFail($finishedNet['item_id']);
                 $this->ensureTrackStock($finished);
@@ -446,7 +456,7 @@ class ProductionBatchController extends Controller
             $revertedAt = now();
             $revertedByName = auth()->user()?->name ?? 'System';
             $revertedUnits = collect($productionBatch->units_data ?? [])->map(function ($unit) use ($revertedAt, $revertedByName) {
-                if (!is_array($unit)) {
+                if (! is_array($unit)) {
                     return $unit;
                 }
 
@@ -495,8 +505,8 @@ class ProductionBatchController extends Controller
     public function revertSelected(Request $request, AccountingService $accounting, EntryVisibilityService $visibility)
     {
         $data = $request->validate([
-            'mode' => ['required','in:batch,serial'],
-            'q' => ['required','string'],
+            'mode' => ['required', 'in:batch,serial'],
+            'q' => ['required', 'string'],
         ]);
 
         if ($data['mode'] === 'batch') {
@@ -509,19 +519,19 @@ class ProductionBatchController extends Controller
         }
 
         $match = $this->findUnitBySerial($data['q'], $visibility);
-        abort_if(!$match, 404, 'Serial number not found.');
+        abort_if(! $match, 404, 'Serial number not found.');
 
         DB::transaction(function () use ($match, $accounting) {
             /** @var ProductionBatch $batch */
             $batch = $match['batch']->fresh('finishedItem.bomMaterials.rawItem');
             $unitIndex = (int) $match['index'];
             $units = $batch->units_data ?? [];
-            if (!empty($units[$unitIndex]['reverted_at'])) {
+            if (! empty($units[$unitIndex]['reverted_at'])) {
                 $revertedBy = $units[$unitIndex]['reverted_by'] ? (User::find($units[$unitIndex]['reverted_by'])?->name ?? 'System') : 'System';
-                $revertedAt = $units[$unitIndex]['reverted_at'] ? \Carbon\Carbon::parse($units[$unitIndex]['reverted_at'])->format('d M Y h:i A') : 'unknown time';
+                $revertedAt = $units[$unitIndex]['reverted_at'] ? Carbon::parse($units[$unitIndex]['reverted_at'])->format('d M Y h:i A') : 'unknown time';
                 abort(422, "This serial is already reverted on {$revertedAt} by {$revertedBy}.");
             }
-            abort_if(in_array($batch->id . '-' . $unitIndex, $this->soldUnitKeys($batch->company_id), true), 422, 'This serial is already sold. Reverse sale first.');
+            abort_if(in_array($batch->id.'-'.$unitIndex, $this->soldUnitKeys($batch->company_id), true), 422, 'This serial is already sold. Reverse sale first.');
 
             $finished = Item::lockForUpdate()->findOrFail($batch->finished_item_id);
             $this->ensureTrackStock($finished);
@@ -538,11 +548,11 @@ class ProductionBatchController extends Controller
                 'reference_no' => $batch->batch_no,
                 'movement_units' => $this->productionMovementUnits($batch, [$unitIndex => $units[$unitIndex]]),
                 'force' => true,
-                'description' => 'Production serial reverted - finished goods removed: ' . ($units[$unitIndex]['serial_no'] ?? $unitIndex),
+                'description' => 'Production serial reverted - finished goods removed: '.($units[$unitIndex]['serial_no'] ?? $unitIndex),
             ]);
 
             foreach ($batch->finishedItem?->bomMaterials ?? [] as $bom) {
-                if (!$bom->rawItem) {
+                if (! $bom->rawItem) {
                     continue;
                 }
                 if (($bom->line_type ?? 'raw_material') === 'service' || $bom->rawItem->item_type === 'service') {
@@ -570,13 +580,13 @@ class ProductionBatchController extends Controller
             $units[$unitIndex]['reverted_at'] = $revertedAt->toDateTimeString();
             $units[$unitIndex]['reverted_by'] = auth()->id();
             $units[$unitIndex]['reverted_by_name'] = auth()->user()?->name ?? 'System';
-            $allUnitsReverted = collect($units)->filter(fn($unit) => is_array($unit))->every(fn($unit) => !empty($unit['reverted_at']));
+            $allUnitsReverted = collect($units)->filter(fn ($unit) => is_array($unit))->every(fn ($unit) => ! empty($unit['reverted_at']));
             $batch->update(array_filter([
                 'units_data' => $units,
                 'status' => $allUnitsReverted ? 'reverted' : $batch->status,
                 'reverted_at' => $allUnitsReverted ? $revertedAt : null,
                 'reverted_by' => $allUnitsReverted ? auth()->id() : null,
-            ], fn($value) => $value !== null));
+            ], fn ($value) => $value !== null));
             $this->logUpdate($batch, $oldValues, $batch->fresh()->toArray());
         });
 
@@ -607,7 +617,7 @@ class ProductionBatchController extends Controller
 
         foreach ($finished?->bomMaterials ?? [] as $bom) {
             $raw = $bom->rawItem;
-            if (!$raw) {
+            if (! $raw) {
                 continue;
             }
             if (($bom->line_type ?? 'raw_material') === 'service' || $raw->item_type === 'service') {
@@ -686,17 +696,17 @@ class ProductionBatchController extends Controller
                     'value' => max(0, round($value, 2)),
                 ];
             })
-            ->filter(fn($row) => $row['quantity'] > 0)
+            ->filter(fn ($row) => $row['quantity'] > 0)
             ->values();
     }
 
     private function productionMovementUnits(ProductionBatch $batch, array $units): array
     {
         return collect($units)
-            ->filter(fn($unit) => is_array($unit))
+            ->filter(fn ($unit) => is_array($unit))
             ->map(function (array $unit, $index) use ($batch) {
                 return array_merge($unit, [
-                    'key' => $batch->id . '-' . $index,
+                    'key' => $batch->id.'-'.$index,
                     'item_id' => $batch->finished_item_id,
                     'item_name' => $batch->finishedItem?->name,
                     'production_batch_no' => $batch->batch_no,
@@ -711,7 +721,7 @@ class ProductionBatchController extends Controller
     private function activeProductionUnits(ProductionBatch $batch): array
     {
         return collect($batch->units_data ?? [])
-            ->filter(fn($unit) => is_array($unit) && empty($unit['reverted_at']))
+            ->filter(fn ($unit) => is_array($unit) && empty($unit['reverted_at']))
             ->all();
     }
 
@@ -741,13 +751,14 @@ class ProductionBatchController extends Controller
                 ]), true)) {
                     $revertedAt = $unit['reverted_at'] ?? null;
                     $revertedBy = $unit['reverted_by'] ?? null;
+
                     return [
                         'batch' => $batch,
                         'index' => $index,
                         'unit' => $unit,
-                        'key' => $batch->id . '-' . $index,
+                        'key' => $batch->id.'-'.$index,
                         'raw' => $this->rawMaterialRows($batch, 1),
-                        'is_reverted' => !empty($revertedAt),
+                        'is_reverted' => ! empty($revertedAt),
                         'reverted_at' => $revertedAt,
                         'reverted_by' => $revertedBy,
                         'reverted_by_name' => $revertedBy ? (User::find($revertedBy)?->name ?? 'System') : null,
@@ -766,9 +777,9 @@ class ProductionBatchController extends Controller
         foreach ($fields as $field => $label) {
             $submitted = collect($units)
                 ->pluck($field)
-                ->map(fn($value) => trim((string) $value))
+                ->map(fn ($value) => trim((string) $value))
                 ->filter()
-                ->map(fn($value) => mb_strtolower($value));
+                ->map(fn ($value) => mb_strtolower($value));
 
             abort_if($submitted->duplicates()->isNotEmpty(), 422, "Duplicate {$label} is not allowed in the same production batch.");
 
@@ -779,11 +790,11 @@ class ProductionBatchController extends Controller
             $alreadyUsed = ProductionBatch::query()
                 ->where('company_id', $companyId)
                 ->where('status', 'posted')
-                ->when($excludeBatchId, fn($query) => $query->whereKeyNot($excludeBatchId))
+                ->when($excludeBatchId, fn ($query) => $query->whereKeyNot($excludeBatchId))
                 ->get(['id', 'batch_no', 'units_data'])
-                ->flatMap(fn(ProductionBatch $batch) => collect($batch->units_data ?? [])
-                    ->filter(fn($unit) => is_array($unit) && empty($unit['reverted_at']) && trim((string) ($unit[$field] ?? '')) !== '')
-                    ->map(fn($unit) => [
+                ->flatMap(fn (ProductionBatch $batch) => collect($batch->units_data ?? [])
+                    ->filter(fn ($unit) => is_array($unit) && empty($unit['reverted_at']) && trim((string) ($unit[$field] ?? '')) !== '')
+                    ->map(fn ($unit) => [
                         'value' => mb_strtolower(trim((string) $unit[$field])),
                         'display' => trim((string) $unit[$field]),
                         'batch' => $batch->batch_no,
@@ -796,8 +807,8 @@ class ProductionBatchController extends Controller
             abort_if(
                 $conflicts->isNotEmpty(),
                 422,
-                "{$label} is already used in an active Production / CRM Assembly. Conflicts: " .
-                    $conflicts->map(fn($row) => "{$row['display']} in batch {$row['batch']}")->join(', ') .
+                "{$label} is already used in an active Production / CRM Assembly. Conflicts: ".
+                    $conflicts->map(fn ($row) => "{$row['display']} in batch {$row['batch']}")->join(', ').
                     ". Use a unique {$label} or update the original batch first."
             );
         }
@@ -810,7 +821,7 @@ class ProductionBatchController extends Controller
             $vtsSim = trim((string) $request->input("unit_vts_sim.{$i}", ''));
             abort_if($requiresGps && $vtsSim === '', 422, 'VTS/SIM number is required for every GPS finished goods unit.');
             $units[] = [
-                'buyer_code' => $request->input("unit_buyer_code.{$i}") ?: 'BC-AUTO-' . str_pad((string) ($i + 1), 3, '0', STR_PAD_LEFT),
+                'buyer_code' => $request->input("unit_buyer_code.{$i}") ?: 'BC-AUTO-'.str_pad((string) ($i + 1), 3, '0', STR_PAD_LEFT),
                 'buyer_id' => $request->input("unit_buyer_id.{$i}"),
                 'serial_no' => $request->input("unit_serial.{$i}"),
                 'batch_no' => $request->input("unit_batch.{$i}"),
@@ -834,6 +845,7 @@ class ProductionBatchController extends Controller
 
         return collect($batch->units_data ?? [])->contains(function ($unit, $index) use ($newUnits) {
             $new = $newUnits[$index] ?? [];
+
             return (string) ($unit['serial_no'] ?? '') !== (string) ($new['serial_no'] ?? '')
                 || (string) ($unit['vts_sim'] ?? '') !== (string) ($new['vts_sim'] ?? '');
         });
@@ -841,7 +853,7 @@ class ProductionBatchController extends Controller
 
     private function rawMaterialRows(ProductionBatch $batch, float $qty): array
     {
-        return collect($batch->finishedItem?->bomMaterials ?? [])->map(fn($bom) => [
+        return collect($batch->finishedItem?->bomMaterials ?? [])->map(fn ($bom) => [
             'name' => $bom->rawItem?->name ?: 'Raw material',
             'qty' => (float) $bom->qty_per_unit * $qty,
             'unit' => $bom->rawItem?->unit,
@@ -880,7 +892,13 @@ class ProductionBatchController extends Controller
     private function nextNo(): string
     {
         $count = ProductionBatch::where('company_id', auth()->user()->current_company_id)->count() + 1;
-        return 'PB-' . str_pad((string) $count, 5, '0', STR_PAD_LEFT);
+
+        return 'PB-'.str_pad((string) $count, 5, '0', STR_PAD_LEFT);
+    }
+
+    private function generatedUnitSerial(string $batchNo, int $index): string
+    {
+        return substr($batchNo.'-'.str_pad((string) ($index + 1), 3, '0', STR_PAD_LEFT), 0, 100);
     }
 
     private function ensureTrackStock(Item $item): void

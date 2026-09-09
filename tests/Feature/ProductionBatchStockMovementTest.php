@@ -2,13 +2,19 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Admin\Production\ProductionBatchController;
 use App\Models\Company;
 use App\Models\Item;
 use App\Models\ItemBom;
-use App\Models\ProductType;
 use App\Models\ProductionBatch;
+use App\Models\ProductType;
+use App\Models\StockMovement;
 use App\Models\User;
+use App\Services\AccountingService;
+use App\Services\CrmIdentifierPropagationService;
+use App\Services\EntryVisibilityService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Tests\TestCase;
 
 class ProductionBatchStockMovementTest extends TestCase
@@ -54,6 +60,15 @@ class ProductionBatchStockMovementTest extends TestCase
             'quantity' => 2,
             'status' => 'posted',
         ]);
+
+        $batch = ProductionBatch::where('batch_no', 'PB-TEST-001')->firstOrFail();
+        $this->assertCount(2, $batch->units_data);
+        $this->assertSame('PB-TEST-001-001', $batch->units_data[0]['serial_no']);
+        $this->assertSame('PB-TEST-001-002', $batch->units_data[1]['serial_no']);
+        $this->assertCount(2, StockMovement::where('reference_type', ProductionBatch::class)
+            ->where('reference_id', $batch->id)
+            ->firstOrFail()
+            ->movement_units);
     }
 
     public function test_metadata_only_update_with_same_quantity_does_not_trigger_stock_validation(): void
@@ -80,7 +95,7 @@ class ProductionBatchStockMovementTest extends TestCase
 
         $this->actingAs($user);
 
-        $request = new \Illuminate\Http\Request([
+        $request = new Request([
             'batch_no' => 'PB-TEST-002',
             'production_date' => '2026-07-16',
             'quantity' => 2,
@@ -90,13 +105,13 @@ class ProductionBatchStockMovementTest extends TestCase
             'unit_vts_sim' => ['VTS-NEW-1', 'VTS-NEW-2'],
         ]);
 
-        $response = app(\App\Http\Controllers\Admin\Production\ProductionBatchController::class)
+        $response = app(ProductionBatchController::class)
             ->update(
                 $request,
                 $batch,
-                app(\App\Services\AccountingService::class),
-                app(\App\Services\EntryVisibilityService::class),
-                app(\App\Services\CrmIdentifierPropagationService::class)
+                app(AccountingService::class),
+                app(EntryVisibilityService::class),
+                app(CrmIdentifierPropagationService::class)
             );
 
         $this->assertNotNull($response);
