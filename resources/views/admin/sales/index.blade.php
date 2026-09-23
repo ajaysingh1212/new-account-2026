@@ -28,6 +28,9 @@
                     </td>
                     <td>
                         <button type="button" class="btn btn-primary btn-sm sale-detail-btn" title="Profit and item details" data-detail='@json($invoiceDetails[$invoice->id] ?? [])' data-pdf="{{ route('admin.sales.detail-pdf',$invoice) }}"><i class="fas fa-chart-line"></i></button>
+                        @if($invoice->inter_company_transfer)
+                                    <button type="button" class="btn btn-success btn-sm inter-stock-btn" title="Auto purchase stock diagnostic" data-invoice="{{ $invoice->invoice_no }}" data-url="{{ route('admin.sales.inter-company-stock-status', $invoice) }}" data-repair-url="{{ route('admin.sales.repair-inter-company-stock', $invoice) }}"><i class="fas fa-barcode"></i></button>
+                        @endif
                         <a href="{{ route('admin.sales.show',$invoice) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a>
                         @can('sales.edit')<a href="{{ route('admin.sales.edit',$invoice) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>@endcan
                         @can('sales.print')<a href="{{ route('admin.sales.print',$invoice) }}" target="_blank" class="btn btn-secondary btn-sm"><i class="fas fa-print"></i></a>@endcan
@@ -52,6 +55,17 @@
                     <div class="col-lg-7 mb-3"><div class="p-3 bg-white rounded border h-100"><h6 class="font-weight-bold">Items, Pricing, BOM & Units</h6><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Item</th><th>Qty</th><th>Sale</th><th>Cost</th><th>Profit</th><th>Profit %</th></tr></thead><tbody id="saleDetailItems"></tbody></table></div></div></div>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+<div class="modal fade" id="interStockModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-scrollable" role="document">
+        <div class="modal-content" style="border:0;border-radius:16px;overflow:hidden;">
+            <div class="modal-header bg-dark text-white border-0">
+                <div><h5 class="modal-title mb-0" id="interStockTitle">Auto Purchase Stock Diagnostic</h5><small>Serial-wise target company stock status</small></div>
+                <button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button>
+            </div>
+            <div class="modal-body" style="background:#f8fafc;" id="interStockBody"></div>
         </div>
     </div>
 </div>
@@ -82,5 +96,65 @@ $(document).on('click', '.sale-detail-btn', function() {
         return `<tr><td><b>${item.name}</b><br><small>${item.description || '-'}</small><br><small><b>BOM:</b><br>${bom}</small><br><small><b>CRM Units:</b><br>${units}</small></td><td>${Number(item.qty || 0).toFixed(2)} ${item.unit || ''}</td><td>${money(item.amount)}</td><td>${money(item.cost)}</td><td class="${Number(item.profit) < 0 ? 'text-danger' : 'text-success'}"><b>${money(item.profit)}</b></td><td class="${Number(item.profit_percent) < 0 ? 'text-danger' : 'text-success'}"><b>${Number(item.profit_percent || 0).toFixed(2)}%</b></td></tr>`;
     }).join('') || '<tr><td colspan="6" class="text-center text-muted">No item details.</td></tr>');
     $('#saleDetailModal').modal('show');
+});
+let activeInterStockButton = null;
+const renderInterCompanyStockStatus = statuses => {
+    if (!statuses.length) {
+        $('#interStockBody').html('<div class="p-4 bg-white rounded border text-muted">No auto purchase target data found.</div>');
+        return;
+    }
+    $('#interStockBody').html(statuses.map(target => {
+        const badge = Number(target.missing || 0) > 0 ? '<span class="badge badge-danger">Missing ' + target.missing + '</span>' : '<span class="badge badge-success">All added</span>';
+        const rows = (target.details || []).map(row => {
+            const label = row.serial_no || row.vts_sim || row.sku || row.buyer_code || row.key || '-';
+            const status = row.status === 'added' ? '<span class="badge badge-success">Added</span>' : '<span class="badge badge-danger">Missing</span>';
+            const history = (row.history || []).map(h => `${h.date || '-'} | ${h.company || '-'} | ${h.direction || '-'} | ${h.type || '-'} | ${h.reference || '-'}`).join('<br>') || '-';
+            const locations = (row.locations || []).map(l => `${l.company}: ${Number(l.net || 0).toFixed(3)}`).join('<br>') || '-';
+            const repair = row.status === 'missing' && row.unit_token
+                ? `<button type="button" class="btn btn-warning btn-sm repair-inter-stock" title="Add this missing unit" data-company-id="${target.company_id}" data-line-id="${row.line_id}" data-unit-token="${row.unit_token}"><i class="fas fa-wrench"></i></button>`
+                : '-';
+            return `<tr><td><b>${row.item || '-'}</b><br><small>${label}</small></td><td>${status}</td><td>${row.reason || '-'}</td><td>${locations}</td><td><small>${history}</small></td><td>${repair}</td></tr>`;
+        }).join('') || '<tr><td colspan="6" class="text-center text-muted">No serial detail available.</td></tr>';
+        return `<div class="bg-white rounded border mb-3 p-3"><div class="d-flex justify-content-between align-items-center mb-2"><div><b>${target.company || 'Target company'}</b><br><small>Purchase: ${target.purchase || 'Not created'}</small></div>${badge}</div><div class="table-responsive"><table class="table table-sm mb-0"><thead><tr><th>Item / Serial</th><th>Status</th><th>Reason</th><th>Current Location</th><th>Recent History</th><th>Action</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
+    }).join(''));
+};
+$(document).on('click', '.inter-stock-btn', async function() {
+    const button = $(this);
+    activeInterStockButton = button;
+    $('#interStockTitle').text('Auto Purchase Diagnostic - Invoice ' + (button.data('invoice') || '-'));
+    $('#interStockBody').html('<div class="p-4 bg-white rounded border text-muted">Loading diagnostic...</div>');
+    $('#interStockModal').modal('show');
+    try {
+        const response = await fetch(button.data('url'), {headers: {Accept: 'application/json'}});
+        if (!response.ok) {
+            throw new Error('Request failed');
+        }
+        renderInterCompanyStockStatus(await response.json());
+    } catch (error) {
+        $('#interStockBody').html('<div class="p-4 bg-white rounded border text-danger">Diagnostic load nahi ho paya. Page refresh karke dobara try karein.</div>');
+    }
+});
+$(document).on('click', '.repair-inter-stock', async function() {
+    if (!activeInterStockButton) return;
+    const button = $(this).prop('disabled', true);
+    button.html('<i class="fas fa-spinner fa-spin"></i>');
+    try {
+        const response = await fetch(activeInterStockButton.data('repair-url'), {
+            method: 'POST',
+            headers: {'Accept': 'application/json', 'Content-Type': 'application/json', 'X-CSRF-TOKEN': '{{ csrf_token() }}'},
+            body: JSON.stringify({
+                target_company_ids: [button.data('company-id')],
+                line_ids: [button.data('line-id')],
+                unit_token: String(button.data('unit-token')),
+            }),
+        });
+        if (!response.ok) throw new Error('Repair failed');
+        const statusResponse = await fetch(activeInterStockButton.data('url'), {headers: {Accept: 'application/json'}});
+        if (!statusResponse.ok) throw new Error('Status refresh failed');
+        renderInterCompanyStockStatus(await statusResponse.json());
+    } catch (error) {
+        button.prop('disabled', false).html('<i class="fas fa-wrench"></i>');
+        alert('Stock add nahi ho paya. Page refresh karke dobara try karein.');
+    }
 });
 </script>@endpush

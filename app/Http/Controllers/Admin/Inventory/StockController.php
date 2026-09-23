@@ -257,17 +257,27 @@ class StockController extends Controller
         return PurchaseBillItem::whereHas('purchaseBill', fn($query) => $query->where('company_id', $companyId))
             ->whereHas('item.productType', fn($query) => $query->where('nature', 'finished_goods'))
             ->get()
-            ->filter(fn($line) => collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit) && !empty($unit['key']))->isNotEmpty())
+            ->filter(fn($line) => collect($line->selected_units ?? [])->filter(fn($unit) => $this->hasUnitIdentity($unit))->isNotEmpty())
             ->pluck('item_id')
             ->merge(
                 StockMovement::where('company_id', $companyId)
                     ->whereHas('item.productType', fn($query) => $query->where('nature', 'finished_goods'))
                     ->get()
-                    ->filter(fn($movement) => collect($movement->movement_units ?? [])->filter(fn($unit) => is_array($unit) && !empty($unit['key']))->isNotEmpty())
+                    ->filter(fn($movement) => collect($movement->movement_units ?? [])->filter(fn($unit) => $this->hasUnitIdentity($unit))->isNotEmpty())
                     ->pluck('item_id')
             )
             ->unique()
             ->values();
+    }
+
+    private function hasUnitIdentity($unit): bool
+    {
+        if (! is_array($unit)) {
+            return false;
+        }
+
+        return collect(['key', 'serial_no', 'vts_sim', 'buyer_code', 'sku', 'batch_no', 'production_batch_no'])
+            ->contains(fn($field) => ! empty($unit[$field]));
     }
 
     private function movementDateRange(Request $request): array

@@ -149,7 +149,13 @@ class SalesInvoiceController extends Controller
             }
         });
 
-        return back()->with('success', $repaired ? "{$repaired} target-company stock item(s) repaired." : 'Target-company stock is already reconciled.');
+        $message = $repaired ? "{$repaired} target-company stock item(s) repaired." : 'Target-company stock is already reconciled.';
+
+        if ($request->expectsJson()) {
+            return response()->json(['repaired' => $repaired, 'message' => $message]);
+        }
+
+        return back()->with('success', $message);
     }
 
     public function store(Request $request, AccountingService $accounting, EntryVisibilityService $visibility, PartyAdvanceService $advances)
@@ -370,6 +376,13 @@ class SalesInvoiceController extends Controller
         ]);
     }
 
+    public function interCompanyStockStatusJson(SalesInvoice $sale, EntryVisibilityService $visibility)
+    {
+        $visibility->authorizeView($sale);
+
+        return response()->json($this->interCompanyStockStatus($sale));
+    }
+
     private function interCompanyStockStatus(SalesInvoice $invoice)
     {
         if (! $invoice->inter_company_transfer) {
@@ -412,6 +425,7 @@ class SalesInvoiceController extends Controller
                             'vts_sim' => $unit['vts_sim'] ?? null,
                             'buyer_code' => $unit['buyer_code'] ?? null,
                             'key' => $unit['key'] ?? null,
+                            'unit_token' => $this->interCompanyUnitTokens($unit)[0] ?? null,
                             'last_movement' => $active['last_movement_type'] ?? null,
                             'locations' => $audit['locations'],
                             'history' => $audit['history'],
@@ -433,24 +447,35 @@ class SalesInvoiceController extends Controller
                 ->filter()->flip();
 
             return collect($line->selected_units ?? [])->filter(fn ($unit) => is_array($unit))
-                ->reject(fn ($unit) => ! collect($this->interCompanyUnitTokens($unit))->contains(fn ($token) => $activeIdentities->has($token)))
+                ->reject(fn ($unit) => collect($this->interCompanyUnitTokens($unit))->contains(fn ($token) => $activeIdentities->has($token)))
                 ->values()->all();
         }
 
-        $incoming = $movements->where('direction', 'in')->flatMap(fn ($movement) => $movement->movement_units ?? [])->map(fn ($unit) => is_array($unit) ? ($unit['key'] ?? $unit['serial_no'] ?? $unit['vts_sim'] ?? null) : null)->filter()->values()->all();
+        $incoming = $movements->where('direction', 'in')
+            ->flatMap(fn ($movement) => collect($movement->movement_units ?? [])->flatMap(fn ($unit) => is_array($unit) ? $this->interCompanyUnitTokens($unit) : []))
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
 
         return collect($line->selected_units ?? [])->filter(fn ($unit) => is_array($unit))->reject(function ($unit) use ($incoming) {
-            $key = $unit['key'] ?? $unit['serial_no'] ?? $unit['vts_sim'] ?? null;
-
-            return $key && in_array($key, $incoming, true);
+            return collect($this->interCompanyUnitTokens($unit))->contains(fn ($token) => in_array($token, $incoming, true));
         })->values()->all();
     }
 
     private function interCompanyUnitTokens(array $unit): array
     {
-        return collect(['serial_no', 'vts_sim', 'buyer_code', 'sku', 'key'])
+        $tokens = collect(['key', 'serial_no', 'vts_sim'])
             ->map(fn ($field) => ! empty($unit[$field]) ? strtolower(trim((string) $unit[$field])) : null)
             ->filter()->unique()->values()->all();
+
+        // Buyer codes are shared by many units and cannot identify stock. SKU is
+        // only a fallback because some imports use it as a per-unit identifier.
+        if (empty($tokens) && ! empty($unit['sku'])) {
+            $tokens[] = strtolower(trim((string) $unit['sku']));
+        }
+
+        return $tokens;
     }
 
     private function interCompanyUnitAudit(PurchaseBillItem $line, array $unit, int $targetCompanyId): array
@@ -978,7 +1003,19 @@ class SalesInvoiceController extends Controller
                 $targetItem = $this->targetItemForSaleLine($line->item, $targetCompanyId);
                 $movementUnits = collect($line->selected_units ?? [])
                     ->filter(fn ($unit) => is_array($unit))
-                    ->map(fn ($unit) => array_merge($unit, ['item_id' => $targetItem->id]))
+                    ->map(function ($unit, $index) use ($targetItem, $line) {
+                        $identity = $unit['key']
+                            ?? $unit['serial_no']
+                            ?? $unit['vts_sim']
+                            ?? $unit['buyer_code']
+                            ?? $unit['sku']
+                            ?? null;
+
+                        return array_merge($unit, [
+                            'key' => $identity ?: 'IC-' . $line->id . '-' . $index,
+                            'item_id' => $targetItem->id,
+                        ]);
+                    })
                     ->values()
                     ->all();
                 // The auto purchase is the other side of this inter-company
