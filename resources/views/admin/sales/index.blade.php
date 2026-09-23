@@ -110,8 +110,12 @@ const renderInterCompanyStockStatus = statuses => {
             const status = row.status === 'added' ? '<span class="badge badge-success">Added</span>' : '<span class="badge badge-danger">Missing</span>';
             const history = (row.history || []).map(h => `${h.date || '-'} | ${h.company || '-'} | ${h.direction || '-'} | ${h.type || '-'} | ${h.reference || '-'}`).join('<br>') || '-';
             const locations = (row.locations || []).map(l => `${l.company}: ${Number(l.net || 0).toFixed(3)}`).join('<br>') || '-';
-            const repair = row.status === 'missing' && row.unit_token
-                ? `<button type="button" class="btn btn-warning btn-sm repair-inter-stock" title="Add this missing unit" data-company-id="${target.company_id}" data-line-id="${row.line_id}" data-unit-token="${row.unit_token}"><i class="fas fa-wrench"></i></button>`
+            const locationText = locations === '-' ? 'Current stock location: kahin active nahi mila.' : `Current stock location: ${locations.replace(/<br>/g, ', ')}`;
+            const documentText = (row.history || []).length
+                ? (row.history || []).slice(0, 5).map(h => `${h.company || '-'} / ${h.type || '-'} / ${h.reference || '-'}`).join('\n')
+                : 'Sales, sales return ya purchase return history nahi mili.';
+            const repair = row.unit_token
+                ? `<button type="button" class="btn ${row.status === 'missing' ? 'btn-warning' : 'btn-outline-warning'} btn-sm repair-inter-stock" title="Check and add this unit" data-company-id="${target.company_id}" data-line-id="${row.line_id}" data-unit-token="${row.unit_token}" data-location="${encodeURIComponent(locationText)}" data-documents="${encodeURIComponent(documentText)}" data-confirmed="0"><i class="fas fa-wrench"></i></button>`
                 : '-';
             return `<tr><td><b>${row.item || '-'}</b><br><small>${label}</small></td><td>${status}</td><td>${row.reason || '-'}</td><td>${locations}</td><td><small>${history}</small></td><td>${repair}</td></tr>`;
         }).join('') || '<tr><td colspan="6" class="text-center text-muted">No serial detail available.</td></tr>';
@@ -136,7 +140,13 @@ $(document).on('click', '.inter-stock-btn', async function() {
 });
 $(document).on('click', '.repair-inter-stock', async function() {
     if (!activeInterStockButton) return;
-    const button = $(this).prop('disabled', true);
+    const button = $(this);
+    if (String(button.attr('data-confirmed')) !== '1') {
+        alert(`${decodeURIComponent(button.attr('data-location'))}\n\nRecent sale/return records:\n${decodeURIComponent(button.attr('data-documents'))}\n\nAgar phir bhi stock mein add karna hai to isi button par dobara click karein.`);
+        button.attr('data-confirmed', '1').removeClass('btn-outline-warning').addClass('btn-danger').html('<i class="fas fa-plus"></i>');
+        return;
+    }
+    button.prop('disabled', true);
     button.html('<i class="fas fa-spinner fa-spin"></i>');
     try {
         const response = await fetch(activeInterStockButton.data('repair-url'), {
@@ -146,6 +156,7 @@ $(document).on('click', '.repair-inter-stock', async function() {
                 target_company_ids: [button.data('company-id')],
                 line_ids: [button.data('line-id')],
                 unit_token: String(button.data('unit-token')),
+                force_add: true,
             }),
         });
         if (!response.ok) throw new Error('Repair failed');

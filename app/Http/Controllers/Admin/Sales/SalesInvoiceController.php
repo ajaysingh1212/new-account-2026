@@ -97,8 +97,9 @@ class SalesInvoiceController extends Controller
         $requestedTargets = collect($request->input('target_company_ids', []))->map(fn ($id) => (int) $id)->filter()->values();
         $requestedLines = collect($request->input('line_ids', []))->map(fn ($id) => (int) $id)->filter()->values();
         $requestedUnitToken = $request->input('unit_token');
+        $forceAdd = $request->boolean('force_add');
 
-        DB::transaction(function () use ($sale, $accounting, &$repaired, $requestedTargets, $requestedLines, $requestedUnitToken) {
+        DB::transaction(function () use ($sale, $accounting, &$repaired, $requestedTargets, $requestedLines, $requestedUnitToken, $forceAdd) {
             $sale->load(['items.item']);
             foreach (array_map('intval', $sale->inter_company_target_company_ids ?? []) as $targetCompanyId) {
                 if ($requestedTargets->isNotEmpty() && ! $requestedTargets->contains($targetCompanyId)) {
@@ -118,14 +119,30 @@ class SalesInvoiceController extends Controller
                     $missingUnits = $this->missingInterCompanyUnits($line, $movements, (int) $purchase->company_id);
                     if ($requestedUnitToken) {
                         $requestedUnitToken = strtolower(trim((string) $requestedUnitToken));
-                        $missingUnits = collect($missingUnits)->filter(fn ($unit) => collect($this->interCompanyUnitTokens($unit))->contains($requestedUnitToken))->values()->all();
+                        $unitPool = $forceAdd ? collect($line->selected_units ?? []) : collect($missingUnits);
+                        $missingUnits = $unitPool
+                            ->filter(fn ($unit) => is_array($unit) && collect($this->interCompanyUnitTokens($unit))->contains($requestedUnitToken))
+                            ->map(function ($unit) use ($forceAdd, $purchase, $line) {
+                                if (! $forceAdd) {
+                                    return $unit;
+                                }
+
+                                $unit['key'] = 'repair-'.$purchase->id.'-'.$line->id.'-'.str()->uuid();
+                                unset($unit['scope_key']);
+
+                                return $unit;
+                            })
+                            ->values()->all();
                     }
                     $hasSerialUnits = collect($line->selected_units ?? [])->contains(fn ($unit) => is_array($unit) && ! empty($this->interCompanyUnitTokens($unit)));
                     $missing = $hasSerialUnits
                         ? count($missingUnits)
                         : round(max(0, $expected - ((float) $movements->where('direction', 'in')->sum('quantity') - (float) $movements->where('direction', 'out')->sum('quantity'))), 3);
-                    if ($missing <= 0 || ! $line->item) {
+                    if (($missing <= 0 && ! $forceAdd) || ($hasSerialUnits && empty($missingUnits)) || ! $line->item) {
                         continue;
+                    }
+                    if ($forceAdd) {
+                        $missing = count($missingUnits);
                     }
                     $movement = $accounting->moveStock($line->item, [
                         'party_id' => $purchase->party_id,
