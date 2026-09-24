@@ -99,14 +99,22 @@
             </div>
             <div class="col-md-4 form-group">
                 <label>Party</label>
-                <select name="party_id" class="form-control select2">
-                    <option value="">Cash/No Party</option>
-                    @foreach($parties as $party)
-                        <option value="{{ $party->id }}" @selected((string)old('party_id',$invoice->party_id ?? '')===(string)$party->id)>
-                            {{ $party->display_name }} | {{ $party->phone }}
-                        </option>
-                    @endforeach
-                </select>
+                <div class="input-group">
+                    <select name="party_id" class="form-control select2">
+                        <option value="">Cash/No Party</option>
+                        @foreach($parties as $party)
+                            <option value="{{ $party->id }}" @selected((string)old('party_id',$invoice->party_id ?? '')===(string)$party->id)>
+                                {{ $party->display_name }} | {{ $party->phone }}
+                            </option>
+                        @endforeach
+                    </select>
+                    <div class="input-group-append">
+                        <button type="button" class="btn btn-outline-primary" id="advanceIndicator" style="display:none" title="View available advance">
+                            <i class="fas fa-wallet"></i>
+                            <span class="badge badge-primary ml-1" id="advanceIndicatorAmount">0</span>
+                        </button>
+                    </div>
+                </div>
             </div>
             <div class="col-md-2 form-group">
                 <label>Invoice No</label>
@@ -434,11 +442,14 @@ function renderAdvanceSection(){
         return sum + (row.existing ? remaining + applied : remaining);
     }, 0);
     if(total <= 0){
+        $('#advanceIndicator').hide();
+        $('#advanceIndicatorAmount').text('0');
         $('#advancePanel').hide();
         $('#advanceList').empty();
         return;
     }
-    $('#advancePanel').show();
+    $('#advanceIndicator').show();
+    $('#advanceIndicatorAmount').text(money(total).replace('Rs ',''));
     $('#advanceSummary').text(`${money(total)} advance available for this party.`);
     $('#advanceList').html(rows.map((row, idx) => {
         const advance = row.advance || row;
@@ -461,7 +472,10 @@ function renderAdvanceSection(){
         </div>
     `}).join(''));
 }
-async function fetchAdvances(){
+async function fetchAdvances(clearExisting = false){
+    if(clearExisting){
+        existingAdvanceApplications = [];
+    }
     const partyId = $('[name="party_id"]').val();
     if(!partyId){ availableAdvances = []; renderAdvanceSection(); return; }
     const res = await fetch(`{{ route('admin.party-advances.available') }}?party_id=${partyId}&flow=sales`, { headers:{Accept:'application/json'} });
@@ -759,7 +773,10 @@ $(document).on('click', '.choose-units', function(){ openDrawer($(this).closest(
 // Qty changed → re-auto-select serials
 $(document).on('change', '.line-qty', function(){ autoSelectUnits($(this).closest('tr')); });
 
-$(document).on('change', '[name="party_id"]', fetchAdvances);
+$(document).on('change', '[name="party_id"]', () => fetchAdvances(true));
+$('#advanceIndicator,#toggleAdvancePanel').on('click', function(){
+    $('#advancePanel').toggle();
+});
 $(document).on('change', '.advance-check', function(){
     const row = $(this).closest('.advance-row');
     row.toggleClass('active', this.checked);
@@ -819,6 +836,6 @@ $('#termsTemplate').on('change', function(){ if(this.value){ $('#termsBox').val(
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 if(PREFILL_LINES.length){ PREFILL_LINES.forEach(addLine); } else { addLine(); }
-if($('[name="party_id"]').val()){ fetchAdvances(); }
+if($('[name="party_id"]').val()){ fetchAdvances(false); }
 </script>
 @endpush

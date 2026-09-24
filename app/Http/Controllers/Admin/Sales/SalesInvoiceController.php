@@ -817,6 +817,9 @@ class SalesInvoiceController extends Controller
                 'discount_value' => (float) ($request->input("discount_value.$i") ?? 0),
                 'tax_mode' => (string) ($request->input("tax_mode.$i") ?? 'with_gst'),
                 'tax_percent' => (float) ($request->input("tax_percent.$i") ?? 0),
+                'selected_units' => $this->selectedUnitSignature(
+                    $this->decodeSelectedUnits($request->input("selected_units.$i"))
+                ),
             ];
         }
 
@@ -833,9 +836,27 @@ class SalesInvoiceController extends Controller
             'discount_value' => (float) ($line['discount_value'] ?? 0),
             'tax_mode' => (float) ($line['tax_percent'] ?? 0) > 0 ? 'with_gst' : 'without_gst',
             'tax_percent' => (float) ($line['tax_percent'] ?? 0),
+            'selected_units' => $this->selectedUnitSignature($line['selected_units'] ?? []),
         ])->values()->all();
 
         return md5(json_encode($payload));
+    }
+
+    private function selectedUnitSignature(array $units): array
+    {
+        return collect($units)
+            ->filter(fn ($unit) => is_array($unit))
+            ->map(fn ($unit) => [
+                'key' => (string) ($unit['key'] ?? ''),
+                'serial_no' => (string) ($unit['serial_no'] ?? ''),
+                'vts_sim' => (string) ($unit['vts_sim'] ?? ''),
+                'buyer_code' => (string) ($unit['buyer_code'] ?? ''),
+                'batch_no' => (string) ($unit['batch_no'] ?? ''),
+                'production_batch_no' => (string) ($unit['production_batch_no'] ?? ''),
+            ])
+            ->sortBy(fn ($unit) => implode('|', $unit))
+            ->values()
+            ->all();
     }
 
     private function finishedGoodsUnitPool(int $companyId, ?int $currentInvoiceId = null): array
