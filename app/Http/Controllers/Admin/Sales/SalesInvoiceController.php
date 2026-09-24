@@ -284,6 +284,8 @@ class SalesInvoiceController extends Controller
                 ->all();
 
             $linesChanged = $this->lineSignature($sale->items->toArray()) !== $this->requestLineSignature($request);
+            $serialOnlyChange = $linesChanged
+                && $this->lineSignature($sale->items->toArray(), false) === $this->requestLineSignature($request, false);
             $headerChanged = $this->salesHeaderChanged($sale, $data);
             $oldInterCompanyTransfer = (bool) $sale->inter_company_transfer;
             $oldTargetIds = array_map('intval', $sale->inter_company_target_company_ids ?? []);
@@ -292,8 +294,8 @@ class SalesInvoiceController extends Controller
             $newTargetIds = $newInterCompanyTransfer ? $this->validatedTargetCompanyIds($request, $sale->company_id) : [];
             sort($newTargetIds);
             $interCompanyChanged = $oldInterCompanyTransfer !== $newInterCompanyTransfer || $oldTargetIds !== $newTargetIds;
-            $repostStock = $linesChanged;
-            $repostLedger = $linesChanged || $headerChanged;
+            $repostStock = $linesChanged && ! $serialOnlyChange;
+            $repostLedger = $repostStock || $headerChanged;
 
             if ($repostLedger) {
                 $advances->releaseForDocument(SalesInvoice::class, $sale->id);
@@ -331,6 +333,8 @@ class SalesInvoiceController extends Controller
                     $originalUnitsByItem
                 );
                 $sale->update($totals);
+            } elseif ($serialOnlyChange) {
+                $this->syncSerialOnlyChanges($request, $sale, $accounting);
             }
 
             if ($repostLedger && $sale->sale_type === 'credit' && $sale->party_id) {
@@ -360,7 +364,7 @@ class SalesInvoiceController extends Controller
             }
 
             $visibility->syncFromRequest($request, $sale);
-            if ($repostStock || $interCompanyChanged) {
+            if ($repostStock || $serialOnlyChange || $interCompanyChanged) {
                 if ($sale->inter_company_transfer) {
                     $this->createInterCompanyPurchases($sale->fresh(['items.item', 'party']), $accounting, $request);
                 } else {
@@ -743,6 +747,84 @@ class SalesInvoiceController extends Controller
         ];
     }
 
+    private function syncSerialOnlyChanges(
+        Request $request,
+        SalesInvoice $invoice,
+        AccountingService $accounting
+    ): void {
+        $unitPool = $this->finishedGoodsUnitPool($invoice->company_id, $invoice->id);
+        $lines = $invoice->items->values();
+        $selectedScopeKeys = [];
+        $serials = app(SerialUnitService::class);
+
+        foreach ((array) $request->input('item_id', []) as $index => $itemId) {
+            $line = $lines->get($index);
+            abort_if(! $line || (int) $line->item_id !== (int) $itemId, 422, 'Invoice items changed. Please reload and try again.');
+
+            $item = $line->item ?? Item::findOrFail($line->item_id);
+            $quantity = (int) $line->quantity;
+            $requestedUnits = $this->decodeSelectedUnits($request->input("selected_units.$index"));
+            $selectedUnits = $this->reconcileSelectedUnits(
+                $requestedUnits,
+                $unitPool[$item->id] ?? [],
+                $quantity,
+                $this->isGpsItem($item)
+            );
+
+            abort_if(count($selectedUnits) !== $quantity, 422, 'Only '.count($selectedUnits)." available finished goods unit(s) found for {$item->name}; {$quantity} required.");
+            abort_if(
+                $this->isGpsItem($item) && collect($selectedUnits)->contains(fn ($unit) => empty($unit['vts_sim'])),
+                422,
+                "VTS/SIM number is required for selected GPS units of {$item->name}."
+            );
+
+            foreach ($selectedUnits as $unit) {
+                $scopeKey = $serials->scopeUnitKey((int) $item->id, $unit);
+                abort_if($scopeKey && in_array($scopeKey, $selectedScopeKeys, true), 422, "The same serial unit cannot be selected twice for {$item->name}.");
+                if ($scopeKey) {
+                    $selectedScopeKeys[] = $scopeKey;
+                }
+            }
+
+            $oldUnits = collect($line->selected_units ?? [])->filter(fn ($unit) => is_array($unit));
+            $newUnits = collect($selectedUnits);
+            if ($this->selectedUnitSignature($oldUnits->all()) === $this->selectedUnitSignature($newUnits->all())) {
+                continue;
+            }
+
+            $oldKeys = $oldUnits->pluck('key')->filter()->all();
+            $newKeys = $newUnits->pluck('key')->filter()->all();
+            $releasedUnits = $oldUnits->reject(fn ($unit) => in_array($unit['key'] ?? null, $newKeys, true))->values()->all();
+            $issuedUnits = $newUnits->reject(fn ($unit) => in_array($unit['key'] ?? null, $oldKeys, true))->values()->all();
+
+            foreach ([['in', $releasedUnits], ['out', $issuedUnits]] as [$direction, $units]) {
+                if (empty($units)) {
+                    continue;
+                }
+
+                $accounting->moveStock($item, [
+                    'party_id' => $invoice->party_id,
+                    'movement_date' => $invoice->billing_date,
+                    'movement_type' => 'sale_serial_change',
+                    'direction' => $direction,
+                    'quantity' => 0,
+                    'unit_price' => 0,
+                    'total_value' => 0,
+                    'reference_type' => SalesInvoice::class,
+                    'reference_id' => $invoice->id,
+                    'reference_no' => $invoice->invoice_no,
+                    'description' => $direction === 'in'
+                        ? 'Previous sales serial released after invoice edit.'
+                        : 'Replacement sales serial issued after invoice edit.',
+                    'movement_units' => $units,
+                    'force' => true,
+                ]);
+            }
+
+            $line->update(['selected_units' => $selectedUnits]);
+        }
+    }
+
     private function reverseSalePosting(SalesInvoice $invoice, AccountingService $accounting): void
     {
         foreach ($invoice->items as $line) {
@@ -824,11 +906,11 @@ class SalesInvoiceController extends Controller
             || (int) $sale->party_id !== (int) ($data['party_id'] ?? $sale->party_id);
     }
 
-    private function requestLineSignature(Request $request): string
+    private function requestLineSignature(Request $request, bool $includeSelectedUnits = true): string
     {
         $payload = [];
         foreach ((array) $request->input('item_id', []) as $i => $itemId) {
-            $payload[] = [
+            $line = [
                 'item_id' => (int) $itemId,
                 'quantity' => (float) ($request->input("quantity.$i") ?? 0),
                 'unit_price' => (float) ($request->input("unit_price.$i") ?? 0),
@@ -836,27 +918,36 @@ class SalesInvoiceController extends Controller
                 'discount_value' => (float) ($request->input("discount_value.$i") ?? 0),
                 'tax_mode' => (string) ($request->input("tax_mode.$i") ?? 'with_gst'),
                 'tax_percent' => (float) ($request->input("tax_percent.$i") ?? 0),
-                'selected_units' => $this->selectedUnitSignature(
-                    $this->decodeSelectedUnits($request->input("selected_units.$i"))
-                ),
             ];
+            if ($includeSelectedUnits) {
+                $line['selected_units'] = $this->selectedUnitSignature(
+                    $this->decodeSelectedUnits($request->input("selected_units.$i"))
+                );
+            }
+            $payload[] = $line;
         }
 
         return md5(json_encode($payload));
     }
 
-    private function lineSignature(array $lines): string
+    private function lineSignature(array $lines, bool $includeSelectedUnits = true): string
     {
-        $payload = collect($lines)->map(fn ($line) => [
-            'item_id' => (int) ($line['item_id'] ?? 0),
-            'quantity' => (float) ($line['quantity'] ?? 0),
-            'unit_price' => (float) ($line['unit_price'] ?? 0),
-            'discount_type' => (string) ($line['discount_type'] ?? 'percent'),
-            'discount_value' => (float) ($line['discount_value'] ?? 0),
-            'tax_mode' => (float) ($line['tax_percent'] ?? 0) > 0 ? 'with_gst' : 'without_gst',
-            'tax_percent' => (float) ($line['tax_percent'] ?? 0),
-            'selected_units' => $this->selectedUnitSignature($line['selected_units'] ?? []),
-        ])->values()->all();
+        $payload = collect($lines)->map(function ($line) use ($includeSelectedUnits) {
+            $signature = [
+                'item_id' => (int) ($line['item_id'] ?? 0),
+                'quantity' => (float) ($line['quantity'] ?? 0),
+                'unit_price' => (float) ($line['unit_price'] ?? 0),
+                'discount_type' => (string) ($line['discount_type'] ?? 'percent'),
+                'discount_value' => (float) ($line['discount_value'] ?? 0),
+                'tax_mode' => (float) ($line['tax_percent'] ?? 0) > 0 ? 'with_gst' : 'without_gst',
+                'tax_percent' => (float) ($line['tax_percent'] ?? 0),
+            ];
+            if ($includeSelectedUnits) {
+                $signature['selected_units'] = $this->selectedUnitSignature($line['selected_units'] ?? []);
+            }
+
+            return $signature;
+        })->values()->all();
 
         return md5(json_encode($payload));
     }

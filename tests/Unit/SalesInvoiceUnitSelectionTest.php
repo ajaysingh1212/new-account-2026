@@ -5,6 +5,7 @@ namespace Tests\Unit;
 use App\Http\Controllers\Admin\Sales\SalesInvoiceController;
 use PHPUnit\Framework\Attributes\DataProvider;
 use ReflectionMethod;
+use Illuminate\Http\Request;
 use Tests\TestCase;
 
 class SalesInvoiceUnitSelectionTest extends TestCase
@@ -66,5 +67,40 @@ class SalesInvoiceUnitSelectionTest extends TestCase
                 ['A'],
             ],
         ];
+    }
+
+    public function test_it_distinguishes_a_serial_only_edit_from_a_stock_quantity_change(): void
+    {
+        $controller = new SalesInvoiceController();
+        $lineSignature = new ReflectionMethod(SalesInvoiceController::class, 'lineSignature');
+        $requestSignature = new ReflectionMethod(SalesInvoiceController::class, 'requestLineSignature');
+        $lines = [[
+            'item_id' => 10,
+            'quantity' => 50,
+            'unit_price' => 100,
+            'discount_type' => 'percent',
+            'discount_value' => 0,
+            'tax_percent' => 18,
+            'selected_units' => [['key' => 'OLD', 'serial_no' => '100', 'vts_sim' => 'SIM-OLD']],
+        ]];
+        $request = Request::create('/', 'POST', [
+            'item_id' => [10],
+            'quantity' => [50],
+            'unit_price' => [100],
+            'discount_type' => ['percent'],
+            'discount_value' => [0],
+            'tax_mode' => ['with_gst'],
+            'tax_percent' => [18],
+            'selected_units' => [json_encode([['key' => 'NEW', 'serial_no' => '200', 'vts_sim' => 'SIM-NEW']])],
+        ]);
+
+        $this->assertNotSame(
+            $lineSignature->invoke($controller, $lines, true),
+            $requestSignature->invoke($controller, $request, true)
+        );
+        $this->assertSame(
+            $lineSignature->invoke($controller, $lines, false),
+            $requestSignature->invoke($controller, $request, false)
+        );
     }
 }
