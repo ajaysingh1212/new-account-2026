@@ -531,6 +531,18 @@ class SalesReturnController extends Controller
                     if ($movementUnit) {
                         return ['target_item' => $targetLine->item, 'target_unit' => array_merge($movementUnit, ['item_id' => $targetLine->item_id])];
                     }
+
+                    $historicalUnit = StockMovement::where('company_id', $targetLine->item->company_id)
+                        ->where('item_id', $targetLine->item_id)
+                        ->whereNotNull('movement_units')
+                        ->orderByDesc('movement_date')
+                        ->orderByDesc('id')
+                        ->get()
+                        ->flatMap(fn(StockMovement $movement) => collect($movement->movement_units ?? []))
+                        ->first(fn($unit) => is_array($unit) && $this->unitsMatch($selectedUnit, $unit));
+                    if ($historicalUnit) {
+                        return ['target_item' => $targetLine->item, 'target_unit' => array_merge($historicalUnit, ['item_id' => $targetLine->item_id])];
+                    }
                 }
 
                 return null;
@@ -643,9 +655,9 @@ class SalesReturnController extends Controller
 
     private function unitsMatch(array $left, array $right): bool
     {
-        foreach (['key', 'serial_no', 'vts_sim', 'buyer_code', 'sku'] as $field) {
-            if (!empty($left[$field]) && !empty($right[$field]) && (string) $left[$field] === (string) $right[$field]) {
-                return true;
+        foreach (['serial_no', 'sku', 'vts_sim', 'key'] as $field) {
+            if (!empty($left[$field]) && !empty($right[$field])) {
+                return strcasecmp(trim((string) $left[$field]), trim((string) $right[$field])) === 0;
             }
         }
 

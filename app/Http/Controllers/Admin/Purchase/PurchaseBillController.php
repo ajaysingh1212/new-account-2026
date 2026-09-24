@@ -277,10 +277,6 @@ class PurchaseBillController extends Controller
             'parties' => Party::where('company_id', $companyId)->orderBy('display_name')->get(),
             'items' => Item::where('company_id', $companyId)
                 ->where('status', 'active')
-                ->where(function ($q) {
-                    $q->whereDoesntHave('productType')
-                        ->orWhereHas('productType', fn($type) => $type->where('nature', '<>', 'finished_goods'));
-                })
                 ->orderBy('name')
                 ->get(),
             'costCenters' => CostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
@@ -473,7 +469,7 @@ class PurchaseBillController extends Controller
         $rows = [];
         foreach ($request->item_id as $i => $itemId) {
             $item = Item::with('productType')->findOrFail($itemId);
-            abort_if($item->productType?->nature === 'finished_goods', 422, 'Finished goods cannot be purchased. Use Production / CRM Assembly.');
+            abort_if((int) $item->company_id !== (int) $bill->company_id, 422, 'Selected item does not belong to the current company.');
             $qty = (float) $request->quantity[$i];
             $price = (float) $request->unit_price[$i];
             $base = $qty * $price;
@@ -658,7 +654,24 @@ class PurchaseBillController extends Controller
             ->values();
 
         if ($rows->isEmpty()) {
-            return [];
+            if ($item->productType?->nature !== 'finished_goods') {
+                return [];
+            }
+
+            $wholeQty = (int) $qty;
+            abort_if((float) $wholeQty !== $qty, 422, "Ready-made item quantity must be a whole number for {$item->name}.");
+
+            return collect(range(1, $wholeQty))->map(fn(int $index) => [
+                'key' => 'PUR-' . $invoiceNo . '-' . $item->id . '-' . $index . '-' . md5($invoiceNo . '|' . $item->id . '|' . $index),
+                'item_id' => $item->id,
+                'item_name' => $item->name,
+                'serial_no' => null,
+                'vts_sim' => null,
+                'sku' => $item->sku ?: null,
+                'batch_no' => $invoiceNo,
+                'production_batch_no' => $invoiceNo,
+                'cost_per_unit' => $price,
+            ])->all();
         }
 
         $wholeQty = (int) $qty;
@@ -690,4 +703,3 @@ class PurchaseBillController extends Controller
         return str_pad((string) (PurchaseBill::where('company_id', auth()->user()->current_company_id)->withTrashed()->count() + 1), 8, '0', STR_PAD_LEFT);
     }
 }
-

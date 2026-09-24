@@ -42,7 +42,7 @@
     <div class="trade-head">
         <div>
             <h2><i class="fas fa-shopping-cart mr-2"></i>{{ $isEdit ? 'Edit Purchase Bill' : 'Purchase Bill' }}</h2>
-            <small>Raw material and traded goods purchase only. Finished goods come from production.</small>
+            <small>Purchase raw material, traded goods, and ready-made finished goods.</small>
         </div>
         <a href="{{ route('admin.purchases.index') }}" class="btn btn-outline-light btn-sm"><i class="fas fa-arrow-left mr-1"></i> Back</a>
     </div>
@@ -171,7 +171,7 @@ async function fetchAdvances(){
     renderAdvanceSection();
 }
 function calc(){let sub=0,tax=0;$('#lineTable tbody tr').each(function(){let r=$(this),q=+r.find('[name="quantity[]"]').val()||0,p=+r.find('[name="unit_price[]"]').val()||0,d=+r.find('[name="discount_value[]"]').val()||0,dt=r.find('[name="discount_type[]"]').val(),tx=+r.find('[name="tax_percent[]"]').val()||0,b=q*p,da=dt==='flat'?d:b*d/100;sub+=b;tax+=Math.max(0,b-da)*tx/100});let od=+$('[name="discount_amount"]').val()||0;$('#uiSubtotal').text(money(sub));$('#uiTax').text(money(tax));$('#uiTotal').text(money(Math.max(0,sub-od+tax)))}
-function addLine(data={}){let $row=$($('#lineTpl').html());$('#lineTable tbody').append($row);if(data.item_id){$row.find('[name="item_id[]"]').val(data.item_id).trigger('change')}['description','quantity','unit','unit_price','discount_type','discount_value','tax_percent','selected_units'].forEach(k=>$row.find(`[name="${k}[]"]`).val(data[k]??$row.find(`[name="${k}[]"]`).val()));calc()}
+function addLine(data={}){let $row=$($('#lineTpl').html());$('#lineTable tbody').append($row);const $item=$row.find('[name="item_id[]"]');$item.select2({width:'100%',placeholder:'Search item by name, code, or SKU',allowClear:true});if(data.item_id){$item.val(data.item_id).trigger('change')}['description','quantity','unit','unit_price','discount_type','discount_value','tax_percent','selected_units'].forEach(k=>$row.find(`[name="${k}[]"]`).val(data[k]??$row.find(`[name="${k}[]"]`).val()));calc()}
 $('#addLine').click(()=>addLine());
 $(document).on('input change','#lineTable input,#lineTable select,#lineTable textarea,[name="discount_amount"]',calc);
 $(document).on('change', '[name="party_id"]', fetchAdvances);

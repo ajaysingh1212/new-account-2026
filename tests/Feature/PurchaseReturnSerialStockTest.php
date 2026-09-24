@@ -159,4 +159,55 @@ class PurchaseReturnSerialStockTest extends TestCase
             ->assertOk()
             ->assertSee('9.000');
     }
+
+    public function test_inter_company_purchase_return_moves_serial_from_buyer_back_to_source_company(): void
+    {
+        $user = User::factory()->create(['user_type' => 'super_admin']);
+        $source = Company::create(['name' => 'Company A', 'created_by' => $user->id]);
+        $buyer = Company::create(['name' => 'Company B', 'created_by' => $user->id]);
+        $user->update(['current_company_id' => $buyer->id]);
+        $sourceType = ProductType::create(['company_id' => $source->id, 'code' => 'FG-A', 'name' => 'Ready Goods', 'nature' => 'finished_goods']);
+        $buyerType = ProductType::create(['company_id' => $buyer->id, 'code' => 'FG-B', 'name' => 'Ready Goods', 'nature' => 'finished_goods']);
+        $sourceItem = Item::create([
+            'company_id' => $source->id, 'product_type_id' => $sourceType->id, 'item_code' => 'READY-IC',
+            'name' => 'Ready Item', 'unit' => 'PCS', 'purchase_price' => 100, 'current_stock' => 0,
+            'track_stock' => true, 'status' => 'active',
+        ]);
+        $buyerItem = Item::create([
+            'company_id' => $buyer->id, 'product_type_id' => $buyerType->id, 'item_code' => 'READY-IC',
+            'name' => 'Ready Item', 'unit' => 'PCS', 'purchase_price' => 100, 'current_stock' => 1,
+            'stock_value' => 100, 'track_stock' => true, 'status' => 'active',
+        ]);
+        $bill = PurchaseBill::create([
+            'company_id' => $buyer->id, 'purchase_type' => 'cash', 'invoice_no' => 'IC-PUR-1',
+            'billing_date' => '2026-09-20', 'inter_company_source_company_id' => $source->id,
+        ]);
+        $unit = ['key' => 'IC-UNIT-1', 'serial_no' => 'IC-SERIAL-1', 'item_id' => $buyerItem->id];
+        $line = PurchaseBillItem::create([
+            'purchase_bill_id' => $bill->id, 'item_id' => $buyerItem->id, 'quantity' => 1,
+            'unit' => 'PCS', 'unit_price' => 100, 'line_total' => 100, 'selected_units' => [$unit],
+        ]);
+        StockMovement::create([
+            'company_id' => $buyer->id, 'item_id' => $buyerItem->id, 'movement_date' => '2026-09-20',
+            'movement_type' => 'inter_company_purchase', 'direction' => 'in', 'quantity' => 1,
+            'unit_price' => 100, 'total_value' => 100, 'stock_after' => 1, 'movement_units' => [$unit],
+        ]);
+
+        $this->actingAs($user)->withoutMiddleware()->post(route('admin.purchase-returns.store'), [
+            'purchase_bill_id' => $bill->id,
+            'return_no' => 'PR-IC-1',
+            'return_date' => '2026-09-24',
+            'line_id' => [$line->id],
+            'quantity' => [1],
+            'returned_units' => [json_encode([$unit])],
+        ])->assertRedirect(route('admin.purchase-returns.index'));
+
+        $this->assertSame(0.0, (float) $buyerItem->fresh()->current_stock);
+        $this->assertSame(1.0, (float) $sourceItem->fresh()->current_stock);
+        $this->assertEmpty(app(SerialUnitService::class)->currentStockUnitsByItem($buyer->id, $buyerItem->id));
+        $this->assertSame(
+            ['IC-SERIAL-1'],
+            collect(app(SerialUnitService::class)->currentStockUnitsByItem($source->id, $sourceItem->id)[$sourceItem->id] ?? [])->pluck('serial_no')->all()
+        );
+    }
 }

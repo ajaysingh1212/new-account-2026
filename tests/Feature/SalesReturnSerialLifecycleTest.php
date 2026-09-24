@@ -14,6 +14,7 @@ use App\Models\SalesReturn;
 use App\Models\SalesReturnItem;
 use App\Models\StockMovement;
 use App\Models\User;
+use App\Http\Controllers\Admin\Sales\SalesReturnController;
 use App\Services\SerialUnitService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -21,6 +22,21 @@ use Tests\TestCase;
 class SalesReturnSerialLifecycleTest extends TestCase
 {
     use RefreshDatabase;
+
+    public function test_inter_company_matching_does_not_treat_shared_buyer_code_as_serial_identity(): void
+    {
+        $controller = app(SalesReturnController::class);
+        $method = new \ReflectionMethod($controller, 'unitsMatch');
+
+        $this->assertFalse($method->invoke($controller,
+            ['key' => 'SOURCE-1', 'serial_no' => 'SERIAL-1', 'buyer_code' => 'BUY-1'],
+            ['key' => 'TARGET-2', 'serial_no' => 'SERIAL-2', 'buyer_code' => 'BUY-1']
+        ));
+        $this->assertTrue($method->invoke($controller,
+            ['key' => 'SOURCE-1', 'serial_no' => 'SERIAL-1', 'buyer_code' => 'BUY-1'],
+            ['key' => 'TARGET-1', 'serial_no' => 'SERIAL-1', 'buyer_code' => 'BUY-1']
+        ));
+    }
 
     public function test_returned_serials_are_removed_from_active_sold_keys_and_become_resellable(): void
     {
