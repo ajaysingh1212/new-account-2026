@@ -263,11 +263,6 @@ class SalesReturnController extends Controller
         DB::transaction(function () use ($sales_return, $data, $serialUnits, $accounting) {
             $sales_return->load(['items.invoiceItem.item']);
             $invoice = $sales_return->invoice;
-            $needsInterCompanyBackfill = $invoice?->inter_company_transfer
-                && !StockMovement::where('reference_type', SalesReturn::class)
-                    ->where('reference_id', $sales_return->id)
-                    ->where('movement_type', 'inter_company_sales_return_out')
-                    ->exists();
             foreach ($sales_return->items as $index => $returnLine) {
                 $invoiceLine = $returnLine->invoiceItem;
                 if (!$invoiceLine) {
@@ -307,16 +302,10 @@ class SalesReturnController extends Controller
                     ->get()
                     ->each(fn(StockMovement $movement) => $movement->update(['movement_units' => $selectedUnits->all()]));
 
-                if ($needsInterCompanyBackfill && $invoice) {
-                    $this->moveInterCompanySalesReturnStock(
-                        $invoice,
-                        $invoiceLine,
-                        $sales_return,
-                        $selectedUnits->all(),
-                        (float) $returnLine->quantity,
-                        $accounting
-                    );
-                }
+            }
+
+            if ($invoice?->inter_company_transfer) {
+                $this->synchronizeInterCompanySalesReturnStock($sales_return, $accounting);
             }
         });
 
@@ -332,7 +321,7 @@ class SalesReturnController extends Controller
             $quantity = $movements->sum('quantity');
 
             if ($movements->isNotEmpty()) {
-                $action = $hadInterCompanyStockOut ? 'already synchronized' : 'successfully deducted';
+                $action = $hadInterCompanyStockOut ? 'verified and removed' : 'successfully deducted';
                 $message .= " Inter-company confirmation: {$quantity} item(s) {$companyNames} stock se {$action}.";
             } else {
                 $message .= ' Inter-company confirmation: no tracked stock movement was required.';
@@ -497,6 +486,92 @@ class SalesReturnController extends Controller
             'description' => 'Stock returned to source company through inter-company sales return.',
             'movement_units' => $units,
         ]);
+    }
+
+    private function synchronizeInterCompanySalesReturnStock(SalesReturn $return, AccountingService $accounting): void
+    {
+        $return->loadMissing(['invoice', 'items.invoiceItem.item']);
+        $serialUnits = app(SerialUnitService::class);
+
+        foreach ($return->items as $returnLine) {
+            $invoiceLine = $returnLine->invoiceItem;
+            if (!$invoiceLine || !$invoiceLine->item) {
+                continue;
+            }
+
+            $selectedUnits = collect($returnLine->selected_units ?? [])->filter(fn($unit) => is_array($unit))->values();
+            if ($selectedUnits->isEmpty()) {
+                continue;
+            }
+
+            $targetLines = $this->interCompanyTargetLines($return->invoice, $invoiceLine);
+            $targetItemIds = $targetLines->pluck('item_id')->map(fn($id) => (int) $id)->all();
+            $existingMovements = StockMovement::where('reference_type', SalesReturn::class)
+                ->where('reference_id', $return->id)
+                ->where('movement_type', 'inter_company_sales_return_out')
+                ->whereIn('item_id', $targetItemIds)
+                ->orderBy('id')
+                ->get();
+
+            $destinations = $selectedUnits->map(function ($selectedUnit) use ($targetLines, $existingMovements, $serialUnits) {
+                foreach ($targetLines as $targetLine) {
+                    $currentUnits = collect($serialUnits->currentStockUnitsByItem(
+                        (int) $targetLine->item->company_id,
+                        (int) $targetLine->item_id
+                    )[$targetLine->item_id] ?? []);
+                    $targetUnit = $currentUnits->first(fn($unit) => $this->unitsMatch($selectedUnit, $unit));
+                    if ($targetUnit) {
+                        return ['target_item' => $targetLine->item, 'target_unit' => $targetUnit];
+                    }
+
+                    $movementUnit = $existingMovements
+                        ->where('item_id', $targetLine->item_id)
+                        ->flatMap(fn(StockMovement $movement) => collect($movement->movement_units ?? []))
+                        ->first(fn($unit) => is_array($unit) && $this->unitsMatch($selectedUnit, $unit));
+                    if ($movementUnit) {
+                        return ['target_item' => $targetLine->item, 'target_unit' => array_merge($movementUnit, ['item_id' => $targetLine->item_id])];
+                    }
+                }
+
+                return null;
+            })->filter();
+
+            if ($destinations->count() !== $selectedUnits->count()) {
+                throw ValidationException::withMessages([
+                    'returned_units' => "One or more serials for {$invoiceLine->item->name} could not be verified in the merged company's stock history.",
+                ]);
+            }
+
+            $destinations->groupBy(fn($row) => $row['target_item']->id)
+                ->each(function ($rows, $targetItemId) use ($existingMovements, $return, $accounting) {
+                    $targetItem = $rows->first()['target_item'];
+                    $desiredUnits = $rows->pluck('target_unit')->values();
+                    $movements = $existingMovements->where('item_id', (int) $targetItemId)->values();
+                    $existingQty = (int) round($movements->sum('quantity'));
+
+                    if ($movements->isNotEmpty()) {
+                        $offset = 0;
+                        foreach ($movements as $movement) {
+                            $movementQty = (int) round((float) $movement->quantity);
+                            $movement->update([
+                                'movement_units' => $desiredUnits->slice($offset, $movementQty)->values()->all(),
+                            ]);
+                            $offset += $movementQty;
+                        }
+                    }
+
+                    if ($existingQty < $desiredUnits->count()) {
+                        $missingUnits = $desiredUnits->slice($existingQty)->values()->all();
+                        $this->postInterCompanySalesReturnOut(
+                            $targetItem,
+                            $return,
+                            count($missingUnits),
+                            $missingUnits,
+                            $accounting
+                        );
+                    }
+                });
+        }
     }
 
     private function unitsMatch(array $left, array $right): bool

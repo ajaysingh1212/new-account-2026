@@ -205,6 +205,23 @@ class SalesReturnSerialLifecycleTest extends TestCase
         ]);
 
         $return = SalesReturn::where('sales_invoice_id', $invoice->id)->firstOrFail();
+        $interCompanyMovement = StockMovement::where('reference_type', SalesReturn::class)
+            ->where('reference_id', $return->id)
+            ->where('movement_type', 'inter_company_sales_return_out')
+            ->firstOrFail();
+        $interCompanyMovement->update([
+            'movement_units' => [['key' => 'OLD-WRONG-KEY', 'serial_no' => 'SER-100', 'item_id' => $sourceItem->id]],
+        ]);
+        $this->assertNotEmpty(app(SerialUnitService::class)->currentStockUnitsByItem($target->id, $targetItem->id));
+
+        $this->actingAs($user)->withoutMiddleware()->put(route('admin.sales-returns.update', $return), [
+            'returned_units' => [json_encode([$sourceUnit])],
+        ])->assertRedirect(route('admin.sales-returns.show', $return))
+            ->assertSessionHas('success', fn($message) => str_contains($message, 'Company B stock se verified and removed'));
+
+        $this->assertSame(0.0, (float) $targetItem->fresh()->current_stock);
+        $this->assertEmpty(app(SerialUnitService::class)->currentStockUnitsByItem($target->id, $targetItem->id));
+
         StockMovement::where('reference_type', SalesReturn::class)
             ->where('reference_id', $return->id)
             ->where('movement_type', 'inter_company_sales_return_out')
