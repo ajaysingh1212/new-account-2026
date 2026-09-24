@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin\Sales;
 
 use App\Http\Controllers\Controller;
+use App\Models\Company;
 use App\Models\SalesInvoice;
 use App\Models\PurchaseBill;
 use App\Models\SalesReturn;
@@ -242,11 +243,22 @@ class SalesReturnController extends Controller
 
     public function update(Request $request, SalesReturn $sales_return, EntryVisibilityService $visibility, SerialUnitService $serialUnits, AccountingService $accounting)
     {
+        if (!$sales_return->exists) {
+            $routeReturn = $request->route('sales_return');
+            $sales_return = SalesReturn::findOrFail($routeReturn instanceof SalesReturn ? $routeReturn->getKey() : $routeReturn);
+        }
         $visibility->authorizeView($sales_return);
         $data = $request->validate([
             'returned_units' => ['nullable','array'],
             'returned_units.*' => ['nullable','string'],
         ]);
+
+        $sales_return->loadMissing('invoice');
+        $isInterCompanyReturn = (bool) $sales_return->invoice?->inter_company_transfer;
+        $hadInterCompanyStockOut = $isInterCompanyReturn && StockMovement::where('reference_type', SalesReturn::class)
+            ->where('reference_id', $sales_return->id)
+            ->where('movement_type', 'inter_company_sales_return_out')
+            ->exists();
 
         DB::transaction(function () use ($sales_return, $data, $serialUnits, $accounting) {
             $sales_return->load(['items.invoiceItem.item']);
@@ -308,7 +320,26 @@ class SalesReturnController extends Controller
             }
         });
 
-        return redirect()->route('admin.sales-returns.show', $sales_return)->with('success', 'Sales return serial numbers updated.');
+        $message = 'Sales return serial numbers updated.';
+        if ($isInterCompanyReturn) {
+            $movements = StockMovement::where('reference_type', SalesReturn::class)
+                ->where('reference_id', $sales_return->id)
+                ->where('movement_type', 'inter_company_sales_return_out')
+                ->get();
+            $companyNames = Company::whereIn('id', $movements->pluck('company_id')->unique())
+                ->pluck('name')
+                ->implode(', ');
+            $quantity = $movements->sum('quantity');
+
+            if ($movements->isNotEmpty()) {
+                $action = $hadInterCompanyStockOut ? 'already synchronized' : 'successfully deducted';
+                $message .= " Inter-company confirmation: {$quantity} item(s) {$companyNames} stock se {$action}.";
+            } else {
+                $message .= ' Inter-company confirmation: no tracked stock movement was required.';
+            }
+        }
+
+        return redirect()->route('admin.sales-returns.show', $sales_return)->with('success', $message);
     }
 
     private function serialEditLines(SalesReturn $salesReturn, SerialUnitService $serialUnits): array

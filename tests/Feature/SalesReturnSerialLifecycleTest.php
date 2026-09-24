@@ -203,6 +203,21 @@ class SalesReturnSerialLifecycleTest extends TestCase
             'movement_type' => 'inter_company_sales_return_out',
             'direction' => 'out',
         ]);
+
+        $return = SalesReturn::where('sales_invoice_id', $invoice->id)->firstOrFail();
+        StockMovement::where('reference_type', SalesReturn::class)
+            ->where('reference_id', $return->id)
+            ->where('movement_type', 'inter_company_sales_return_out')
+            ->delete();
+        $targetItem->refresh()->update(['current_stock' => 1, 'stock_value' => 50]);
+
+        $this->actingAs($user)->withoutMiddleware()->put(route('admin.sales-returns.update', $return), [
+            'returned_units' => [json_encode([$sourceUnit])],
+        ])->assertRedirect(route('admin.sales-returns.show', $return))
+            ->assertSessionHas('success', fn($message) => str_contains($message, 'Company B stock se successfully deducted'));
+
+        $this->assertSame(0.0, (float) $targetItem->fresh()->current_stock);
+        $this->assertEmpty(app(SerialUnitService::class)->currentStockUnitsByItem($target->id, $targetItem->id));
     }
 
     private function serialSaleContext(int $qty): array
