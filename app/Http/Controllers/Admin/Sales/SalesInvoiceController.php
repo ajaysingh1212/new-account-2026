@@ -265,9 +265,23 @@ class SalesInvoiceController extends Controller
         $data = $this->validated($request);
 
         DB::transaction(function () use ($request, $data, $sale, $accounting, $visibility, $advances) {
-            $sale->load('items');
+            $sale->load('items.item');
             $oldValues = $sale->replicate()->toArray();
             $oldValues['items'] = $sale->items->toArray();
+
+            $originalItemQtys = $sale->items
+                ->groupBy('item_id')
+                ->map(fn ($lines) => (float) $lines->sum('quantity'))
+                ->all();
+            $originalUnitsByItem = $sale->items
+                ->groupBy('item_id')
+                ->map(fn ($lines) => $lines
+                    ->flatMap(fn ($line) => $line->selected_units ?? [])
+                    ->filter(fn ($unit) => is_array($unit))
+                    ->unique('key')
+                    ->values()
+                    ->all())
+                ->all();
 
             $linesChanged = $this->lineSignature($sale->items->toArray()) !== $this->requestLineSignature($request);
             $headerChanged = $this->salesHeaderChanged($sale, $data);
@@ -308,7 +322,14 @@ class SalesInvoiceController extends Controller
 
             if ($repostStock) {
                 $unitPool = $this->finishedGoodsUnitPool($sale->company_id, $sale->id);
-                $totals = $this->storeLines($request, $sale, $accounting, $unitPool);
+                $totals = $this->storeLines(
+                    $request,
+                    $sale,
+                    $accounting,
+                    $unitPool,
+                    $originalItemQtys,
+                    $originalUnitsByItem
+                );
                 $sale->update($totals);
             }
 
@@ -762,18 +783,16 @@ class SalesInvoiceController extends Controller
     private function reverseSaleStock(SalesInvoice $invoice, AccountingService $accounting): void
     {
         foreach ($invoice->items as $line) {
-            if (! $line->item) {
-                continue;
-            }
+            $item = $line->item ?? Item::findOrFail($line->item_id);
 
-            $accounting->moveStock($line->item, [
+            $accounting->moveStock($item, [
                 'party_id' => $invoice->party_id,
                 'movement_date' => now()->toDateString(),
                 'movement_type' => 'sale_reversal',
                 'direction' => 'in',
                 'quantity' => (float) $line->quantity,
-                'unit_price' => $line->item->purchase_price,
-                'total_value' => (float) $line->quantity * (float) $line->item->purchase_price,
+                'unit_price' => $item->purchase_price,
+                'total_value' => (float) $line->quantity * (float) $item->purchase_price,
                 'reference_type' => SalesInvoice::class,
                 'reference_id' => $invoice->id,
                 'reference_no' => $invoice->invoice_no,
