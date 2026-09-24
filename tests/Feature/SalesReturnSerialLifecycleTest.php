@@ -6,6 +6,8 @@ use App\Models\Company;
 use App\Models\Item;
 use App\Models\ProductType;
 use App\Models\ProductionBatch;
+use App\Models\PurchaseBill;
+use App\Models\PurchaseBillItem;
 use App\Models\SalesInvoice;
 use App\Models\SalesInvoiceItem;
 use App\Models\SalesReturn;
@@ -125,6 +127,82 @@ class SalesReturnSerialLifecycleTest extends TestCase
             ->assertOk()
             ->assertSee('Update Returned Serials')
             ->assertSee('GPS Device');
+    }
+
+    public function test_inter_company_sales_return_removes_serial_from_target_company(): void
+    {
+        $user = User::factory()->create(['user_type' => 'super_admin']);
+        $source = Company::create(['name' => 'Company A', 'created_by' => $user->id]);
+        $target = Company::create(['name' => 'Company B', 'created_by' => $user->id]);
+        $user->update(['current_company_id' => $source->id]);
+        $sourceType = ProductType::create(['company_id' => $source->id, 'code' => 'FG-A', 'name' => 'Finished Goods', 'nature' => 'finished_goods']);
+        $targetType = ProductType::create(['company_id' => $target->id, 'code' => 'FG-B', 'name' => 'Finished Goods', 'nature' => 'finished_goods']);
+        $sourceItem = Item::create([
+            'company_id' => $source->id, 'product_type_id' => $sourceType->id, 'item_code' => 'GPS-1',
+            'name' => 'GPS Device', 'unit' => 'PCS', 'purchase_price' => 50, 'sale_price' => 100,
+            'current_stock' => 0, 'track_stock' => true, 'status' => 'active',
+        ]);
+        $targetItem = Item::create([
+            'company_id' => $target->id, 'product_type_id' => $targetType->id, 'item_code' => 'GPS-1',
+            'name' => 'GPS Device', 'unit' => 'PCS', 'purchase_price' => 50, 'sale_price' => 100,
+            'current_stock' => 1, 'stock_value' => 50, 'track_stock' => true, 'status' => 'active',
+        ]);
+        $sourceUnit = ['key' => 'SRC-1', 'serial_no' => 'SER-100', 'item_id' => $sourceItem->id];
+        $targetUnit = ['key' => 'SRC-1', 'serial_no' => 'SER-100', 'item_id' => $targetItem->id];
+        $invoice = SalesInvoice::create([
+            'company_id' => $source->id, 'sale_type' => 'cash', 'invoice_no' => 'SI-IC-1',
+            'billing_date' => '2026-09-20', 'subtotal' => 100, 'grand_total' => 100,
+            'inter_company_transfer' => true, 'inter_company_target_company_ids' => [$target->id], 'created_by' => $user->id,
+        ]);
+        $invoiceLine = SalesInvoiceItem::create([
+            'sales_invoice_id' => $invoice->id, 'item_id' => $sourceItem->id, 'quantity' => 1,
+            'unit' => 'PCS', 'unit_price' => 100, 'discount_type' => 'percent', 'discount_value' => 0,
+            'discount_amount' => 0, 'tax_percent' => 0, 'tax_amount' => 0, 'line_total' => 100,
+            'selected_units' => [$sourceUnit],
+        ]);
+        $bill = PurchaseBill::create([
+            'company_id' => $target->id, 'purchase_type' => 'credit', 'invoice_no' => 'AUTO-SI-IC-1',
+            'billing_date' => '2026-09-20', 'source_sales_invoice_id' => $invoice->id,
+            'inter_company_source_company_id' => $source->id,
+        ]);
+        PurchaseBillItem::create([
+            'purchase_bill_id' => $bill->id, 'item_id' => $targetItem->id, 'quantity' => 1,
+            'unit' => 'PCS', 'unit_price' => 50, 'line_total' => 50, 'selected_units' => [$targetUnit],
+        ]);
+        StockMovement::create([
+            'company_id' => $target->id, 'item_id' => $targetItem->id, 'movement_date' => '2026-09-20',
+            'movement_type' => 'purchase', 'direction' => 'in', 'quantity' => 1, 'unit_price' => 50,
+            'total_value' => 50, 'stock_after' => 1, 'movement_units' => [$targetUnit],
+        ]);
+        StockMovement::create([
+            'company_id' => $target->id, 'item_id' => $targetItem->id, 'movement_date' => '2026-09-21',
+            'movement_type' => 'sale', 'direction' => 'out', 'quantity' => 1, 'unit_price' => 100,
+            'total_value' => 100, 'stock_after' => 0, 'movement_units' => [$targetUnit],
+        ]);
+        StockMovement::create([
+            'company_id' => $target->id, 'item_id' => $targetItem->id, 'movement_date' => '2026-09-22',
+            'movement_type' => 'sales_return', 'direction' => 'in', 'quantity' => 1, 'unit_price' => 50,
+            'total_value' => 50, 'stock_after' => 1, 'movement_units' => [$targetUnit],
+        ]);
+
+        $this->actingAs($user)->withoutMiddleware()->post(route('admin.sales-returns.store'), [
+            'sales_invoice_id' => $invoice->id,
+            'return_no' => 'SR-IC-1',
+            'return_date' => '2026-09-24',
+            'line_id' => [$invoiceLine->id],
+            'quantity' => [1],
+            'returned_units' => [json_encode([$sourceUnit])],
+        ])->assertRedirect(route('admin.sales-returns.index'));
+
+        $this->assertSame(1.0, (float) $sourceItem->fresh()->current_stock);
+        $this->assertSame(0.0, (float) $targetItem->fresh()->current_stock);
+        $this->assertEmpty(app(SerialUnitService::class)->currentStockUnitsByItem($target->id, $targetItem->id));
+        $this->assertDatabaseHas('stock_movements', [
+            'company_id' => $target->id,
+            'item_id' => $targetItem->id,
+            'movement_type' => 'inter_company_sales_return_out',
+            'direction' => 'out',
+        ]);
     }
 
     private function serialSaleContext(int $qty): array

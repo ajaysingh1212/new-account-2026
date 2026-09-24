@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Sales;
 
 use App\Http\Controllers\Controller;
 use App\Models\SalesInvoice;
+use App\Models\PurchaseBill;
 use App\Models\SalesReturn;
 use App\Models\SalesReturnItem;
 use App\Models\StockMovement;
@@ -41,12 +42,29 @@ class SalesReturnController extends Controller
                 $availableUnits = $soldUnits
                     ->reject(fn($unit) => in_array($unit['key'] ?? null, $returnedKeys, true))
                     ->values();
+                if ($invoice->inter_company_transfer) {
+                    $availableKeys = $this->interCompanyAvailableUnits($invoice, $line)
+                        ->pluck('unit.key')
+                        ->filter()
+                        ->flip();
+                    $availableUnits = $availableUnits
+                        ->filter(fn($unit) => $availableKeys->has($unit['key'] ?? null))
+                        ->values();
+                }
+                $remainingQty = round(max(0, (float) $line->quantity - $alreadyReturned), 3);
+                if ($invoice->inter_company_transfer && $soldUnits->isNotEmpty()) {
+                    $remainingQty = min($remainingQty, $availableUnits->count());
+                } elseif ($invoice->inter_company_transfer) {
+                    $targetStock = $this->interCompanyTargetLines($invoice, $line)
+                        ->sum(fn($targetLine) => max(0, (float) $targetLine->item?->current_stock));
+                    $remainingQty = min($remainingQty, $targetStock);
+                }
                 $invoiceData[$invoice->id][] = [
                     'id' => $line->id,
                     'item' => optional($line->item)->name ?? 'N/A',
                     'qty' => (float) $line->quantity,
                     'already_returned' => round($alreadyReturned, 3),
-                    'remaining_qty' => round(max(0, (float) $line->quantity - $alreadyReturned), 3),
+                    'remaining_qty' => $remainingQty,
                     'unit' => $line->unit ?? '',
                     'price' => (float) $line->unit_price,
                     'tax' => (float) $line->tax_percent,
@@ -169,6 +187,14 @@ class SalesReturnController extends Controller
                     'description' => 'Sales return stock in.',
                     'movement_units' => $selectedUnits->all(),
                 ]);
+                $this->moveInterCompanySalesReturnStock(
+                    $invoice,
+                    $line,
+                    $return,
+                    $selectedUnits->all(),
+                    $qty,
+                    $accounting
+                );
                 $subtotal += max(0, $lineTotal - $taxAmount);
                 $tax += $taxAmount;
                 $storedLines++;
@@ -214,7 +240,7 @@ class SalesReturnController extends Controller
         ]);
     }
 
-    public function update(Request $request, SalesReturn $sales_return, EntryVisibilityService $visibility, SerialUnitService $serialUnits)
+    public function update(Request $request, SalesReturn $sales_return, EntryVisibilityService $visibility, SerialUnitService $serialUnits, AccountingService $accounting)
     {
         $visibility->authorizeView($sales_return);
         $data = $request->validate([
@@ -222,8 +248,14 @@ class SalesReturnController extends Controller
             'returned_units.*' => ['nullable','string'],
         ]);
 
-        DB::transaction(function () use ($sales_return, $data, $serialUnits) {
+        DB::transaction(function () use ($sales_return, $data, $serialUnits, $accounting) {
             $sales_return->load(['items.invoiceItem.item']);
+            $invoice = $sales_return->invoice;
+            $needsInterCompanyBackfill = $invoice?->inter_company_transfer
+                && !StockMovement::where('reference_type', SalesReturn::class)
+                    ->where('reference_id', $sales_return->id)
+                    ->where('movement_type', 'inter_company_sales_return_out')
+                    ->exists();
             foreach ($sales_return->items as $index => $returnLine) {
                 $invoiceLine = $returnLine->invoiceItem;
                 if (!$invoiceLine) {
@@ -262,6 +294,17 @@ class SalesReturnController extends Controller
                     ->where('movement_type', 'sales_return')
                     ->get()
                     ->each(fn(StockMovement $movement) => $movement->update(['movement_units' => $selectedUnits->all()]));
+
+                if ($needsInterCompanyBackfill && $invoice) {
+                    $this->moveInterCompanySalesReturnStock(
+                        $invoice,
+                        $invoiceLine,
+                        $sales_return,
+                        $selectedUnits->all(),
+                        (float) $returnLine->quantity,
+                        $accounting
+                    );
+                }
             }
         });
 
@@ -298,5 +341,141 @@ class SalesReturnController extends Controller
     private function nextNo(): string
     {
         return 'SR-' . str_pad((string) (SalesReturn::where('company_id', auth()->user()->current_company_id)->withTrashed()->count() + 1), 5, '0', STR_PAD_LEFT);
+    }
+
+    private function interCompanyAvailableUnits(SalesInvoice $invoice, $invoiceLine): \Illuminate\Support\Collection
+    {
+        if (!$invoice->inter_company_transfer || !$invoiceLine->item) {
+            return collect();
+        }
+
+        $serialUnits = app(SerialUnitService::class);
+        $soldUnits = collect($invoiceLine->selected_units ?? [])->filter(fn($unit) => !empty($unit['key']));
+        if ($soldUnits->isEmpty()) {
+            return collect();
+        }
+
+        return PurchaseBill::with(['items.item'])
+            ->where('source_sales_invoice_id', $invoice->id)
+            ->get()
+            ->flatMap(function (PurchaseBill $bill) use ($invoiceLine, $serialUnits, $soldUnits) {
+                return $bill->items
+                    ->filter(fn($line) => $line->item?->item_code === $invoiceLine->item?->item_code)
+                    ->flatMap(function ($targetLine) use ($bill, $serialUnits, $soldUnits) {
+                        $currentUnits = collect($serialUnits->currentStockUnitsByItem(
+                            (int) $bill->company_id,
+                            (int) $targetLine->item_id
+                        )[$targetLine->item_id] ?? []);
+
+                        return $soldUnits->map(function ($soldUnit) use ($currentUnits, $targetLine) {
+                            $currentUnit = $currentUnits->first(fn($unit) => $this->unitsMatch($soldUnit, $unit));
+
+                            return $currentUnit ? [
+                                'unit' => $soldUnit,
+                                'target_unit' => $currentUnit,
+                                'target_item' => $targetLine->item,
+                            ] : null;
+                        })->filter();
+                    });
+            })
+            ->unique(fn($row) => $row['unit']['key'])
+            ->values();
+    }
+
+    private function moveInterCompanySalesReturnStock(
+        SalesInvoice $invoice,
+        $invoiceLine,
+        SalesReturn $return,
+        array $selectedUnits,
+        float $quantity,
+        AccountingService $accounting
+    ): void {
+        if (!$invoice->inter_company_transfer) {
+            return;
+        }
+
+        if (empty($selectedUnits)) {
+            $remaining = $quantity;
+            foreach ($this->interCompanyTargetLines($invoice, $invoiceLine) as $targetLine) {
+                if ($remaining <= 0) {
+                    break;
+                }
+
+                $targetItem = $targetLine->item;
+                $qty = min($remaining, max(0, (float) $targetItem->current_stock));
+                if ($qty <= 0) {
+                    continue;
+                }
+
+                $this->postInterCompanySalesReturnOut($targetItem, $return, $qty, [], $accounting);
+                $remaining -= $qty;
+            }
+
+            if ($remaining > 0.0001) {
+                throw ValidationException::withMessages([
+                    'quantity' => "Return quantity for {$invoiceLine->item?->name} is not available in the merged company's stock.",
+                ]);
+            }
+
+            return;
+        }
+
+        $available = $this->interCompanyAvailableUnits($invoice, $invoiceLine)
+            ->keyBy(fn($row) => $row['unit']['key']);
+        $selectedKeys = collect($selectedUnits)->pluck('key')->filter()->unique();
+        $destinations = $selectedKeys->map(fn($key) => $available->get($key))->filter();
+
+        if ($destinations->count() !== $selectedKeys->count()) {
+            throw ValidationException::withMessages([
+                'returned_units' => "Selected serial for {$invoiceLine->item?->name} is not currently available in the merged company's stock.",
+            ]);
+        }
+
+        $destinations->groupBy(fn($row) => $row['target_item']->id)
+            ->each(function ($rows) use ($return, $accounting, $invoiceLine) {
+                $targetItem = $rows->first()['target_item'];
+                $movementUnits = $rows->pluck('target_unit')->values()->all();
+                $qty = count($movementUnits);
+                $this->postInterCompanySalesReturnOut($targetItem, $return, $qty, $movementUnits, $accounting);
+            });
+    }
+
+    private function interCompanyTargetLines(SalesInvoice $invoice, $invoiceLine): \Illuminate\Support\Collection
+    {
+        return PurchaseBill::with(['items.item'])
+            ->where('source_sales_invoice_id', $invoice->id)
+            ->get()
+            ->flatMap(fn(PurchaseBill $bill) => $bill->items)
+            ->filter(fn($line) => $line->item?->item_code === $invoiceLine->item?->item_code)
+            ->values();
+    }
+
+    private function postInterCompanySalesReturnOut($targetItem, SalesReturn $return, float $qty, array $units, AccountingService $accounting): void
+    {
+        $accounting->moveStock($targetItem, [
+            'party_id' => null,
+            'movement_date' => $return->return_date,
+            'movement_type' => 'inter_company_sales_return_out',
+            'direction' => 'out',
+            'quantity' => $qty,
+            'unit_price' => $targetItem->purchase_price,
+            'total_value' => $qty * (float) $targetItem->purchase_price,
+            'reference_type' => SalesReturn::class,
+            'reference_id' => $return->id,
+            'reference_no' => $return->return_no,
+            'description' => 'Stock returned to source company through inter-company sales return.',
+            'movement_units' => $units,
+        ]);
+    }
+
+    private function unitsMatch(array $left, array $right): bool
+    {
+        foreach (['key', 'serial_no', 'vts_sim', 'buyer_code', 'sku'] as $field) {
+            if (!empty($left[$field]) && !empty($right[$field]) && (string) $left[$field] === (string) $right[$field]) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
