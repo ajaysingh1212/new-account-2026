@@ -212,6 +212,11 @@ class SalesReturnSerialLifecycleTest extends TestCase
         $interCompanyMovement->update([
             'movement_units' => [['key' => 'OLD-WRONG-KEY', 'serial_no' => 'SER-100', 'item_id' => $sourceItem->id]],
         ]);
+        StockMovement::create([
+            'company_id' => $target->id, 'item_id' => $targetItem->id, 'movement_date' => '2026-09-25',
+            'movement_type' => 'legacy_sales_return_reversal', 'direction' => 'in', 'quantity' => 0,
+            'unit_price' => 0, 'total_value' => 0, 'stock_after' => 0, 'movement_units' => [$targetUnit],
+        ]);
         $this->assertNotEmpty(app(SerialUnitService::class)->currentStockUnitsByItem($target->id, $targetItem->id));
 
         $this->actingAs($user)->withoutMiddleware()->put(route('admin.sales-returns.update', $return), [
@@ -221,10 +226,17 @@ class SalesReturnSerialLifecycleTest extends TestCase
 
         $this->assertSame(0.0, (float) $targetItem->fresh()->current_stock);
         $this->assertEmpty(app(SerialUnitService::class)->currentStockUnitsByItem($target->id, $targetItem->id));
+        $this->assertDatabaseHas('stock_movements', [
+            'company_id' => $target->id,
+            'item_id' => $targetItem->id,
+            'movement_type' => 'inter_company_sales_return_serial_repair',
+            'direction' => 'out',
+            'quantity' => 0,
+        ]);
 
         StockMovement::where('reference_type', SalesReturn::class)
             ->where('reference_id', $return->id)
-            ->where('movement_type', 'inter_company_sales_return_out')
+            ->whereIn('movement_type', ['inter_company_sales_return_out', 'inter_company_sales_return_serial_repair'])
             ->delete();
         $targetItem->refresh()->update(['current_stock' => 1, 'stock_value' => 50]);
 

@@ -257,7 +257,7 @@ class SalesReturnController extends Controller
         $isInterCompanyReturn = (bool) $sales_return->invoice?->inter_company_transfer;
         $hadInterCompanyStockOut = $isInterCompanyReturn && StockMovement::where('reference_type', SalesReturn::class)
             ->where('reference_id', $sales_return->id)
-            ->where('movement_type', 'inter_company_sales_return_out')
+            ->whereIn('movement_type', ['inter_company_sales_return_out', 'inter_company_sales_return_serial_repair'])
             ->exists();
 
         DB::transaction(function () use ($sales_return, $data, $serialUnits, $accounting) {
@@ -313,7 +313,7 @@ class SalesReturnController extends Controller
         if ($isInterCompanyReturn) {
             $movements = StockMovement::where('reference_type', SalesReturn::class)
                 ->where('reference_id', $sales_return->id)
-                ->where('movement_type', 'inter_company_sales_return_out')
+                ->whereIn('movement_type', ['inter_company_sales_return_out', 'inter_company_sales_return_serial_repair'])
                 ->get();
             $companyNames = Company::whereIn('id', $movements->pluck('company_id')->unique())
                 ->pluck('name')
@@ -570,7 +570,74 @@ class SalesReturnController extends Controller
                             $accounting
                         );
                     }
+
+                    $currentUnits = collect(app(SerialUnitService::class)->currentStockUnitsByItem(
+                        (int) $targetItem->company_id,
+                        (int) $targetItem->id
+                    )[$targetItem->id] ?? []);
+                    $stillActiveUnits = $currentUnits
+                        ->filter(fn($currentUnit) => $desiredUnits->contains(
+                            fn($desiredUnit) => $this->unitsMatch($desiredUnit, $currentUnit)
+                        ))
+                        ->values();
+
+                    if ($stillActiveUnits->isNotEmpty()) {
+                        $latestMovementDate = StockMovement::where('company_id', $targetItem->company_id)
+                            ->where('item_id', $targetItem->id)
+                            ->max('movement_date');
+                        $repairDate = collect([
+                            $return->return_date?->format('Y-m-d'),
+                            $latestMovementDate,
+                        ])->filter()->max();
+
+                        $accounting->moveStock($targetItem, [
+                            'party_id' => null,
+                            'movement_date' => $repairDate ?: now()->toDateString(),
+                            'movement_type' => 'inter_company_sales_return_serial_repair',
+                            'direction' => 'out',
+                            'quantity' => 0,
+                            'unit_price' => 0,
+                            'total_value' => 0,
+                            'reference_type' => SalesReturn::class,
+                            'reference_id' => $return->id,
+                            'reference_no' => $return->return_no,
+                            'description' => 'Serial ownership repair after inter-company sales return.',
+                            'movement_units' => $stillActiveUnits->all(),
+                        ]);
+                    }
                 });
+        }
+
+        $this->assertInterCompanyReturnedUnitsRemoved($return);
+    }
+
+    private function assertInterCompanyReturnedUnitsRemoved(SalesReturn $return): void
+    {
+        $serialUnits = app(SerialUnitService::class);
+
+        foreach ($return->items as $returnLine) {
+            $invoiceLine = $returnLine->invoiceItem;
+            if (!$invoiceLine) {
+                continue;
+            }
+
+            $selectedUnits = collect($returnLine->selected_units ?? [])->filter(fn($unit) => is_array($unit));
+            foreach ($this->interCompanyTargetLines($return->invoice, $invoiceLine) as $targetLine) {
+                $currentUnits = collect($serialUnits->currentStockUnitsByItem(
+                    (int) $targetLine->item->company_id,
+                    (int) $targetLine->item_id
+                )[$targetLine->item_id] ?? []);
+                $stillPresent = $currentUnits->filter(fn($currentUnit) => $selectedUnits->contains(
+                    fn($selectedUnit) => $this->unitsMatch($selectedUnit, $currentUnit)
+                ));
+
+                if ($stillPresent->isNotEmpty()) {
+                    $labels = $stillPresent->map(fn($unit) => $unit['serial_no'] ?? $unit['sku'] ?? $unit['key'] ?? 'unknown')->implode(', ');
+                    throw ValidationException::withMessages([
+                        'returned_units' => "Stock verification failed. These serials are still present in the merged company: {$labels}.",
+                    ]);
+                }
+            }
         }
     }
 
