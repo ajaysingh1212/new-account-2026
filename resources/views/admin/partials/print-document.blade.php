@@ -10,6 +10,11 @@
     $discount     = (float)($discount   ?? 0);
     $tax          = (float)($tax        ?? 0);
     $grandTotal   = (float)($grandTotal ?? 0);
+    $returnDetails = $returnDetails ?? [];
+    $returnLabel = $returnLabel ?? 'Return';
+    $hasReturn = (bool)($returnDetails['has_return'] ?? false);
+    $returnedAmount = (float)($returnDetails['returned_amount'] ?? 0);
+    $netGrandTotal = $hasReturn ? (float)($returnDetails['net_total'] ?? max(0, $grandTotal - $returnedAmount)) : $grandTotal;
     $totalWeight  = (float)($totalWeight ?? 0);
     $terms        = $terms        ?? '';
     $status       = $status       ?? 'posted';
@@ -40,7 +45,7 @@
         if ($paise)  $result .= ' and '.$words($paise).' Paise';
         return $result.' Only';
     }
-    $amountInWords = numberToWordsIN($grandTotal);
+    $amountInWords = numberToWordsIN($netGrandTotal);
 @endphp
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
@@ -431,6 +436,7 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
         </thead>
         <tbody>
         @forelse($lines as $line)
+          @php($returnLine = collect($returnDetails['items'] ?? [])->firstWhere('line_id', $line->id))
           <tr>
             <td style="text-align:center;color:var(--muted);font-size:11px">{{ $loop->iteration }}</td>
             <td>
@@ -442,7 +448,12 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
             <td style="color:var(--muted);font-size:12px">{{ $line->unit }}</td>
             <td class="num-cell">{{ number_format((float)$line->unit_price,2) }}</td>
             <td class="num-cell" style="color:var(--muted)">{{ number_format((float)($line->tax_percent ?? 0),2) }}%<br><small>₹ {{ number_format((float)($line->tax_amount ?? 0),2) }}</small></td>
-            <td class="amount-cell">{{ number_format((float)$line->line_total,2) }}</td>
+            <td class="amount-cell">
+              {{ number_format((float)($returnLine['net_amount'] ?? $line->line_total),2) }}
+              @if(($returnLine['returned_amount'] ?? 0) > 0)
+                <div class="item-desc" style="color:#ef4444;font-weight:700">{{ $returnLabel }}: - Rs {{ number_format((float)$returnLine['returned_amount'],2) }}</div>
+              @endif
+            </td>
           </tr>
         @empty
           <tr><td colspan="8" style="text-align:center;padding:28px;color:var(--muted)">No items added.</td></tr>
@@ -453,7 +464,7 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
             <td colspan="3"><b>TOTAL</b></td>
             <td class="num-cell">{{ number_format((float)$lines->sum('quantity'),3) }}</td>
             <td colspan="3"></td>
-            <td class="amount-cell">₹ {{ number_format($grandTotal,2) }}</td>
+            <td class="amount-cell">₹ {{ number_format($netGrandTotal,2) }}</td>
           </tr>
         </tfoot>
       </table>
@@ -474,6 +485,16 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
           <span class="sum-label">GST / Tax</span>
           <b>₹ {{ number_format($tax,2) }}</b>
         </div>
+        @if($hasReturn)
+        <div class="sum-line">
+          <span class="sum-label">Original Total</span>
+          <b>₹ {{ number_format($grandTotal,2) }}</b>
+        </div>
+        <div class="sum-line">
+          <span class="sum-label">Less {{ $returnLabel }}</span>
+          <b style="color:#ef4444">− ₹ {{ number_format($returnedAmount,2) }}</b>
+        </div>
+        @endif
         @if($totalWeight > 0)
         <div class="sum-line">
           <span class="sum-label">Total Weight</span>
@@ -482,11 +503,11 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
         @endif
         <div class="sum-line" style="border-top:1.5px solid var(--border)">
           <span class="sum-label">Round Off</span>
-          <b>₹ {{ number_format($grandTotal - floor($grandTotal),2) }}</b>
+          <b>₹ {{ number_format($netGrandTotal - floor($netGrandTotal),2) }}</b>
         </div>
         <div class="sum-line total-line">
           <span class="sum-label">Grand Total</span>
-          <b>₹ {{ number_format($grandTotal,2) }}</b>
+          <b>₹ {{ number_format($netGrandTotal,2) }}</b>
         </div>
       </div>
     </div>

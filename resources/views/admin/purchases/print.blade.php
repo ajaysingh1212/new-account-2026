@@ -11,6 +11,8 @@
     'discount' => $bill->discount_amount,
     'tax' => $bill->tax_amount,
     'grandTotal' => $bill->grand_total,
+    'returnDetails' => $purchaseReturnDetails ?? [],
+    'returnLabel' => 'Purchase Return',
     'terms' => $bill->terms ?: ($defaultTerms?->content ?? ''),
     'company' => $company ?? $bill->company,
     'bankAccount' => $bankAccount ?? null,

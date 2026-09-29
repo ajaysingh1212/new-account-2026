@@ -12,7 +12,9 @@
             <div class="col-md-2"><b>Date</b><br>{{ $invoice->billing_date?->format('d M Y') }}</div>
             <div class="col-md-2"><b>PO Date</b><br>{{ $invoice->po_date?->format('d M Y') ?: '-' }}</div>
             <div class="col-md-2"><b>Type</b><br>{{ ucfirst($invoice->sale_type) }}</div>
-            <div class="col-md-2"><b>Total</b><br>Rs {{ number_format((float)$invoice->grand_total,2) }}</div>
+            <div class="col-md-2"><b>Total</b><br>Rs {{ number_format((float)($invoiceReturnDetails['net_total'] ?? $invoice->grand_total),2) }}
+                @if($invoiceReturnDetails['has_return'] ?? false)<br><small class="text-muted">Original: Rs {{ number_format((float)$invoice->grand_total,2) }}</small>@endif
+            </div>
             <div class="col-md-3">@if($invoice->attachment)<b>Attachment</b><br><a href="{{ asset('storage/'.$invoice->attachment) }}" target="_blank">Open attachment</a>@endif</div>
         </div>
         @if($invoice->sourceDeliveryChallan)
@@ -22,15 +24,18 @@
         @endif
         @if($invoiceReturnDetails['has_return'] ?? false)
             <div class="alert alert-warning">
-                <b>This invoice has sales return activity.</b> Returned quantity: {{ number_format((float) ($invoiceReturnDetails['returned_qty'] ?? 0), 3) }}
+                <b>This invoice has sales return activity.</b>
+                Returned quantity: {{ number_format((float) ($invoiceReturnDetails['returned_qty'] ?? 0), 3) }} |
+                Returned amount minus: Rs {{ number_format((float) ($invoiceReturnDetails['returned_amount'] ?? 0), 2) }} |
+                Net invoice value: Rs {{ number_format((float) ($invoiceReturnDetails['net_total'] ?? $invoice->grand_total), 2) }}
             </div>
         @endif
         <table class="table table-hover">
-            <thead><tr><th>Item</th><th>Sold Qty</th><th>Returned Qty</th><th>Remaining</th><th>Selected Finished Goods</th><th>Price</th><th>Tax</th><th>Total</th><th>Returns</th></tr></thead>
+            <thead><tr><th>Item</th><th>Sold Qty</th><th>Returned Qty</th><th>Remaining</th><th>Selected Finished Goods</th><th>Price</th><th>Tax</th><th>Total</th><th>Returned Amount</th><th>Net Total</th><th>Returns</th></tr></thead>
             <tbody>
             @foreach($invoice->items as $line)
-                @php($lineSummary = collect($invoiceReturnDetails['items'] ?? [])->firstWhere('item_id', $line->item_id))
-                <tr>
+                @php($lineSummary = collect($invoiceReturnDetails['items'] ?? [])->firstWhere('line_id', $line->id))
+                <tr class="{{ ($lineSummary['returned_qty'] ?? 0) > 0 ? 'table-warning' : '' }}">
                     <td>{{ $line->item?->name }}</td>
                     <td>{{ $lineSummary['sold_qty'] ?? $line->quantity }}</td>
                     <td class="{{ ($lineSummary['returned_qty'] ?? 0) > 0 ? 'text-warning' : '' }}">{{ number_format((float) ($lineSummary['returned_qty'] ?? 0), 3) }}</td>
@@ -39,11 +44,13 @@
                     <td>Rs {{ number_format((float)$line->unit_price,2) }}</td>
                     <td>Rs {{ number_format((float)$line->tax_amount,2) }}</td>
                     <td>Rs {{ number_format((float)$line->line_total,2) }}</td>
+                    <td class="{{ ($lineSummary['returned_amount'] ?? 0) > 0 ? 'text-danger font-weight-bold' : '' }}">- Rs {{ number_format((float) ($lineSummary['returned_amount'] ?? 0), 2) }}</td>
+                    <td class="font-weight-bold">Rs {{ number_format((float) ($lineSummary['net_amount'] ?? $line->line_total), 2) }}</td>
                     <td>
                         @forelse(($lineSummary['returns'] ?? []) as $returnRow)
                             <div class="mb-1">
                                 <b>{{ $returnRow['return_no'] }}</b><br>
-                                <small class="text-muted">{{ $returnRow['return_date'] }} | Qty {{ number_format((float) $returnRow['return_qty'], 3) }} | {{ $returnRow['returned_by'] }}</small>
+                                <small class="text-muted">{{ $returnRow['return_date'] }} | Qty {{ number_format((float) $returnRow['return_qty'], 3) }} | Rs {{ number_format((float) ($returnRow['return_amount'] ?? 0), 2) }} minus | {{ $returnRow['returned_by'] }}</small>
                             </div>
                         @empty
                             <span class="text-muted">-</span>
@@ -52,6 +59,13 @@
                 </tr>
             @endforeach
             </tbody>
+            @if($invoiceReturnDetails['has_return'] ?? false)
+            <tfoot>
+                <tr><th colspan="9" class="text-right">Original Invoice Total</th><th colspan="2">Rs {{ number_format((float)$invoice->grand_total,2) }}</th></tr>
+                <tr><th colspan="9" class="text-right text-danger">Less Sales Return</th><th colspan="2" class="text-danger">- Rs {{ number_format((float)($invoiceReturnDetails['returned_amount'] ?? 0),2) }}</th></tr>
+                <tr><th colspan="9" class="text-right">Net Invoice Value</th><th colspan="2">Rs {{ number_format((float)($invoiceReturnDetails['net_total'] ?? $invoice->grand_total),2) }}</th></tr>
+            </tfoot>
+            @endif
         </table>
     </div>
 </div>

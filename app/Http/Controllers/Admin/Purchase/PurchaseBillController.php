@@ -11,6 +11,8 @@ use App\Models\Party;
 use App\Models\PartyAdvanceAllocation;
 use App\Models\PurchaseBill;
 use App\Models\PurchaseBillItem;
+use App\Models\PurchaseReturn;
+use App\Models\PurchaseReturnItem;
 use App\Models\StockMovement;
 use App\Models\SubCostCenter;
 use App\Models\TermsTemplate;
@@ -205,7 +207,7 @@ class PurchaseBillController extends Controller
     public function show(PurchaseBill $purchase, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($purchase);
-        $purchase->load(['party','items.item','sourceSalesInvoice.creator','interCompanySourceCompany']);
+        $purchase->load(['party','items.item','returns.items.item','returns.creator','sourceSalesInvoice.creator','interCompanySourceCompany']);
         $auditLogs = AuditLog::with(['user','company'])
             ->where('model', PurchaseBill::class)
             ->where('model_id', $purchase->id)
@@ -213,7 +215,12 @@ class PurchaseBillController extends Controller
             ->get();
         $stockGapRows = $purchase->source_sales_invoice_id ? $this->stockGapRows($purchase) : collect();
 
-        return view('admin.purchases.show', ['bill' => $purchase, 'auditLogs' => $auditLogs, 'stockGapRows' => $stockGapRows]);
+        return view('admin.purchases.show', [
+            'bill' => $purchase,
+            'auditLogs' => $auditLogs,
+            'stockGapRows' => $stockGapRows,
+            'purchaseReturnDetails' => $this->purchaseReturnSummary($purchase),
+        ]);
     }
 
     public function repairInterCompanyStock(Request $request, PurchaseBill $purchase, EntryVisibilityService $visibility, AccountingService $accounting)
@@ -264,10 +271,16 @@ class PurchaseBillController extends Controller
     public function print(PurchaseBill $purchase, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($purchase);
-        $purchase->load(['party','items.item','company']);
+        $purchase->load(['party','items.item','company','returns.items.item','returns.creator']);
         $bankAccount = BankAccount::where('company_id', $purchase->company_id)->where('print_on_invoice', true)->where('status', 'active')->first();
         $defaultTerms = TermsTemplate::where('company_id', $purchase->company_id)->where('status', 'active')->whereIn('document_type', ['purchase','all'])->orderByDesc('is_default')->first();
-        return view('admin.purchases.print', ['bill' => $purchase, 'bankAccount' => $bankAccount, 'company' => $purchase->company, 'defaultTerms' => $defaultTerms]);
+        return view('admin.purchases.print', [
+            'bill' => $purchase,
+            'bankAccount' => $bankAccount,
+            'company' => $purchase->company,
+            'defaultTerms' => $defaultTerms,
+            'purchaseReturnDetails' => $this->purchaseReturnSummary($purchase),
+        ]);
     }
 
     private function formData(?PurchaseBill $bill = null): array
@@ -701,5 +714,60 @@ class PurchaseBillController extends Controller
     private function nextNo(): string
     {
         return str_pad((string) (PurchaseBill::where('company_id', auth()->user()->current_company_id)->withTrashed()->count() + 1), 8, '0', STR_PAD_LEFT);
+    }
+
+    private function purchaseReturnSummary(PurchaseBill $bill): array
+    {
+        $bill->loadMissing(['items.item', 'returns.items.item', 'returns.creator']);
+
+        $lineSummaries = $bill->items->map(function (PurchaseBillItem $line) use ($bill) {
+            $returnLines = $bill->returns->flatMap(function (PurchaseReturn $return) use ($line) {
+                return $return->items
+                    ->where('purchase_bill_item_id', $line->id)
+                    ->map(fn(PurchaseReturnItem $returnLine) => [
+                        'return_id' => $return->id,
+                        'return_no' => $return->return_no,
+                        'return_date' => $return->return_date?->format('d M Y'),
+                        'return_qty' => (float) $returnLine->quantity,
+                        'return_tax' => (float) $returnLine->tax_amount,
+                        'return_amount' => (float) $returnLine->line_total,
+                        'returned_by' => $return->creator?->name ?? 'System',
+                        'returned_at' => $return->created_at?->format('d M Y h:i A'),
+                    ]);
+            })->values();
+
+            $returnedQty = (float) $returnLines->sum('return_qty');
+            $returnedTax = (float) $returnLines->sum('return_tax');
+            $returnedAmount = (float) $returnLines->sum('return_amount');
+
+            return [
+                'line_id' => $line->id,
+                'item_id' => $line->item_id,
+                'item_name' => $line->item?->name ?: 'Item',
+                'purchased_qty' => (float) $line->quantity,
+                'returned_qty' => round($returnedQty, 3),
+                'remaining_qty' => max(0, round((float) $line->quantity - $returnedQty, 3)),
+                'line_amount' => (float) $line->line_total,
+                'returned_tax' => round($returnedTax, 2),
+                'returned_amount' => round($returnedAmount, 2),
+                'net_amount' => max(0, round((float) $line->line_total - $returnedAmount, 2)),
+                'returns' => $returnLines,
+            ];
+        })->values();
+
+        $totalReturned = (float) $lineSummaries->sum('returned_qty');
+        $returnedSubtotal = (float) $bill->returns->sum('subtotal');
+        $returnedTax = (float) $bill->returns->sum('tax_amount');
+        $returnedAmount = (float) $bill->returns->sum('grand_total');
+
+        return [
+            'has_return' => $totalReturned > 0,
+            'returned_qty' => round($totalReturned, 3),
+            'returned_subtotal' => round($returnedSubtotal, 2),
+            'returned_tax' => round($returnedTax, 2),
+            'returned_amount' => round($returnedAmount, 2),
+            'net_total' => max(0, round((float) $bill->grand_total - $returnedAmount, 2)),
+            'items' => $lineSummaries,
+        ];
     }
 }

@@ -11,6 +11,8 @@
     'discount' => $invoice->discount_amount,
     'tax' => $invoice->tax_amount,
     'grandTotal' => $invoice->grand_total,
+    'returnDetails' => $invoiceReturnDetails ?? [],
+    'returnLabel' => 'Sales Return',
     'totalWeight' => $invoice->total_weight,
     'terms' => $invoice->terms ?: ($defaultTerms?->content ?? ''),
     'company' => $company ?? $invoice->company,

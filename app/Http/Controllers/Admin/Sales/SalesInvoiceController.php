@@ -399,11 +399,17 @@ class SalesInvoiceController extends Controller
     public function print(SalesInvoice $sale, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($sale);
-        $sale->load(['party', 'items.item', 'company']);
+        $sale->load(['party', 'items.item', 'company', 'returns.items.item', 'returns.creator']);
         $bankAccount = BankAccount::where('company_id', $sale->company_id)->where('print_on_invoice', true)->where('status', 'active')->first();
         $defaultTerms = TermsTemplate::where('company_id', $sale->company_id)->where('status', 'active')->whereIn('document_type', ['sales', 'all'])->orderByDesc('is_default')->first();
 
-        return view('admin.sales.print', ['invoice' => $sale, 'bankAccount' => $bankAccount, 'company' => $sale->company, 'defaultTerms' => $defaultTerms]);
+        return view('admin.sales.print', [
+            'invoice' => $sale,
+            'bankAccount' => $bankAccount,
+            'company' => $sale->company,
+            'defaultTerms' => $defaultTerms,
+            'invoiceReturnDetails' => $this->invoiceReturnSummary($sale),
+        ]);
     }
 
     public function detailPdf(SalesInvoice $sale, EntryVisibilityService $visibility, SalesProfitService $profits)
@@ -1609,28 +1615,44 @@ class SalesInvoiceController extends Controller
                         'return_no' => $return->return_no,
                         'return_date' => $return->return_date?->format('d M Y'),
                         'return_qty' => (float) $returnLine->quantity,
+                        'return_tax' => (float) $returnLine->tax_amount,
+                        'return_amount' => (float) $returnLine->line_total,
                         'returned_by' => $return->creator?->name ?? 'System',
                         'returned_at' => $return->created_at?->format('d M Y h:i A'),
                     ]);
             })->values();
 
             $returnedQty = (float) $returnLines->sum('return_qty');
+            $returnedTax = (float) $returnLines->sum('return_tax');
+            $returnedAmount = (float) $returnLines->sum('return_amount');
 
             return [
+                'line_id' => $line->id,
                 'item_id' => $line->item_id,
                 'item_name' => $line->item?->name ?: 'Item',
                 'sold_qty' => (float) $line->quantity,
                 'returned_qty' => round($returnedQty, 3),
                 'remaining_qty' => max(0, round((float) $line->quantity - $returnedQty, 3)),
+                'line_amount' => (float) $line->line_total,
+                'returned_tax' => round($returnedTax, 2),
+                'returned_amount' => round($returnedAmount, 2),
+                'net_amount' => max(0, round((float) $line->line_total - $returnedAmount, 2)),
                 'returns' => $returnLines,
             ];
         })->values();
 
         $totalReturned = (float) $lineSummaries->sum('returned_qty');
+        $returnedSubtotal = (float) $invoice->returns->sum('subtotal');
+        $returnedTax = (float) $invoice->returns->sum('tax_amount');
+        $returnedAmount = (float) $invoice->returns->sum('grand_total');
 
         return [
             'has_return' => $totalReturned > 0,
             'returned_qty' => round($totalReturned, 3),
+            'returned_subtotal' => round($returnedSubtotal, 2),
+            'returned_tax' => round($returnedTax, 2),
+            'returned_amount' => round($returnedAmount, 2),
+            'net_total' => max(0, round((float) $invoice->grand_total - $returnedAmount, 2)),
             'items' => $lineSummaries,
         ];
     }
