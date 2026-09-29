@@ -113,6 +113,27 @@ class CreditNoteTest extends TestCase
             ->assertSee('CN-GST-1');
     }
 
+    public function test_dashboard_cards_use_credit_note_date_filter_and_show_details(): void
+    {
+        [$user, $invoice, $line] = $this->invoiceContext();
+        $invoice->update(['tax_amount' => 36, 'grand_total' => 236]);
+        $line->update(['unit_price' => 118, 'tax_percent' => 18, 'tax_amount' => 36, 'line_total' => 236]);
+        $this->actingAs($user)->withoutMiddleware()->post(route('admin.credit-notes.store'), [
+            'sales_invoice_id' => $invoice->id, 'credit_note_no' => 'CN-DASH-1',
+            'credit_note_date' => '2026-09-10', 'line_id' => [$line->id], 'quantity' => [1],
+            'selected_units' => [json_encode([$line->selected_units[0]])], 'allow_without_return' => 1,
+        ]);
+
+        $this->actingAs($user)->withoutMiddleware()
+            ->get(route('admin.dashboard', ['period' => 'custom', 'from_date' => '2026-09-01', 'to_date' => '2026-09-30']))
+            ->assertOk()
+            ->assertViewHas('stats', fn($stats) => (float) $stats['credit_notes_total'] === 118.0
+                && (float) $stats['credit_notes_tax'] === 18.0)
+            ->assertSee('Credit Notes Passed')
+            ->assertSee('GST Tax Minus')
+            ->assertSee('CN-DASH-1');
+    }
+
     private function invoiceContext(): array
     {
         $user = User::factory()->create(['user_type' => 'super_admin']);

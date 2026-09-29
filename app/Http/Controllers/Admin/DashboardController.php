@@ -7,6 +7,7 @@ use App\Models\BankAccount;
 use App\Models\ChequeLeaf;
 use App\Models\Company;
 use App\Models\CostCenter;
+use App\Models\CreditNote;
 use App\Models\DeliveryChallan;
 use App\Models\Estimate;
 use App\Models\EstimateItem;
@@ -39,6 +40,42 @@ class DashboardController extends Controller
         $companyId = $user->isSuperAdmin() ? $request->integer('company_id') : $user->current_company_id;
         [$period, $from, $to] = $this->dateRange($request);
         $companiesFilter = $user->isSuperAdmin() ? Company::orderBy('name')->get() : collect();
+
+        $creditNoteQuery = CreditNote::with(['invoice', 'party', 'items.item', 'creator']);
+        $creditNoteQuery = $user->isSuperAdmin()
+            ? $this->scope($creditNoteQuery, $companyId)
+            : $visibility->scopeForUser($creditNoteQuery, CreditNote::class);
+        $creditNoteRows = $creditNoteQuery
+            ->whereBetween('credit_note_date', [$from, $to])
+            ->latest('credit_note_date')
+            ->latest('id')
+            ->get()
+            ->map(fn(CreditNote $note) => [
+                'id' => $note->id,
+                'number' => $note->credit_note_no,
+                'date' => $note->credit_note_date?->format('d M Y'),
+                'invoice_id' => $note->sales_invoice_id,
+                'invoice' => $note->invoice?->invoice_no ?: '-',
+                'party' => $note->party?->display_name ?: 'Cash / Walk-in',
+                'gstin' => $note->party?->gstin ?: '-',
+                'taxable' => max(0, (float) $note->grand_total - (float) $note->tax_amount),
+                'tax' => (float) $note->tax_amount,
+                'total' => (float) $note->grand_total,
+                'reason' => $note->reason ?: '-',
+                'return_received' => $note->hasCompleteSalesReturn(),
+                'created_by' => $note->creator?->name ?: 'System',
+                'credit_note_url' => route('admin.credit-notes.show', $note),
+                'invoice_url' => $note->invoice ? route('admin.sales.show', $note->invoice) : null,
+                'items' => $note->items->map(fn($line) => [
+                    'name' => $line->item?->name ?: 'Item',
+                    'sku' => $line->item?->item_code ?: '-',
+                    'quantity' => (float) $line->quantity,
+                    'tax_percent' => (float) $line->tax_percent,
+                    'tax' => (float) $line->tax_amount,
+                    'total' => (float) $line->line_total,
+                ])->values()->all(),
+            ])
+            ->values();
 
         if ($user->isSuperAdmin()) {
             $stats = [
@@ -92,6 +129,8 @@ class DashboardController extends Controller
             $companies = collect();
         }
 
+        $stats['credit_notes_total'] = (float) $creditNoteRows->sum('total');
+        $stats['credit_notes_tax'] = (float) $creditNoteRows->sum('tax');
         $salesDueRows = $this->dueRows($outstanding, $visibility, 'receivable', $companyId, $to);
         $purchaseDueRows = $this->dueRows($outstanding, $visibility, 'payable', $companyId, $to);
                 $stats['sales_due'] = $salesDueRows->sum('due');
@@ -249,7 +288,7 @@ class DashboardController extends Controller
 
         $companyName = $companyId ? Company::find($companyId)?->name : 'All Companies';
 
-        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','companyName','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','estimateSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals','chequeRows','completedChequeRows','collectionRows'));
+        return view('admin.dashboard', compact('stats','recentLogs','companies','companiesFilter','companyId','companyName','from','to','period','monthly','mix','quickActions','salesDueRows','purchaseDueRows','ageingMatrix','ageingSlabLabels','ageingKind','salesProducts','purchaseProducts','lowStockProducts','profitRows','salesSegments','estimateSegments','purchaseSegments','profitSegments','serviceRows','serviceTotals','chequeRows','completedChequeRows','collectionRows','creditNoteRows'));
     }
 
     private function dateRange(Request $request): array
@@ -266,6 +305,7 @@ class DashboardController extends Controller
             'three_months', 'last_3_months' => ['three_months', $today->copy()->subMonths(3)->startOfDay()->toDateString(), $today->toDateString()],
             'six_months' => [$period, $today->copy()->subMonths(6)->startOfDay()->toDateString(), $today->toDateString()],
             'nine_months' => [$period, $today->copy()->subMonths(9)->startOfDay()->toDateString(), $today->toDateString()],
+            'this_year' => [$period, $today->copy()->startOfYear()->toDateString(), $today->toDateString()],
             'one_year', 'year' => ['year', $today->copy()->subYear()->startOfDay()->toDateString(), $today->toDateString()],
             'all' => [$period, '1970-01-01', $today->toDateString()],
             'custom' => [

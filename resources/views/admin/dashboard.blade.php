@@ -48,6 +48,8 @@
         $cards[] = ['label'=>'Active Companies','value'=>$stats['active_companies'] ?? 0,'icon'=>'fa-check-circle','accent'=>'#22c55e'];
     }
     if ($user->can('sales.view')) $cards[] = ['label'=>'Sales','value'=>'Rs '.number_format($stats['sales'] ?? 0,2),'icon'=>'fa-file-invoice-dollar','accent'=>'#2563eb','modal'=>'salesSegmentModal'];
+    if ($user->can('credit_notes.view')) $cards[] = ['label'=>'Credit Notes Passed','html'=>'Rs '.number_format($stats['credit_notes_total'] ?? 0,2).'<br><small style="color:#64748b;font-weight:800"><i class="fas fa-eye mr-1"></i>View invoice-wise details</small>','icon'=>'fa-file-circle-minus','accent'=>'#dc2626','modal'=>'creditNotesDashboardModal'];
+    if ($user->can('credit_notes.view')) $cards[] = ['label'=>'GST Tax Minus','html'=>'Rs '.number_format($stats['credit_notes_tax'] ?? 0,2).'<br><small style="color:#64748b;font-weight:800"><i class="fas fa-eye mr-1"></i>View sales invoice details</small>','icon'=>'fa-percent','accent'=>'#7c3aed','modal'=>'creditNoteTaxDashboardModal'];
     if ($user->can('sales.view')) $cards[] = ['label'=>'Sales Due','value'=>'Rs '.number_format($stats['sales_due'] ?? 0,2),'icon'=>'fa-hand-holding-dollar','accent'=>'#dc2626','modal'=>'salesDueModal'];
     if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase','value'=>'Rs '.number_format($stats['purchases'] ?? 0,2),'icon'=>'fa-shopping-cart','accent'=>'#ec4899','modal'=>'purchaseSegmentModal'];
     if ($user->can('purchase.view')) $cards[] = ['label'=>'Purchase Due','value'=>'Rs '.number_format($stats['purchase_due'] ?? 0,2),'icon'=>'fa-file-circle-exclamation','accent'=>'#f59e0b','target'=>'purchaseDueBox'];
@@ -91,7 +93,7 @@
         <div class="col-md-{{ $user->isSuperAdmin() ? '8' : '10' }} form-group mb-md-0">
             <label>Date Filter</label>
             <div class="period-tabs">
-                @foreach(['today'=>'Today','week'=>'This Week','month'=>'This Month','last_month'=>'Last Month','yesterday'=>'Yesterday','three_months'=>'3 Month','six_months'=>'6 Month','nine_months'=>'9 Month','year'=>'1 Year','all'=>'All','custom'=>'Custom Date'] as $value => $label)
+                @foreach(['today'=>'Today','yesterday'=>'Yesterday','week'=>'This Week','month'=>'This Month','this_year'=>'This Year','custom'=>'Custom Date','last_month'=>'Last Month','three_months'=>'3 Month','six_months'=>'6 Month','nine_months'=>'9 Month','year'=>'1 Year','all'=>'All'] as $value => $label)
                     <button type="button" data-period="{{ $value }}" class="period-tab {{ $period === $value ? 'active' : '' }}">{{ $label }}</button>
                 @endforeach
             </div>
@@ -256,6 +258,57 @@
     <div class="table-responsive mt-3"><table class="table table-hover"><thead><tr><th>Company</th><th>Users</th><th>Roles</th><th>Status</th></tr></thead><tbody>@foreach($companies as $company)<tr><td><b>{{ $company->name }}</b></td><td>{{ $company->users_count }}</td><td>{{ $company->roles_count }}</td><td>{{ $company->is_active ? 'Active' : 'Inactive' }}</td></tr>@endforeach</tbody></table></div>
 </div>
 @endif
+
+@can('credit_notes.view')
+<div class="modal fade" id="creditNotesDashboardModal" tabindex="-1" role="dialog" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable" role="document"><div class="modal-content" style="border:0;border-radius:8px;overflow:hidden">
+    <div class="modal-header bg-dark text-white"><div><h5 class="modal-title mb-0">Credit Notes Passed</h5><small>{{ $from }} to {{ $to }} | Current dashboard filter</small></div><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+    <div class="modal-body" style="background:#f8fafc">
+        <div class="d-flex justify-content-between align-items-center bg-white border p-3 mb-3"><div><small class="text-muted">Total Credit Notes</small><div class="h4 mb-0">Rs {{ number_format($stats['credit_notes_total'] ?? 0,2) }}</div></div><span class="badge badge-danger">{{ $creditNoteRows->count() }} document(s)</span></div>
+        <div class="table-responsive"><table id="dashboardCreditNotesTable" class="table table-hover bg-white"><thead><tr><th>Date</th><th>Credit Note</th><th>Against Invoice</th><th>Party</th><th>Taxable</th><th>GST Minus</th><th>Credit Total</th><th>Return</th><th>Details</th></tr></thead><tbody>
+        @foreach($creditNoteRows as $row)
+            <tr>
+                <td>{{ $row['date'] }}</td><td><b>{{ $row['number'] }}</b><br><small class="text-muted">{{ $row['reason'] }}</small></td><td>{{ $row['invoice'] }}</td><td>{{ $row['party'] }}<br><small class="text-muted">GSTIN {{ $row['gstin'] }}</small></td><td>Rs {{ number_format($row['taxable'],2) }}</td><td class="text-danger font-weight-bold">- Rs {{ number_format($row['tax'],2) }}</td><td><b>Rs {{ number_format($row['total'],2) }}</b></td>
+                <td>@if($row['return_received'])<span class="badge badge-success">Received</span>@else<span class="badge badge-warning">Pending</span>@endif</td>
+                <td class="text-nowrap">
+                    <a href="{{ $row['credit_note_url'] }}" class="btn btn-info btn-sm" title="View Credit Note"><i class="fas fa-file-invoice-dollar"></i></a>
+                    @can('sales.view')
+                        @if($row['invoice_url'])<a href="{{ $row['invoice_url'] }}" class="btn btn-outline-primary btn-sm" title="View Sales Invoice"><i class="fas fa-eye"></i></a>@endif
+                    @endcan
+                </td>
+            </tr>
+        @endforeach
+        </tbody></table></div>
+    </div><div class="modal-footer"><button class="btn btn-secondary" data-dismiss="modal">Close</button></div>
+</div></div></div>
+
+@php
+    $creditTaxInvoiceRows = $creditNoteRows->groupBy('invoice_id');
+@endphp
+<div class="modal fade" id="creditNoteTaxDashboardModal" tabindex="-1" role="dialog" aria-hidden="true"><div class="modal-dialog modal-xl modal-dialog-scrollable" role="document"><div class="modal-content" style="border:0;border-radius:8px;overflow:hidden">
+    <div class="modal-header" style="background:#4c1d95;color:#fff"><div><h5 class="modal-title mb-0">GST Tax Minus by Sales Invoice</h5><small>{{ $from }} to {{ $to }} | Credit Note date basis</small></div><button type="button" class="close text-white" data-dismiss="modal"><span>&times;</span></button></div>
+    <div class="modal-body" style="background:#f8fafc">
+        <div class="d-flex justify-content-between align-items-center bg-white border p-3 mb-3"><div><small class="text-muted">Total GST Reversed</small><div class="h4 mb-0 text-danger">- Rs {{ number_format($stats['credit_notes_tax'] ?? 0,2) }}</div></div><span class="badge badge-primary">{{ $creditTaxInvoiceRows->count() }} sales invoice(s)</span></div>
+        <div class="table-responsive"><table id="dashboardCreditTaxTable" class="table table-hover bg-white"><thead><tr><th>Sales Invoice</th><th>Party</th><th>Credit Notes</th><th>Taxable Minus</th><th>GST Minus</th><th>Credit Total</th><th>Details</th></tr></thead><tbody>
+        @foreach($creditTaxInvoiceRows as $invoiceId => $rows)
+            @php
+                $first = $rows->first();
+            @endphp
+            <tr>
+                <td><b>{{ $first['invoice'] }}</b></td><td>{{ $first['party'] }}<br><small class="text-muted">GSTIN {{ $first['gstin'] }}</small></td>
+                <td>@foreach($rows as $row)<a href="{{ $row['credit_note_url'] }}" class="badge badge-info mr-1 mb-1">{{ $row['number'] }}</a>@endforeach</td>
+                <td class="text-danger">- Rs {{ number_format($rows->sum('taxable'),2) }}</td><td class="text-danger font-weight-bold">- Rs {{ number_format($rows->sum('tax'),2) }}</td><td>Rs {{ number_format($rows->sum('total'),2) }}</td>
+                <td class="text-nowrap">
+                    @can('sales.view')
+                        @if($first['invoice_url'])<a href="{{ $first['invoice_url'] }}" class="btn btn-primary btn-sm" title="View complete Sales Invoice"><i class="fas fa-eye"></i></a>@endif
+                    @endcan
+                    @foreach($rows as $row)<a href="{{ $row['credit_note_url'] }}" class="btn btn-outline-info btn-sm ml-1" title="View {{ $row['number'] }}"><i class="fas fa-file-invoice-dollar"></i></a>@endforeach
+                </td>
+            </tr>
+        @endforeach
+        </tbody></table></div>
+    </div><div class="modal-footer"><button class="btn btn-secondary" data-dismiss="modal">Close</button></div>
+</div></div></div>
+@endcan
 
 <div class="quick-drawer-backdrop" id="quickDrawerBackdrop"></div>
 <aside class="quick-drawer" id="quickDrawer" aria-hidden="true">
