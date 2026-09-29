@@ -134,6 +134,47 @@ class CreditNoteTest extends TestCase
             ->assertSee('CN-DASH-1');
     }
 
+    public function test_credit_note_print_shows_sales_invoice_adjustment_summary(): void
+    {
+        [$user, $invoice, $line, $item] = $this->invoiceContext();
+
+        $note = CreditNote::create([
+            'company_id' => $invoice->company_id,
+            'sales_invoice_id' => $invoice->id,
+            'party_id' => $invoice->party_id,
+            'credit_note_no' => 'CN-PRINT-1',
+            'credit_note_date' => '2026-09-29',
+            'subtotal' => 100,
+            'tax_amount' => 0,
+            'grand_total' => 100,
+            'return_status' => 'pending',
+            'created_by' => $user->id,
+        ]);
+        $note->items()->create([
+            'sales_invoice_item_id' => $line->id,
+            'item_id' => $item->id,
+            'description' => 'SKU: GPS-1',
+            'quantity' => 1,
+            'unit' => 'PCS',
+            'unit_price' => 100,
+            'tax_percent' => 0,
+            'tax_amount' => 0,
+            'line_total' => 100,
+            'selected_units' => [$line->selected_units[0]],
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('admin.credit-notes.print', $note))
+            ->assertOk()
+            ->assertSee('Sales Invoice Adjustment Summary')
+            ->assertSee('Original Sales Invoice Amount')
+            ->assertSee('This Credit Note Amount')
+            ->assertSee('Invoice Amount After Credit Notes')
+            ->assertSee('SI-00001')
+            ->assertSee('200.00')
+            ->assertSee('100.00');
+    }
+
     private function invoiceContext(): array
     {
         $user = User::factory()->create(['user_type' => 'super_admin']);

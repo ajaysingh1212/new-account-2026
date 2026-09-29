@@ -75,7 +75,7 @@ class CreditNoteController extends Controller
     public function print(CreditNote $credit_note, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($credit_note);
-        $credit_note->load(['company', 'invoice', 'party', 'items.item']);
+        $credit_note->load(['company', 'invoice.creditNotes', 'party', 'items.item']);
         $bankAccount = BankAccount::where('company_id', $credit_note->company_id)->where('print_on_invoice', true)->where('status', 'active')->first();
         $defaultTerms = TermsTemplate::where('company_id', $credit_note->company_id)->where('status', 'active')->whereIn('document_type', ['sales', 'all'])->orderByDesc('is_default')->first();
 

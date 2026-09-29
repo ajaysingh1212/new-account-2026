@@ -11,6 +11,7 @@
     $tax          = (float)($tax        ?? 0);
     $grandTotal   = (float)($grandTotal ?? 0);
     $relatedDocumentNotice = $relatedDocumentNotice ?? null;
+    $adjustmentSummary = $adjustmentSummary ?? null;
     $totalWeight  = (float)($totalWeight ?? 0);
     $terms        = $terms        ?? '';
     $status       = $status       ?? 'posted';
@@ -249,6 +250,26 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
   border-radius:8px;font-size:12.5px;color:var(--text);line-height:1.5;
 }
 .amount-words strong{color:var(--accent);font-size:11px;text-transform:uppercase;letter-spacing:.07em;display:block;margin-bottom:3px}
+.adjustment-summary{
+  margin:0 24px 20px;border:1.5px solid var(--border);
+  border-radius:10px;overflow:hidden;background:var(--sheet);
+}
+.adjustment-title{
+  padding:10px 14px;background:var(--accent-light);color:var(--accent);
+  font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;
+  border-bottom:1px solid var(--border);
+}
+.adjustment-grid{display:grid;grid-template-columns:repeat(2,1fr)}
+.adjustment-line{
+  display:flex;justify-content:space-between;gap:12px;padding:10px 14px;
+  border-bottom:1px solid var(--border);font-size:12.5px;
+}
+.adjustment-line:nth-child(odd){border-right:1px solid var(--border)}
+.adjustment-label{color:var(--muted)}
+.adjustment-value{font-weight:800;color:var(--text);text-align:right}
+.adjustment-line.highlight{grid-column:1 / -1;background:var(--accent);color:#fff}
+.adjustment-line.highlight .adjustment-label{color:rgba(255,255,255,.82)}
+.adjustment-line.highlight .adjustment-value{color:#fff;font-size:15px}
 
 /* ── FOOTER SECTION ── */
 .footer-grid{
@@ -499,6 +520,24 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
 
     @if($relatedDocumentNotice)
     <div style="margin:0 24px 14px;padding:11px 14px;border:1px solid var(--accent);background:var(--accent-light);font-size:12px;font-weight:600">{{ $relatedDocumentNotice }}</div>
+    @endif
+
+    @if(!empty($adjustmentSummary['rows']))
+    <div class="adjustment-summary">
+      <div class="adjustment-title">{{ $adjustmentSummary['title'] ?? 'Adjustment Summary' }}</div>
+      <div class="adjustment-grid">
+        @foreach($adjustmentSummary['rows'] as $row)
+          @php
+              $isAmount = array_key_exists('amount', $row);
+              $value = $isAmount ? '₹ '.number_format((float) $row['amount'], 2) : ($row['value'] ?? '-');
+          @endphp
+          <div class="adjustment-line {{ !empty($row['highlight']) ? 'highlight' : '' }}">
+            <span class="adjustment-label">{{ $row['label'] }}</span>
+            <span class="adjustment-value">{{ $value }}</span>
+          </div>
+        @endforeach
+      </div>
+    </div>
     @endif
     <!-- FOOTER -->
     <div class="footer-grid">
