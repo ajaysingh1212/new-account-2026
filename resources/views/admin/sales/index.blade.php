@@ -25,6 +25,9 @@
                         @if(($invoiceReturnDetails[$invoice->id]['has_return'] ?? false))
                             <div><span class="badge badge-warning mt-1">Sales Return</span></div>
                         @endif
+                        @foreach($invoice->creditNotes as $note)
+                            <div><a href="{{ route('admin.credit-notes.show',$note) }}" class="badge badge-info mt-1">CN {{ $note->credit_note_no }}</a> @if(!$note->hasCompleteSalesReturn())<span class="badge badge-warning mt-1">Return pending</span>@endif</div>
+                        @endforeach
                     </td>
                     <td>
                         <button type="button" class="btn btn-primary btn-sm sale-detail-btn" title="Profit and item details" data-detail='@json($invoiceDetails[$invoice->id] ?? [])' data-pdf="{{ route('admin.sales.detail-pdf',$invoice) }}"><i class="fas fa-chart-line"></i></button>

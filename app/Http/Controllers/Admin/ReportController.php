@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
 use App\Models\Company;
+use App\Models\CreditNote;
 use App\Models\Expense;
 use App\Models\Item;
 use App\Models\Party;
@@ -559,27 +560,85 @@ class ReportController extends Controller
 
         $gstBills = $bills->filter(fn($bill) => (float) $bill->tax_amount > 0);
         $withoutGst = $bills->filter(fn($bill) => (float) $bill->tax_amount <= 0);
-        $summary = $gstBills->groupBy('party_id')->map(function (Collection $rows) {
-            $party = $rows->first()->party;
-            return [
-                'party' => $party?->display_name ?: 'Cash / Walk-in',
-                'gstin' => $party?->gstin ?: '-',
-                'state' => $party?->state ?: '-',
-                'taxable' => (float) $rows->sum(fn($bill) => max(0, (float) $bill->grand_total - (float) $bill->tax_amount)),
-                'gst' => (float) $rows->sum('tax_amount'),
-                'total' => (float) $rows->sum('grand_total'),
-            ];
-        })->values();
-
-        $invoiceRows = $gstBills->map(fn($bill) => [
+        $salesRows = $gstBills->map(fn($bill) => [
+            'type' => 'invoice',
+            'party_id' => $bill->party_id,
             'date' => $this->gstBillDate($bill)?->format('d-m-Y'),
             'invoice' => $bill->invoice_no,
             'party' => $bill->party?->display_name ?: 'Cash / Walk-in',
             'gstin' => $bill->party?->gstin ?: '-',
+            'state' => $bill->party?->state ?: '-',
             'taxable' => max(0, (float) $bill->grand_total - (float) $bill->tax_amount),
             'gst' => (float) $bill->tax_amount,
             'total' => (float) $bill->grand_total,
         ])->values();
+
+        $creditNoteRows = collect();
+        if ($type === 'sales') {
+            $creditNotes = $visibility->scopeForUser(
+                CreditNote::with(['party', 'invoice', 'items.item'])
+                    ->whereBetween('credit_note_date', [$filters['from'], $filters['to']]),
+                CreditNote::class
+            )
+                ->when($filters['partyId'], fn($q) => $q->where('party_id', $filters['partyId']))
+                ->where('tax_amount', '>', 0)
+                ->get();
+
+            $creditNoteRows = $creditNotes->map(fn(CreditNote $note) => [
+                'id' => $note->id,
+                'type' => 'credit_note',
+                'party_id' => $note->party_id,
+                'date' => $note->credit_note_date?->format('d-m-Y'),
+                'credit_note_no' => $note->credit_note_no,
+                'invoice' => $note->invoice?->invoice_no ?: '-',
+                'party' => $note->party?->display_name ?: 'Cash / Walk-in',
+                'gstin' => $note->party?->gstin ?: '-',
+                'state' => $note->party?->state ?: '-',
+                'taxable' => max(0, (float) $note->grand_total - (float) $note->tax_amount),
+                'gst' => (float) $note->tax_amount,
+                'total' => (float) $note->grand_total,
+                'reason' => $note->reason ?: '-',
+                'items' => $note->items->map(fn($line) => [
+                    'name' => $line->item?->name ?: 'Item',
+                    'sku' => $line->item?->item_code ?: '-',
+                    'quantity' => (float) $line->quantity,
+                    'tax_percent' => (float) $line->tax_percent,
+                    'taxable' => max(0, (float) $line->line_total - (float) $line->tax_amount),
+                    'gst' => (float) $line->tax_amount,
+                    'total' => (float) $line->line_total,
+                ])->values()->all(),
+            ])->values();
+        }
+
+        $adjustedRows = $salesRows->concat($creditNoteRows->map(fn($row) => array_merge($row, [
+            'taxable' => -$row['taxable'], 'gst' => -$row['gst'], 'total' => -$row['total'],
+            'invoice' => $row['credit_note_no'].' (against '.$row['invoice'].')',
+        ])));
+
+        $summary = $adjustedRows->groupBy('party_id')->map(function (Collection $rows) {
+            $first = $rows->first();
+            return [
+                'party' => $first['party'],
+                'gstin' => $first['gstin'],
+                'state' => $first['state'],
+                'taxable' => (float) $rows->sum('taxable'),
+                'gst' => (float) $rows->sum('gst'),
+                'total' => (float) $rows->sum('total'),
+            ];
+        })->values();
+
+        $invoiceRows = $adjustedRows->values();
+
+        $grossTotals = [
+            'taxable' => (float) $salesRows->sum('taxable'),
+            'gst' => (float) $salesRows->sum('gst'),
+            'total' => (float) $salesRows->sum('total'),
+        ];
+        $creditNoteTotals = [
+            'taxable' => (float) $creditNoteRows->sum('taxable'),
+            'gst' => (float) $creditNoteRows->sum('gst'),
+            'total' => (float) $creditNoteRows->sum('total'),
+        ];
 
         $totals = [
             'taxable' => (float) $invoiceRows->sum('taxable'),
@@ -587,7 +646,7 @@ class ReportController extends Controller
             'total' => (float) $invoiceRows->sum('total'),
         ];
 
-        return compact('filters','parties','summary','invoiceRows','withoutGst','totals','type');
+        return compact('filters','parties','summary','invoiceRows','withoutGst','totals','type','creditNoteRows','creditNoteTotals','grossTotals');
     }
 
     private function gstBillDate(SalesInvoice|PurchaseBill $bill): ?Carbon

@@ -38,7 +38,7 @@ class SalesInvoiceController extends Controller
     public function index(EntryVisibilityService $visibility, SalesProfitService $profits)
     {
         $invoices = $visibility->scopeForUser(
-            SalesInvoice::with(['party', 'creator', 'items.item.bomMaterials.rawItem', 'returns.items.item', 'returns.creator'])->latest(),
+            SalesInvoice::with(['party', 'creator', 'items.item.bomMaterials.rawItem', 'returns.items.item', 'returns.creator', 'creditNotes.items'])->latest(),
             SalesInvoice::class
         )->get();
         $invoiceDetails = $invoices->mapWithKeys(fn (SalesInvoice $invoice) => [
@@ -382,7 +382,7 @@ class SalesInvoiceController extends Controller
     public function show(SalesInvoice $sale, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($sale);
-        $sale->load(['party', 'items.item', 'returns.items.item', 'returns.creator', 'sourceDeliveryChallan', 'sourcePendingOrder']);
+        $sale->load(['party', 'items.item', 'creditNotes', 'sourceDeliveryChallan', 'sourcePendingOrder']);
         $auditLogs = AuditLog::with(['user', 'company'])
             ->where('model', SalesInvoice::class)
             ->where('model_id', $sale->id)
@@ -392,14 +392,14 @@ class SalesInvoiceController extends Controller
         return view('admin.sales.show', [
             'invoice' => $sale,
             'auditLogs' => $auditLogs,
-            'invoiceReturnDetails' => $this->invoiceReturnSummary($sale),
+            'creditNotes' => $sale->creditNotes,
         ]);
     }
 
     public function print(SalesInvoice $sale, EntryVisibilityService $visibility)
     {
         $visibility->authorizeView($sale);
-        $sale->load(['party', 'items.item', 'company', 'returns.items.item', 'returns.creator']);
+        $sale->load(['party', 'items.item', 'company', 'creditNotes']);
         $bankAccount = BankAccount::where('company_id', $sale->company_id)->where('print_on_invoice', true)->where('status', 'active')->first();
         $defaultTerms = TermsTemplate::where('company_id', $sale->company_id)->where('status', 'active')->whereIn('document_type', ['sales', 'all'])->orderByDesc('is_default')->first();
 
@@ -408,7 +408,7 @@ class SalesInvoiceController extends Controller
             'bankAccount' => $bankAccount,
             'company' => $sale->company,
             'defaultTerms' => $defaultTerms,
-            'invoiceReturnDetails' => $this->invoiceReturnSummary($sale),
+            'creditNotes' => $sale->creditNotes,
         ]);
     }
 

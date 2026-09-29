@@ -126,6 +126,12 @@ class PermissionSeeder extends Seeder
             ['name'=>'Delete Sales Targets', 'slug'=>'sales_targets.delete', 'module'=>'sales_targets'],
             ['name'=>'View Sales Target Reports', 'slug'=>'sales_targets.report', 'module'=>'sales_targets'],
 
+            ['name'=>'View Credit Notes', 'slug'=>'credit_notes.view', 'module'=>'credit_notes'],
+            ['name'=>'Create Credit Notes', 'slug'=>'credit_notes.create', 'module'=>'credit_notes'],
+            ['name'=>'Edit Credit Notes', 'slug'=>'credit_notes.edit', 'module'=>'credit_notes'],
+            ['name'=>'Delete Credit Notes', 'slug'=>'credit_notes.delete', 'module'=>'credit_notes'],
+            ['name'=>'Print Credit Notes', 'slug'=>'credit_notes.print', 'module'=>'credit_notes'],
+
             ['name'=>'View Audit Logs', 'slug'=>'audit.view', 'module'=>'audit'],
             ['name'=>'Manage Terms', 'slug'=>'terms.manage', 'module'=>'terms'],
         ];

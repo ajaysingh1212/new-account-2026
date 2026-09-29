@@ -28,6 +28,7 @@ use App\Http\Controllers\Admin\Sales\DeliveryChallanController;
 use App\Http\Controllers\Admin\Sales\EstimateController;
 use App\Http\Controllers\Admin\Sales\SalesInvoiceController;
 use App\Http\Controllers\Admin\Sales\SalesReturnController;
+use App\Http\Controllers\Admin\Sales\CreditNoteController;
 use App\Http\Controllers\Admin\Sales\StockOutChallanController;
 use App\Http\Controllers\Admin\Sales\PendingOrderController;
 use App\Http\Controllers\Admin\SalesTargetController;
@@ -218,6 +219,13 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('sales-returns', SalesReturnController::class)->only(['create','store'])->middleware('permission:sales.create');
         Route::resource('sales-returns', SalesReturnController::class)->only(['edit','update'])->middleware('permission:sales.edit');
         Route::resource('sales-returns', SalesReturnController::class)->only(['index','show']);
+    });
+    Route::middleware('permission:credit_notes.view')->group(function () {
+        Route::get('credit-notes/{credit_note}/print', [CreditNoteController::class, 'print'])->middleware('permission:credit_notes.print')->name('credit-notes.print');
+        Route::resource('credit-notes', CreditNoteController::class)->only(['create', 'store'])->middleware('permission:credit_notes.create');
+        Route::resource('credit-notes', CreditNoteController::class)->only(['edit', 'update'])->middleware('permission:credit_notes.edit');
+        Route::resource('credit-notes', CreditNoteController::class)->only(['destroy'])->middleware('permission:credit_notes.delete');
+        Route::resource('credit-notes', CreditNoteController::class)->only(['index', 'show']);
     });
     Route::middleware('permission:sales_targets.view')->group(function () {
         Route::get('sales-targets/report', [SalesTargetController::class, 'report'])->middleware('permission:sales_targets.report')->name('sales-targets.report');

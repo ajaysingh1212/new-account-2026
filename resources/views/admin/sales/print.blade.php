@@ -11,11 +11,10 @@
     'discount' => $invoice->discount_amount,
     'tax' => $invoice->tax_amount,
     'grandTotal' => $invoice->grand_total,
-    'returnDetails' => $invoiceReturnDetails ?? [],
-    'returnLabel' => 'Sales Return',
     'totalWeight' => $invoice->total_weight,
     'terms' => $invoice->terms ?: ($defaultTerms?->content ?? ''),
     'company' => $company ?? $invoice->company,
     'bankAccount' => $bankAccount ?? null,
     'accent' => '#2563eb',
+    'relatedDocumentNotice' => ($creditNotes ?? collect())->isNotEmpty() ? 'Credit Note(s) issued against this invoice: '.($creditNotes ?? collect())->pluck('credit_note_no')->join(', ').'. Please download the related Credit Note document(s) for complete adjustment details.' : null,
 ])

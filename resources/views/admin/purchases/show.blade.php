@@ -29,34 +29,16 @@
             <div class="col-md-3"><b>Party</b><br>{{ $bill->party?->display_name ?: 'Cash' }}</div>
             <div class="col-md-2"><b>Date</b><br>{{ $bill->billing_date?->format('d M Y') }}</div>
             <div class="col-md-2"><b>Supplier Bill</b><br>{{ $bill->supplier_bill_no ?: '-' }}</div>
-            <div class="col-md-2"><b>Total</b><br>Rs {{ number_format((float)($purchaseReturnDetails['net_total'] ?? $bill->grand_total),2) }}
-                @if($purchaseReturnDetails['has_return'] ?? false)<br><small class="text-muted">Original: Rs {{ number_format((float)$bill->grand_total,2) }}</small>@endif
-            </div>
+            <div class="col-md-2"><b>Total</b><br>Rs {{ number_format((float)$bill->grand_total,2) }}</div>
             <div class="col-md-3">@if($bill->attachment)<b>Attachment</b><br><a href="{{ asset('storage/'.$bill->attachment) }}" target="_blank">Open attachment</a>@endif</div>
         </div>
-        @if($purchaseReturnDetails['has_return'] ?? false)
-            <div class="alert alert-warning">
-                <b>This bill has purchase return activity.</b>
-                Returned quantity: {{ number_format((float) ($purchaseReturnDetails['returned_qty'] ?? 0), 3) }} |
-                Returned amount minus: Rs {{ number_format((float) ($purchaseReturnDetails['returned_amount'] ?? 0), 2) }} |
-                Net bill value: Rs {{ number_format((float) ($purchaseReturnDetails['net_total'] ?? $bill->grand_total), 2) }}
-            </div>
-        @endif
         <table class="table table-hover">
-            <thead><tr><th>Item</th><th>Purchased Qty</th><th>Returned Qty</th><th>Remaining</th><th>Finished Goods Units</th><th>Price</th><th>Tax</th><th>Total</th><th>Returned Amount</th><th>Net Total</th><th>Returns</th></tr></thead>
+            <thead><tr><th>Item</th><th>Quantity</th><th>Finished Goods Units</th><th>Price</th><th>Tax</th><th>Total</th></tr></thead>
             <tbody>
             @foreach($bill->items as $line)
-                @php($lineSummary = collect($purchaseReturnDetails['items'] ?? [])->firstWhere('line_id', $line->id))
-                <tr class="{{ ($lineSummary['returned_qty'] ?? 0) > 0 ? 'table-warning' : '' }}"><td>{{ $line->item?->name }}</td><td>{{ $lineSummary['purchased_qty'] ?? $line->quantity }}</td><td class="{{ ($lineSummary['returned_qty'] ?? 0) > 0 ? 'text-warning' : '' }}">{{ number_format((float) ($lineSummary['returned_qty'] ?? 0), 3) }}</td><td>{{ number_format((float) ($lineSummary['remaining_qty'] ?? $line->quantity), 3) }}</td><td>@foreach(($line->selected_units ?? []) as $unit)<span class="badge badge-info mr-1">{{ $unit['serial_no'] ?? 'No serial' }} / {{ $unit['batch_no'] ?? '-' }}@if(!empty($unit['vts_sim'])) / {{ $unit['vts_sim'] }}@endif</span>@endforeach</td><td>Rs {{ number_format((float)$line->unit_price,2) }}</td><td>Rs {{ number_format((float)$line->tax_amount,2) }}</td><td>Rs {{ number_format((float)$line->line_total,2) }}</td><td class="{{ ($lineSummary['returned_amount'] ?? 0) > 0 ? 'text-danger font-weight-bold' : '' }}">- Rs {{ number_format((float) ($lineSummary['returned_amount'] ?? 0), 2) }}</td><td class="font-weight-bold">Rs {{ number_format((float) ($lineSummary['net_amount'] ?? $line->line_total), 2) }}</td><td>@forelse(($lineSummary['returns'] ?? []) as $returnRow)<div class="mb-1"><b>{{ $returnRow['return_no'] }}</b><br><small class="text-muted">{{ $returnRow['return_date'] }} | Qty {{ number_format((float) $returnRow['return_qty'], 3) }} | Rs {{ number_format((float) ($returnRow['return_amount'] ?? 0), 2) }} minus | {{ $returnRow['returned_by'] }}</small></div>@empty<span class="text-muted">-</span>@endforelse</td></tr>
+                <tr><td>{{ $line->item?->name }}</td><td>{{ $line->quantity }}</td><td>@foreach(($line->selected_units ?? []) as $unit)<span class="badge badge-info mr-1">{{ $unit['serial_no'] ?? 'No serial' }} / {{ $unit['batch_no'] ?? '-' }}@if(!empty($unit['vts_sim'])) / {{ $unit['vts_sim'] }}@endif</span>@endforeach</td><td>Rs {{ number_format((float)$line->unit_price,2) }}</td><td>Rs {{ number_format((float)$line->tax_amount,2) }}</td><td>Rs {{ number_format((float)$line->line_total,2) }}</td></tr>
             @endforeach
             </tbody>
-            @if($purchaseReturnDetails['has_return'] ?? false)
-            <tfoot>
-                <tr><th colspan="9" class="text-right">Original Bill Total</th><th colspan="2">Rs {{ number_format((float)$bill->grand_total,2) }}</th></tr>
-                <tr><th colspan="9" class="text-right text-danger">Less Purchase Return</th><th colspan="2" class="text-danger">- Rs {{ number_format((float)($purchaseReturnDetails['returned_amount'] ?? 0),2) }}</th></tr>
-                <tr><th colspan="9" class="text-right">Net Bill Value</th><th colspan="2">Rs {{ number_format((float)($purchaseReturnDetails['net_total'] ?? $bill->grand_total),2) }}</th></tr>
-            </tfoot>
-            @endif
         </table>
     </div>
 </div>
