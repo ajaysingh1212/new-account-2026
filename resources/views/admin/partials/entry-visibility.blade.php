@@ -12,7 +12,7 @@
         $visibilityRoles = $companyId ? \App\Models\Role::where('company_id', $companyId)->orderBy('name')->get() : collect();
         $visibilityUsers = $companyId ? \App\Models\User::where('current_company_id', $companyId)->where('id', '!=', $currentUser->id)->orderBy('name')->get() : collect();
     @endphp
-    @if(($currentUser->isAdmin() || $currentUser->isSuperAdmin()) && $companyId)
+    @if($currentUser->isCompanyAdmin($companyId) && $companyId)
     <div class="card border-0 shadow-sm mt-3">
         <div class="card-header bg-white">
             <strong><i class="fas fa-eye mr-1 text-primary"></i> Entry Visibility</strong>

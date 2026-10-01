@@ -38,7 +38,7 @@
 @section('content')
 @php
     $user = auth()->user();
-    $roleLabel = $user->isSuperAdmin() ? 'Super Admin Control Center' : ($user->isAdmin() ? 'Company Admin Dashboard' : 'My Role Dashboard');
+    $roleLabel = $user->isSuperAdmin() ? 'Super Admin Control Center' : ($user->isCompanyAdmin() ? 'Company Admin Dashboard' : 'My Role Dashboard');
     $serviceNameOptions = collect($serviceRows ?? [])->pluck('service')->filter()->unique()->sort()->values();
     $cards = [];
     if ($user->isSuperAdmin()) {

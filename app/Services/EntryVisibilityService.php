@@ -30,7 +30,7 @@ class EntryVisibilityService
     public function apply(Builder $query, string $modelClass): Builder
     {
         $user = auth()->user();
-        if (!$user || $user->isSuperAdmin() || $user->isAdmin()) {
+        if (!$user || $user->isCompanyAdmin()) {
             return $query;
         }
 
@@ -100,7 +100,7 @@ class EntryVisibilityService
             return true;
         }
 
-        if ($user->isAdmin()) {
+        if ($user->isCompanyAdmin($entry->company_id)) {
             return (int) $entry->company_id === (int) $user->current_company_id;
         }
 
@@ -121,7 +121,7 @@ class EntryVisibilityService
             return false;
         }
 
-        if ($user->isAdmin()) {
+        if ($user->isCompanyAdmin($entry->company_id)) {
             return true;
         }
 

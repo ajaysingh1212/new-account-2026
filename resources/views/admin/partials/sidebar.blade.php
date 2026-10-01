@@ -5,7 +5,8 @@
     $canAnyBanking = $user->can('banking.view') || $user->can('cost_centers.view');
     $canAnyExpense = $user->can('expenses.view') || $user->can('other_transactions.view');
     $canAnyReport = $user->can('reports.party') || $user->can('reports.stock') || $user->can('reports.expense') || $user->can('reports.gst') || $user->can('reports.transaction');
-    $canManagement = $user->isSuperAdmin() || $user->isAdmin() || $user->can('users.view') || $user->can('roles.view') || $user->can('audit.view') || $user->can('terms.manage');
+    $isCompanyAdmin = $user->isCompanyAdmin();
+    $canManagement = $user->isSuperAdmin() || $isCompanyAdmin || $user->can('users.view') || $user->can('roles.view') || $user->can('audit.view') || $user->can('terms.manage');
     $hasCrmAccess = $user->isSuperAdmin() || (bool) $user->currentCompany?->has_crm_access;
     $canAnyInventory = $user->can('items.view') || $user->can('product_types.view') || $user->can('stocks.view') || ($hasCrmAccess && ($user->can('production.view') || $user->can('production_reverts.view')));
 @endphp
@@ -46,7 +47,7 @@
             <div class="info">
                 <a href="{{ route('admin.profile.edit') }}" class="d-block">
                     {{ $user->name }}<br>
-                    <small style="opacity:.65;font-size:11px;">{{ $user->isSuperAdmin() ? 'Super Admin' : ($user->isAdmin() ? 'Company Admin' : 'Role User') }}</small>
+                    <small style="opacity:.65;font-size:11px;">{{ $user->isSuperAdmin() ? 'Super Admin' : ($isCompanyAdmin ? 'Company Admin' : 'Role User') }}</small>
                 </a>
             </div>
         </div>

@@ -9,7 +9,7 @@ class CompanyAdmin
     public function handle(Request $request, Closure $next)
     {
         $user = auth()->user();
-        if (!$user || !in_array($user->user_type, ['super_admin', 'admin'])) {
+        if (!$user || !$user->isCompanyAdmin()) {
             abort(403, 'Admin access required.');
         }
         return $next($request);

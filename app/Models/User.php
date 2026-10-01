@@ -62,6 +62,30 @@ class User extends Authenticatable
         return $this->user_type === 'admin';
     }
 
+    public function isCompanyAdmin(?int $companyId = null): bool
+    {
+        if ($this->isSuperAdmin()) {
+            return true;
+        }
+
+        $companyId = $companyId ?? $this->current_company_id;
+
+        if (!$companyId) {
+            return $this->isAdmin();
+        }
+
+        if ($this->isAdmin() && (int) $this->current_company_id === (int) $companyId) {
+            return true;
+        }
+
+        return $this->userRoles()
+            ->where('company_id', $companyId)
+            ->whereHas('role', fn($query) => $query
+                ->where('slug', 'company-admin')
+                ->orWhere('name', 'Company Admin'))
+            ->exists();
+    }
+
     public function hasPermission(string $slug, ?int $companyId = null): bool
     {
         if ($this->isSuperAdmin()) return true;
