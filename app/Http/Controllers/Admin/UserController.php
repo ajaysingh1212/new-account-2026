@@ -133,6 +133,9 @@ class UserController extends Controller
             'user_type'  => 'required|in:admin,user',
             'company_id' => 'required|exists:companies,id',
             'role_ids'   => 'nullable|array',
+            'role_ids.*' => 'exists:roles,id',
+            'phone'      => 'nullable|string|max:20',
+            'is_active'  => 'nullable|boolean',
         ]);
 
         $authUser = auth()->user();
@@ -141,6 +144,7 @@ class UserController extends Controller
         }
 
         $old = $user->toArray();
+        $oldCompanyId = (int) $user->current_company_id;
         $data = $request->only('name','email','user_type','phone','is_active');
         $data['current_company_id'] = $request->company_id;
         if ($request->password) {
@@ -148,8 +152,16 @@ class UserController extends Controller
         }
         $user->update($data);
 
+        UserCompany::updateOrCreate(
+            ['user_id' => $user->id, 'company_id' => $request->company_id],
+            ['user_id' => $user->id, 'company_id' => $request->company_id]
+        );
+
         // Update roles
-        UserRole::where('user_id', $user->id)->where('company_id', $request->company_id)->delete();
+        UserRole::where('user_id', $user->id)
+            ->whereIn('company_id', array_unique([$oldCompanyId, (int) $request->company_id]))
+            ->delete();
+
         $roleIds = $this->allowedRoleIds($request->role_ids ?? [], (int) $request->company_id);
         if ($roleIds) {
             foreach ($roleIds as $roleId) {
