@@ -38,9 +38,17 @@ class SalesInvoiceController extends Controller
     public function index(EntryVisibilityService $visibility, SalesProfitService $profits)
     {
         $invoices = $visibility->scopeForUser(
-            SalesInvoice::with(['party', 'creator', 'items.item.bomMaterials.rawItem', 'returns.items.item', 'returns.creator', 'creditNotes.items'])->latest(),
+            SalesInvoice::with(['party', 'creator', 'items.item.bomMaterials.rawItem', 'returns.items.item', 'returns.creator', 'creditNotes.items']),
             SalesInvoice::class
-        )->get();
+        )->get()
+            ->sortBy(fn (SalesInvoice $invoice) => sprintf(
+                '%02d-%04d-%02d-%06d',
+                (int) ($invoice->billing_date?->month ?? 13),
+                (int) ($invoice->billing_date?->year ?? 9999),
+                (int) ($invoice->billing_date?->day ?? 31),
+                (int) $invoice->id
+            ))
+            ->values();
         $invoiceDetails = $invoices->mapWithKeys(fn (SalesInvoice $invoice) => [
             $invoice->id => $profits->invoiceDetail($invoice),
         ]);

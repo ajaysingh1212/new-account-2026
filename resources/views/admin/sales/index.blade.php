@@ -10,9 +10,19 @@
         <table id="salesTable" class="table table-hover">
             <thead><tr><th>No</th><th>Date</th><th>Party</th><th>Items Sold</th><th>Serial / VTS / SKU</th><th>Created By</th><th>Type</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
+            @php
+                $monthSerials = [];
+            @endphp
             @foreach($invoices as $invoice)
+                @php
+                    $monthKey = $invoice->billing_date?->format('Y-m') ?? 'no-date';
+                    $monthSerials[$monthKey] = ($monthSerials[$monthKey] ?? 0) + 1;
+                @endphp
                 <tr>
-                    <td>{{ $invoice->invoice_no }}</td>
+                    <td>
+                        {{ $monthSerials[$monthKey] }}
+                        <div><small class="text-muted">{{ $invoice->invoice_no }}</small></div>
+                    </td>
                     <td>{{ $invoice->billing_date?->format('d M Y') }}</td>
                     <td>{{ $invoice->party?->display_name ?: 'Cash' }}</td>
                     <td>@foreach($invoice->items as $line)<div><b>{{ $line->item?->name }}</b> <small class="text-muted">x {{ $line->quantity }}</small></div>@endforeach</td>
@@ -74,7 +84,7 @@
 </div>
 @endsection
 @push('scripts')<script>
-$('#salesTable').DataTable({pageLength:25, columnDefs:[{orderable:false, targets:9}]});
+$('#salesTable').DataTable({pageLength:25, order:[], columnDefs:[{orderable:false, targets:[0,9]}]});
 const money = value => 'Rs ' + Number(value || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
 $(document).on('click', '.sale-detail-btn', function() {
     const detail = $(this).data('detail') || {};
