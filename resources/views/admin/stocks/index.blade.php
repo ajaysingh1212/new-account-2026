@@ -270,7 +270,8 @@ const stockTable = $('#stockTable').DataTable({pageLength:25,order:[[0,'asc']]})
 $('#openReplacementItems').on('click',function(){$('#replacementDrawer').addClass('open');});
 $('#closeReplacementItems').on('click',function(){$('#replacementDrawer').removeClass('open');});
 let stockPdfPeriod = 'all';
-const stockPdfCompany = @json([
+@php
+$stockPdfCompany = [
     'name' => auth()->user()?->currentCompany?->name ?? 'Company',
     'address' => auth()->user()?->currentCompany?->address ?? '',
     'phone' => auth()->user()?->currentCompany?->phone ?? '',
@@ -279,7 +280,9 @@ const stockPdfCompany = @json([
     'pan' => auth()->user()?->currentCompany?->pan_number ?? '',
     'logo' => auth()->user()?->currentCompany?->logo_url ?? '',
     'user' => auth()->user()?->name ?? 'User',
-]);
+];
+@endphp
+const stockPdfCompany = @json($stockPdfCompany);
 
 $('#pdfPeriodTabs').on('click','button',function(){
     $('#pdfPeriodTabs button').removeClass('active btn-secondary').addClass('btn-outline-secondary');
