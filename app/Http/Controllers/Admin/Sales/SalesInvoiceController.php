@@ -343,12 +343,18 @@ class SalesInvoiceController extends Controller
                 $sale->update($totals);
             } elseif ($serialOnlyChange) {
                 $this->syncSerialOnlyChanges($request, $sale, $accounting);
-            } elseif ($headerChanged) {
+            }
+
+            if (! $repostStock) {
                 $lineDiscount = (float) $sale->items->sum('discount_amount');
                 $overallDiscount = (float) ($request->discount_amount ?? 0);
+                $tax = (float) $sale->items->sum('tax_amount');
+                $lineTotal = (float) $sale->items->sum('line_total');
                 $sale->update([
+                    'subtotal' => $lineTotal - $tax,
+                    'tax_amount' => $tax,
                     'discount_amount' => $lineDiscount + $overallDiscount,
-                    'grand_total' => max(0, (float) $sale->subtotal + (float) $sale->tax_amount - $overallDiscount),
+                    'grand_total' => max(0, $lineTotal - $overallDiscount),
                 ]);
             }
 
@@ -929,6 +935,7 @@ class SalesInvoiceController extends Controller
         return (string) $sale->sale_type !== (string) ($data['sale_type'] ?? $sale->sale_type)
             || (int) $sale->party_id !== (int) ($data['party_id'] ?? $sale->party_id)
             || (string) $sale->billing_date?->toDateString() !== (string) ($data['billing_date'] ?? $sale->billing_date?->toDateString())
+            || round((float) $sale->grand_total, 2) !== round(max(0, (float) $sale->items->sum('line_total') - (float) ($data['discount_amount'] ?? 0)), 2)
             || round($currentOverallDiscount, 2) !== round((float) ($data['discount_amount'] ?? 0), 2);
     }
 

@@ -161,6 +161,31 @@ class InterCompanyBulkSaleTest extends TestCase
         $purchase = PurchaseBill::where('source_sales_invoice_id', $sale->id)->firstOrFail();
         $this->assertSame(4000.0, (float) $sale->grand_total);
         $this->assertSame((float) $sale->grand_total, (float) $purchase->grand_total);
+
+        // Saving unchanged lines must also repair a stale invoice header total.
+        $sale->update(['grand_total' => 4050, 'subtotal' => 3012.71]);
+        $this->put(route('admin.sales.update', $sale), [
+            'sale_type' => 'cash',
+            'invoice_no' => 'BULK-IC-2',
+            'billing_date' => '2026-09-09',
+            'discount_amount' => 0,
+            'item_id' => [$first->id, $second->id],
+            'quantity' => [1, 1],
+            'unit_price' => [1500, 2500],
+            'tax_mode' => ['with_gst', 'with_gst'],
+            'tax_percent' => [18, 18],
+            'selected_units' => [
+                json_encode([['key' => 'PB-1-0', 'serial_no' => 'SER-1']]),
+                json_encode([['key' => 'PB-2-0', 'serial_no' => 'SER-2']]),
+            ],
+            'inter_company_transfer' => true,
+            'target_company_ids' => [$targetCompany->id],
+        ])->assertRedirect(route('admin.sales.show', $sale));
+
+        $sale->refresh();
+        $this->assertSame(4000.0, (float) $sale->grand_total);
+        $this->assertEqualsWithDelta(4000, (float) $sale->subtotal + (float) $sale->tax_amount, 0.01);
+        $this->assertSame(4000.0, (float) $purchase->fresh()->grand_total);
     }
 
     private function finishedItem(Company $company, ProductType $type, ProductCategory $category, User $user, string $code, string $name): Item
