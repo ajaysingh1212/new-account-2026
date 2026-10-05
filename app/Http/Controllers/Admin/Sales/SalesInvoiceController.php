@@ -385,14 +385,10 @@ class SalesInvoiceController extends Controller
             }
 
             $visibility->syncFromRequest($request, $sale);
-            if ($repostStock || $serialOnlyChange || $interCompanyChanged || $headerChanged) {
-                if ($sale->inter_company_transfer) {
-                    $this->createInterCompanyPurchases($sale->fresh(['items.item', 'party']), $accounting, $request);
-                } else {
-                    $this->removeInterCompanyPurchases($sale, $accounting);
-                }
-            } elseif ($sale->inter_company_transfer) {
-                $this->syncExistingInterCompanyPurchaseVisibility($sale, $request);
+            if ($sale->inter_company_transfer) {
+                $this->createInterCompanyPurchases($sale->fresh(['items.item', 'party']), $accounting, $request);
+            } elseif ($interCompanyChanged) {
+                $this->removeInterCompanyPurchases($sale, $accounting);
             }
             $this->logUpdate($sale, $oldValues, $sale->fresh('items')->toArray());
         });

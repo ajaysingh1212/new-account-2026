@@ -164,7 +164,7 @@ class InterCompanyBulkSaleTest extends TestCase
 
         // Saving unchanged lines must also repair a stale invoice header total.
         $sale->update(['grand_total' => 4050, 'subtotal' => 3012.71]);
-        $this->put(route('admin.sales.update', $sale), [
+        $updatePayload = [
             'sale_type' => 'cash',
             'invoice_no' => 'BULK-IC-2',
             'billing_date' => '2026-09-09',
@@ -180,12 +180,28 @@ class InterCompanyBulkSaleTest extends TestCase
             ],
             'inter_company_transfer' => true,
             'target_company_ids' => [$targetCompany->id],
-        ])->assertRedirect(route('admin.sales.show', $sale));
+        ];
+        $this->put(route('admin.sales.update', $sale), $updatePayload)
+            ->assertRedirect(route('admin.sales.show', $sale));
 
         $sale->refresh();
         $this->assertSame(4000.0, (float) $sale->grand_total);
         $this->assertEqualsWithDelta(4000, (float) $sale->subtotal + (float) $sale->tax_amount, 0.01);
         $this->assertSame(4000.0, (float) $purchase->fresh()->grand_total);
+
+        $purchase->update(['grand_total' => 5744.50, 'tax_amount' => 0]);
+        $purchase->items()->update(['tax_amount' => 0, 'tax_percent' => 0]);
+
+        $this->put(route('admin.sales.update', $sale), $updatePayload)
+            ->assertRedirect(route('admin.sales.show', $sale));
+
+        $purchase->refresh()->load('items');
+        $sale->refresh()->load('items');
+        $this->assertSame((float) $sale->grand_total, (float) $purchase->grand_total);
+        $this->assertSame((float) $sale->tax_amount, (float) $purchase->tax_amount);
+        $this->assertGreaterThan(0, (float) $purchase->tax_amount);
+        $this->assertSame($sale->items->pluck('tax_amount')->all(), $purchase->items->pluck('tax_amount')->all());
+        $this->assertSame($sale->items->pluck('tax_percent')->all(), $purchase->items->pluck('tax_percent')->all());
     }
 
     private function finishedItem(Company $company, ProductType $type, ProductCategory $category, User $user, string $code, string $name): Item
