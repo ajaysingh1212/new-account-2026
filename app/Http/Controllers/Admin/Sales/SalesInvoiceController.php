@@ -343,6 +343,13 @@ class SalesInvoiceController extends Controller
                 $sale->update($totals);
             } elseif ($serialOnlyChange) {
                 $this->syncSerialOnlyChanges($request, $sale, $accounting);
+            } elseif ($headerChanged) {
+                $lineDiscount = (float) $sale->items->sum('discount_amount');
+                $overallDiscount = (float) ($request->discount_amount ?? 0);
+                $sale->update([
+                    'discount_amount' => $lineDiscount + $overallDiscount,
+                    'grand_total' => max(0, (float) $sale->subtotal + (float) $sale->tax_amount - $overallDiscount),
+                ]);
             }
 
             if ($repostLedger && $sale->sale_type === 'credit' && $sale->party_id) {
@@ -372,7 +379,7 @@ class SalesInvoiceController extends Controller
             }
 
             $visibility->syncFromRequest($request, $sale);
-            if ($repostStock || $serialOnlyChange || $interCompanyChanged) {
+            if ($repostStock || $serialOnlyChange || $interCompanyChanged || $headerChanged) {
                 if ($sale->inter_company_transfer) {
                     $this->createInterCompanyPurchases($sale->fresh(['items.item', 'party']), $accounting, $request);
                 } else {
@@ -916,8 +923,13 @@ class SalesInvoiceController extends Controller
 
     private function salesHeaderChanged(SalesInvoice $sale, array $data): bool
     {
+        $lineDiscount = (float) $sale->items->sum('discount_amount');
+        $currentOverallDiscount = max(0, (float) $sale->discount_amount - $lineDiscount);
+
         return (string) $sale->sale_type !== (string) ($data['sale_type'] ?? $sale->sale_type)
-            || (int) $sale->party_id !== (int) ($data['party_id'] ?? $sale->party_id);
+            || (int) $sale->party_id !== (int) ($data['party_id'] ?? $sale->party_id)
+            || (string) $sale->billing_date?->toDateString() !== (string) ($data['billing_date'] ?? $sale->billing_date?->toDateString())
+            || round($currentOverallDiscount, 2) !== round((float) ($data['discount_amount'] ?? 0), 2);
     }
 
     private function requestLineSignature(Request $request, bool $includeSelectedUnits = true): string

@@ -70,6 +70,9 @@ class InterCompanyBulkSaleTest extends TestCase
 
         $purchase = PurchaseBill::where('company_id', $targetCompany->id)->firstOrFail();
         $this->assertCount(2, $purchase->items);
+        $this->assertSame(4000.0, (float) $purchase->grand_total);
+        $this->assertSame([1500.0, 2500.0], $purchase->items->pluck('unit_price')->map(fn ($price) => (float) $price)->all());
+        $this->assertSame([1500.0, 2500.0], $purchase->items->pluck('line_total')->map(fn ($total) => (float) $total)->all());
         $this->assertSame(2, StockMovement::where('company_id', $targetCompany->id)
             ->where('movement_type', 'inter_company_purchase')
             ->count());
@@ -79,6 +82,85 @@ class InterCompanyBulkSaleTest extends TestCase
         $this->assertSame('Tracker One', $targetItem->name);
         $this->assertSame('TRACKER', $targetItem->productType->code);
         $this->assertSame('Vehicle Devices', $targetItem->productCategory->name);
+    }
+
+    public function test_inter_company_purchase_total_is_refreshed_when_sale_header_total_changes(): void
+    {
+        $user = User::factory()->create(['user_type' => 'super_admin']);
+        $sourceCompany = Company::create(['name' => 'Source Company', 'created_by' => $user->id]);
+        $targetCompany = Company::create(['name' => 'Target Company', 'created_by' => $user->id]);
+        $user->update(['current_company_id' => $sourceCompany->id]);
+        CompanyMerge::create([
+            'company_id' => $sourceCompany->id,
+            'merged_with_company_id' => $targetCompany->id,
+            'created_by' => $user->id,
+        ]);
+
+        $category = ProductCategory::create([
+            'company_id' => $sourceCompany->id,
+            'name' => 'Vehicle Devices',
+            'status' => 'active',
+            'created_by' => $user->id,
+        ]);
+        $type = ProductType::create([
+            'company_id' => $sourceCompany->id,
+            'product_category_id' => $category->id,
+            'code' => 'TRACKER',
+            'name' => 'GPS Tracker',
+            'nature' => 'finished_goods',
+            'status' => 'active',
+            'created_by' => $user->id,
+        ]);
+
+        $first = $this->finishedItem($sourceCompany, $type, $category, $user, 'TRK-001', 'Tracker One');
+        $second = $this->finishedItem($sourceCompany, $type, $category, $user, 'TRK-002', 'Tracker Two');
+        $this->stockUnit($sourceCompany, $first, $user, 'PB-1', 'SER-1');
+        $this->stockUnit($sourceCompany, $second, $user, 'PB-2', 'SER-2');
+
+        $this->actingAs($user)->withoutMiddleware()->post(route('admin.sales.store'), [
+            'sale_type' => 'cash',
+            'invoice_no' => 'BULK-IC-2',
+            'billing_date' => '2026-09-09',
+            'discount_amount' => 500,
+            'item_id' => [$first->id, $second->id],
+            'quantity' => [1, 1],
+            'unit_price' => [1500, 2500],
+            'tax_mode' => ['with_gst', 'with_gst'],
+            'tax_percent' => [18, 18],
+            'selected_units' => [
+                json_encode([['key' => 'PB-1-0', 'serial_no' => 'SER-1']]),
+                json_encode([['key' => 'PB-2-0', 'serial_no' => 'SER-2']]),
+            ],
+            'inter_company_transfer' => true,
+            'target_company_ids' => [$targetCompany->id],
+        ])->assertRedirect(route('admin.sales.index'));
+
+        $sale = \App\Models\SalesInvoice::where('invoice_no', 'BULK-IC-2')->firstOrFail();
+        $this->assertSame(3500.0, (float) $sale->grand_total);
+        $this->assertSame(3500.0, (float) PurchaseBill::where('source_sales_invoice_id', $sale->id)->firstOrFail()->grand_total);
+
+        $this->withMiddleware()->actingAs($user)->put(route('admin.sales.update', $sale), [
+            'sale_type' => 'cash',
+            'invoice_no' => 'BULK-IC-2',
+            'billing_date' => '2026-09-09',
+            'discount_amount' => 0,
+            'item_id' => [$first->id, $second->id],
+            'quantity' => [1, 1],
+            'unit_price' => [1500, 2500],
+            'tax_mode' => ['with_gst', 'with_gst'],
+            'tax_percent' => [18, 18],
+            'selected_units' => [
+                json_encode([['key' => 'PB-1-0', 'serial_no' => 'SER-1']]),
+                json_encode([['key' => 'PB-2-0', 'serial_no' => 'SER-2']]),
+            ],
+            'inter_company_transfer' => true,
+            'target_company_ids' => [$targetCompany->id],
+        ])->assertRedirect(route('admin.sales.show', $sale));
+
+        $sale->refresh();
+        $purchase = PurchaseBill::where('source_sales_invoice_id', $sale->id)->firstOrFail();
+        $this->assertSame(4000.0, (float) $sale->grand_total);
+        $this->assertSame((float) $sale->grand_total, (float) $purchase->grand_total);
     }
 
     private function finishedItem(Company $company, ProductType $type, ProductCategory $category, User $user, string $code, string $name): Item
