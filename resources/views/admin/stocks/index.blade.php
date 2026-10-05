@@ -3,7 +3,7 @@
 
 @push('styles')
 <style>
-.stock-head{background:#111827;color:#fff;border-radius:8px;padding:22px;margin-bottom:16px;display:flex;justify-content:space-between;gap:16px;align-items:center}.stock-head h2{margin:0;font-weight:800}.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}.metric{background:#fff;border:1px solid #e8edf5;border-radius:8px;padding:16px;box-shadow:0 10px 24px rgba(15,23,42,.06)}.metric small{display:block;text-transform:uppercase;color:#667085;font-weight:800;font-size:11px}.metric b{font-size:22px;color:#111827}.filter-card{background:#fff;border:1px solid #e8edf5;border-radius:8px;padding:14px;margin-bottom:16px}.stock-table-card{background:#fff;border:1px solid #e8edf5;border-radius:8px;padding:16px}.low-row{background:#fff7ed}.raw-adjust-btn{white-space:nowrap}.raw-chip{display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#4338ca;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700}.replacement-drawer{position:fixed;top:0;right:-480px;width:460px;max-width:100%;height:100vh;background:#fff;z-index:1050;box-shadow:-20px 0 45px rgba(15,23,42,.2);transition:.25s;padding:20px;overflow:auto}.replacement-drawer.open{right:0}.replacement-item{border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:10px;cursor:pointer;background:#f8fafc}.replacement-item:hover{border-color:#0ea5e9;background:#f0f9ff}.mini-label{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:800}.stock-modal-summary{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:12px}@media(max-width:992px){.metric-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:576px){.metric-grid{grid-template-columns:1fr}.stock-head{display:block}}
+.stock-head{background:#111827;color:#fff;border-radius:8px;padding:22px;margin-bottom:16px;display:flex;justify-content:space-between;gap:16px;align-items:center}.stock-head h2{margin:0;font-weight:800}.metric-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:16px}.metric{background:#fff;border:1px solid #e8edf5;border-radius:8px;padding:16px;box-shadow:0 10px 24px rgba(15,23,42,.06)}.metric small{display:block;text-transform:uppercase;color:#667085;font-weight:800;font-size:11px}.metric b{font-size:22px;color:#111827}.filter-card{background:#fff;border:1px solid #e8edf5;border-radius:8px;padding:14px;margin-bottom:16px}.stock-table-card{background:#fff;border:1px solid #e8edf5;border-radius:8px;padding:16px}.low-row{background:#fff7ed}.raw-adjust-btn{white-space:nowrap}.raw-chip{display:inline-flex;align-items:center;gap:6px;background:#eef2ff;color:#4338ca;border-radius:999px;padding:4px 10px;font-size:11px;font-weight:700}.replacement-drawer{position:fixed;top:0;right:-480px;width:460px;max-width:100%;height:100vh;background:#fff;z-index:1050;box-shadow:-20px 0 45px rgba(15,23,42,.2);transition:.25s;padding:20px;overflow:auto}.replacement-drawer.open{right:0}.replacement-item{border:1px solid #e5e7eb;border-radius:8px;padding:12px;margin-bottom:10px;cursor:pointer;background:#f8fafc}.replacement-item:hover{border-color:#0ea5e9;background:#f0f9ff}.mini-label{font-size:11px;text-transform:uppercase;color:#64748b;font-weight:800}.stock-modal-summary{background:#f8fafc;border:1px dashed #cbd5e1;border-radius:12px;padding:12px}.period-tabs{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.period-tabs .btn{text-align:left;white-space:normal}.seal-box,.signature-box{height:56px;border:1px dashed #94a3b8;border-radius:8px;color:#64748b;display:flex;align-items:center;justify-content:center;font-weight:700}@media(max-width:992px){.metric-grid{grid-template-columns:repeat(2,1fr)}.period-tabs{grid-template-columns:repeat(2,1fr)}}@media(max-width:576px){.metric-grid{grid-template-columns:1fr}.stock-head{display:block}.period-tabs{grid-template-columns:1fr}}
 </style>
 @endpush
 
@@ -14,6 +14,7 @@
         <small>Overall value, monthly stock movement value and item-level balance.</small>
     </div>
     <div>
+        <button type="button" class="btn btn-danger btn-sm" data-toggle="modal" data-target="#stockDownloadModal"><i class="fas fa-file-pdf mr-1"></i>Download PDF</button>
         <a href="{{ route('admin.stocks.history') }}" class="btn btn-outline-light btn-sm"><i class="fas fa-clock-rotate-left mr-1"></i>History</a>
         <button type="button" id="openReplacementItems" class="btn btn-info btn-sm"><i class="fas fa-sync-alt mr-1"></i>Replacement Items</button>
         <a href="{{ route('admin.stocks.special-stock-out') }}" class="btn btn-warning btn-sm"><i class="fas fa-dolly mr-1"></i>Special Stock Out</a>
@@ -44,7 +45,10 @@
         @foreach($items as $item)
             @php $isLow = $item->low_stock_qty && $item->current_stock <= $item->low_stock_qty; @endphp
             @php $isRawMaterial = ($item->productType?->nature === 'raw_material'); @endphp
-            <tr class="{{ $isLow ? 'low-row' : '' }}">
+            <tr class="{{ $isLow ? 'low-row' : '' }}"
+                data-nature="{{ $item->productType?->nature }}"
+                data-category-id="{{ $item->product_category_id ?: '' }}"
+                data-activity-date="{{ optional($item->stock_activity_date)->format('Y-m-d') }}">
                 <td>{{ $item->id }}</td>
                 <td>
                     <b>{{ $item->name }}</b><br>
@@ -93,6 +97,69 @@
         @endforeach
         </tbody>
     </table>
+</div>
+
+<div class="modal fade" id="stockDownloadModal" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 class="modal-title mb-0">Download Current Stock PDF</h5>
+                    <small class="text-muted">Choose filters before generating the company stock report.</small>
+                </div>
+                <button type="button" class="close" data-dismiss="modal">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="row">
+                    <div class="col-md-4 form-group">
+                        <label>Product Nature</label>
+                        <select id="pdfNature" class="form-control">
+                            <option value="">All Stock</option>
+                            <option value="raw_material">Raw Material</option>
+                            <option value="finished_goods">Finished Goods</option>
+                            <option value="traded_goods">Traded Goods</option>
+                            <option value="packing_material">Packing Material</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4 form-group">
+                        <label>Product Category</label>
+                        <select id="pdfCategory" class="form-control">
+                            <option value="">All Categories</option>
+                            @foreach($productCategories as $category)
+                                <option value="{{ $category->id }}">{{ $category->name }}</option>
+                            @endforeach
+                        </select>
+                    </div>
+                    <div class="col-md-4 form-group">
+                        <label>Amount / Value</label>
+                        <div class="custom-control custom-checkbox mt-2">
+                            <input type="checkbox" class="custom-control-input" id="pdfIncludeAmount">
+                            <label class="custom-control-label" for="pdfIncludeAmount">Include purchase cost and stock value</label>
+                        </div>
+                    </div>
+                </div>
+                <label class="d-block">Date Filter</label>
+                <div class="period-tabs" id="pdfPeriodTabs">
+                    <button type="button" class="btn btn-outline-secondary active" data-period="all">All Current Stock</button>
+                    <button type="button" class="btn btn-outline-secondary" data-period="today">Today</button>
+                    <button type="button" class="btn btn-outline-secondary" data-period="yesterday">Yesterday</button>
+                    <button type="button" class="btn btn-outline-secondary" data-period="week">This Week</button>
+                    <button type="button" class="btn btn-outline-secondary" data-period="month">This Month</button>
+                    <button type="button" class="btn btn-outline-secondary" data-period="last_3_months">Last 3 Months</button>
+                    <button type="button" class="btn btn-outline-secondary" data-period="last_6_months">Last 6 Months</button>
+                    <button type="button" class="btn btn-outline-secondary" data-period="year">This Year</button>
+                    <button type="button" class="btn btn-outline-secondary" data-period="last_year">Last Year</button>
+                </div>
+                <div class="alert alert-light border mt-3 mb-0">
+                    PDF me company logo/details, generated date/time, downloaded by, header/footer, signature aur company seal section rahega.
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-dismiss="modal">Cancel</button>
+                <button type="button" id="generateStockPdf" class="btn btn-danger"><i class="fas fa-download mr-1"></i>Download PDF</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div id="replacementDrawer" class="replacement-drawer">
@@ -196,10 +263,142 @@
 @endsection
 
 @push('scripts')
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 <script>
-$('#stockTable').DataTable({pageLength:25,order:[[0,'asc']]});
+const stockTable = $('#stockTable').DataTable({pageLength:25,order:[[0,'asc']]});
 $('#openReplacementItems').on('click',function(){$('#replacementDrawer').addClass('open');});
 $('#closeReplacementItems').on('click',function(){$('#replacementDrawer').removeClass('open');});
+let stockPdfPeriod = 'all';
+const stockPdfCompany = @json([
+    'name' => auth()->user()?->currentCompany?->name ?? 'Company',
+    'address' => auth()->user()?->currentCompany?->address ?? '',
+    'phone' => auth()->user()?->currentCompany?->phone ?? '',
+    'email' => auth()->user()?->currentCompany?->email ?? '',
+    'gst' => auth()->user()?->currentCompany?->gst_number ?? '',
+    'pan' => auth()->user()?->currentCompany?->pan_number ?? '',
+    'logo' => auth()->user()?->currentCompany?->logo_url ?? '',
+    'user' => auth()->user()?->name ?? 'User',
+]);
+
+$('#pdfPeriodTabs').on('click','button',function(){
+    $('#pdfPeriodTabs button').removeClass('active btn-secondary').addClass('btn-outline-secondary');
+    $(this).addClass('active btn-secondary').removeClass('btn-outline-secondary');
+    stockPdfPeriod = $(this).data('period');
+});
+
+function periodRange(period) {
+    const today = new Date();
+    today.setHours(0,0,0,0);
+    const start = new Date(today);
+    const end = new Date(today);
+    if (period === 'all') return null;
+    if (period === 'yesterday') { start.setDate(start.getDate() - 1); end.setDate(end.getDate() - 1); return [start, end]; }
+    if (period === 'week') { start.setDate(start.getDate() - start.getDay() + 1); end.setDate(start.getDate() + 6); return [start, end]; }
+    if (period === 'month') { start.setDate(1); end.setMonth(end.getMonth() + 1, 0); return [start, end]; }
+    if (period === 'last_3_months') { start.setMonth(start.getMonth() - 3); return [start, end]; }
+    if (period === 'last_6_months') { start.setMonth(start.getMonth() - 6); return [start, end]; }
+    if (period === 'year') { start.setMonth(0, 1); end.setMonth(11, 31); return [start, end]; }
+    if (period === 'last_year') { start.setFullYear(start.getFullYear() - 1, 0, 1); end.setFullYear(end.getFullYear() - 1, 11, 31); return [start, end]; }
+    return [start, end];
+}
+
+function periodLabel(period) {
+    return $('#pdfPeriodTabs button[data-period="'+period+'"]').text().trim();
+}
+
+async function stockLogoData(){
+    if(!stockPdfCompany.logo) return null;
+    try { const blob = await fetch(stockPdfCompany.logo).then(r => r.blob()); return await new Promise(ok => { const f = new FileReader(); f.onload = () => ok(f.result); f.readAsDataURL(blob); }); } catch(e) { return null; }
+}
+
+$('#generateStockPdf').on('click', async function(){
+    const nature = $('#pdfNature').val();
+    const category = $('#pdfCategory').val();
+    const includeAmount = $('#pdfIncludeAmount').is(':checked');
+    const range = periodRange(stockPdfPeriod);
+    const rows = [];
+
+    stockTable.rows({search:'applied'}).every(function(){
+        const node = this.node();
+        const $row = $(node);
+        if (nature && $row.data('nature') !== nature) return;
+        if (category && String($row.data('category-id') || '') !== String(category)) return;
+        if (range) {
+            const dateText = $row.data('activity-date');
+            if (!dateText) return;
+            const activity = new Date(dateText + 'T00:00:00');
+            if (activity < range[0] || activity > range[1]) return;
+        }
+        const cells = $('td', node).map(function(){ return $(this).text().replace(/\s+/g,' ').trim(); }).get();
+        const base = [cells[0], cells[1], cells[2], cells[3], cells[4], cells[5], cells[6], cells[9], cells[10]];
+        if (includeAmount) base.splice(7, 0, cells[7], cells[8]);
+        rows.push(base);
+    });
+
+    if (!rows.length) {
+        Swal.fire({icon:'info', title:'No stock found', text:'Selected filters ke hisab se koi stock row nahi mili.'});
+        return;
+    }
+
+    const headers = includeAmount
+        ? ['Item Id','Item','SKU','Nature','Stock','Incoming','Serials','Purchase Cost','Value','Low Warning','Status']
+        : ['Item Id','Item','SKU','Nature','Stock','Incoming','Serials','Low Warning','Status'];
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({orientation:'landscape'});
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    const generatedAt = new Date().toLocaleString('en-IN');
+    const logo = await stockLogoData();
+
+    doc.setFillColor(17,24,39);
+    doc.rect(0,0,pageWidth,38,'F');
+    if (logo) { try { doc.addImage(logo, 'PNG', 14, 8, 22, 22); } catch(e) {} }
+    doc.setTextColor(255);
+    doc.setFontSize(18);
+    doc.text(stockPdfCompany.name, logo ? 42 : 14, 15);
+    doc.setFontSize(8);
+    doc.text([stockPdfCompany.address, `Phone: ${stockPdfCompany.phone} | Email: ${stockPdfCompany.email} | GSTIN: ${stockPdfCompany.gst} | PAN: ${stockPdfCompany.pan}`].filter(Boolean), logo ? 42 : 14, 22);
+    doc.setFillColor(20,184,166);
+    doc.rect(0,34,pageWidth,4,'F');
+
+    doc.setTextColor(17,24,39);
+    doc.setFontSize(15);
+    doc.text('Current Stock Report',14,49);
+    doc.setFontSize(8);
+    doc.text(`Downloaded: ${generatedAt}`, pageWidth - 14, 45, {align:'right'});
+    doc.text(`Downloaded By: ${stockPdfCompany.user}`, pageWidth - 14, 50, {align:'right'});
+    doc.text(`Filter: ${periodLabel(stockPdfPeriod)} | ${nature ? nature.replace('_',' ') : 'All Stock'} | ${$('#pdfCategory option:selected').text()}`,14,55);
+    doc.text(includeAmount ? 'Amount included' : 'Amount hidden by request',14,60);
+
+    doc.autoTable({
+        head:[headers],
+        body:rows,
+        startY:66,
+        theme:'grid',
+        styles:{fontSize:7,cellPadding:2,valign:'top'},
+        headStyles:{fillColor:[15,118,110],textColor:255,fontStyle:'bold'},
+        alternateRowStyles:{fillColor:[241,245,249]},
+        margin:{left:10,right:10},
+        didDrawPage:function(){
+            doc.setFontSize(7);
+            doc.setTextColor(100);
+            doc.text(stockPdfCompany.name + ' | Current Stock Report', 10, pageHeight - 6);
+            doc.text('Page ' + doc.internal.getNumberOfPages(), pageWidth - 10, pageHeight - 6, {align:'right'});
+        }
+    });
+
+    const y = Math.min(doc.lastAutoTable.finalY + 16, pageHeight - 28);
+    doc.setDrawColor(148,163,184);
+    doc.roundedRect(pageWidth - 102, y, 40, 18, 2, 2);
+    doc.roundedRect(pageWidth - 56, y, 40, 18, 2, 2);
+    doc.setFontSize(9);
+    doc.setTextColor(71,85,105);
+    doc.text('Signature', pageWidth - 82, y + 11, {align:'center'});
+    doc.text('Company Seal', pageWidth - 36, y + 11, {align:'center'});
+    doc.save('current-stock-report.pdf');
+    $('#stockDownloadModal').modal('hide');
+});
 
 $('#stockAdjustModal').on('show.bs.modal', function (event) {
     const button = $(event.relatedTarget);

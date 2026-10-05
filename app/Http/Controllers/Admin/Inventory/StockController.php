@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Inventory;
 
 use App\Http\Controllers\Controller;
 use App\Models\Item;
+use App\Models\ProductCategory;
 use App\Models\ProductType;
 use App\Models\PurchaseBillItem;
 use App\Models\PurchaseEstimateItem;
@@ -32,8 +33,8 @@ class StockController extends Controller
         $serialItemIds = $this->serialTrackedItemIds($companyId);
         $incomingByItem = PurchaseEstimateItem::whereHas('purchaseEstimate', fn($q) => $q->where('company_id',$companyId)->where('status','transit'))
             ->selectRaw('item_id, SUM(quantity) as incoming_qty')->groupBy('item_id')->pluck('incoming_qty','item_id');
-        $items = $visibility->scopeForUser(
-            Item::with('productType')
+        $items = Item::with(['productType', 'productCategory'])
+                ->where('company_id', $companyId)
                 ->where(function ($q) use ($incomingByItem, $serialItemIds) {
                     $q->where('current_stock', '>', 0)
                         ->orWhereIn('id', $serialItemIds)
@@ -42,9 +43,8 @@ class StockController extends Controller
                 })
                 ->when($nature, fn($q) => $q->whereHas('productType', fn($type) => $type->where('nature', $nature)))
                 ->when($productTypeId, fn($q) => $q->where('product_type_id', $productTypeId))
-                ->orderBy('name'),
-            Item::class
-        )->get();
+                ->orderBy('name')
+                ->get();
 
         if ($serialSearch !== '') {
             $term = mb_strtolower($serialSearch);
@@ -73,9 +73,32 @@ class StockController extends Controller
             $item->calculated_avg_rate = (float) $item->purchase_price;
         });
 
+        $itemIds = $items->pluck('id');
+        $latestMovementDates = StockMovement::where('company_id', $companyId)
+            ->whereIn('item_id', $itemIds)
+            ->selectRaw('item_id, MAX(movement_date) as activity_date')
+            ->groupBy('item_id')
+            ->pluck('activity_date', 'item_id');
+        $latestAdjustmentDates = StockAdjustment::where('company_id', $companyId)
+            ->whereIn('item_id', $itemIds)
+            ->selectRaw('item_id, MAX(created_at) as activity_date')
+            ->groupBy('item_id')
+            ->pluck('activity_date', 'item_id');
+
+        $items->each(function ($item) use ($latestMovementDates, $latestAdjustmentDates) {
+            $dates = collect([
+                $latestMovementDates[$item->id] ?? null,
+                $latestAdjustmentDates[$item->id] ?? null,
+                $item->updated_at,
+            ])->filter()->map(fn($date) => Carbon::parse($date));
+
+            $item->stock_activity_date = $dates->max();
+        });
+
         $overallValue = $items->sum(fn($item) => (float) $item->calculated_stock_value);
         $overallQty = $items->sum(fn($item) => (float) $item->current_stock);
-        $productTypes = $visibility->scopeForUser(ProductType::orderBy('name'), ProductType::class)->get();
+        $productTypes = ProductType::where('company_id', $companyId)->orderBy('name')->get();
+        $productCategories = ProductCategory::where('company_id', $companyId)->orderBy('name')->get();
 
         $monthStart = \Carbon\Carbon::parse($month . '-01')->startOfMonth();
         $monthEnd = (clone $monthStart)->endOfMonth();
@@ -101,7 +124,7 @@ class StockController extends Controller
             ])
             ->values();
 
-        return view('admin.stocks.index', compact('items', 'overallValue', 'overallQty', 'month', 'nature', 'productTypeId', 'productTypes', 'monthIn', 'monthOut', 'serialsByItem', 'serialSearch','incomingByItem', 'replacementReceived', 'companyAdmin'));
+        return view('admin.stocks.index', compact('items', 'overallValue', 'overallQty', 'month', 'nature', 'productTypeId', 'productTypes', 'productCategories', 'monthIn', 'monthOut', 'serialsByItem', 'serialSearch','incomingByItem', 'replacementReceived', 'companyAdmin'));
     }
 
     public function history(Request $request, EntryVisibilityService $visibility)
