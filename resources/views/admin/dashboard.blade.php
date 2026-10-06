@@ -682,7 +682,7 @@
                 </div>
                 <div class="modal-table-wrap">
                     <table class="table table-sm mb-0">
-                        <thead><tr><th>Party</th><th>Payment Date</th><th>Reference</th><th>Final Collection</th><th>Outsource Expense</th><th>State</th><th>District</th><th>City</th><th>Bills</th></tr></thead>
+                        <thead><tr><th>Party</th><th>Payment Date</th><th>Reference</th><th>Final Collection</th><th>Expense</th><th>State</th><th>District</th><th>City</th><th>Bills</th></tr></thead>
                         <tbody id="collectionRows"></tbody>
                     </table>
                 </div>

@@ -14,7 +14,7 @@
         @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
         <div class="table-responsive">
             <table id="paymentsTable" class="table table-hover">
-                <thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Bank/Cash</th><th>Bills</th><th>Reference</th><th>Invoice Amount</th><th>Discount</th><th>Outsource Expense</th><th>Final Collection</th><th>Mode</th><th>Created By</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Bank/Cash</th><th>Bills</th><th>Reference</th><th>Invoice Amount</th><th>Discount</th><th>Expense</th><th>Final Collection</th><th>Mode</th><th>Created By</th><th>Actions</th></tr></thead>
                 <tbody>
                 @foreach($payments as $payment)
                     <tr>
