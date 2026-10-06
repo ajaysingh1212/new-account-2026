@@ -180,12 +180,11 @@ class PartyPaymentCrudTest extends TestCase
             'payment_date' => '2026-07-20',
             'amount' => 2500,
             'discount_amount' => 0,
-            'outsource_expense_amount' => 300,
             'payment_mode' => 'UPI',
             'description' => 'Outsource installation paid directly',
             'settlement_source' => 'bills',
             'allocations' => [
-                ['bill_id' => $invoice->id, 'amount' => 2500],
+                ['bill_id' => $invoice->id, 'amount' => 2500, 'outsource_expense_amount' => 300],
             ],
         ])->assertRedirect(route('admin.party-payments.index', ['type' => 'payment_in']));
 
@@ -199,6 +198,7 @@ class PartyPaymentCrudTest extends TestCase
             'party_payment_id' => $payment->id,
             'bill_id' => $invoice->id,
             'amount' => 2500,
+            'outsource_expense_amount' => 300,
         ]);
 
         $this->actingAs($user)->withoutMiddleware()

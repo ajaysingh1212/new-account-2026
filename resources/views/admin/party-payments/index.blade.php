@@ -30,6 +30,9 @@
                         <td>
                             @forelse($payment->allocations as $allocation)
                                 <div><b>{{ $allocation->bill_type === 'opening_balance' ? 'Opening Balance' : $allocation->bill_no }}</b>: Rs {{ number_format((float) $allocation->amount, 2) }}</div>
+                                @if($payment->payment_type === 'payment_in')
+                                <small>Outsource: Rs {{ number_format((float) $allocation->outsource_expense_amount, 2) }} | Received: Rs {{ number_format((float) $allocation->amount - (float) $allocation->outsource_expense_amount - (float) $payment->discount_amount * (float) $allocation->amount / max(0.01, (float) $payment->amount), 2) }}</small>
+                                @endif
                             @empty
                                 -
                             @endforelse

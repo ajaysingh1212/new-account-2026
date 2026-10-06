@@ -291,8 +291,8 @@ class DashboardController extends Controller
                         'bill_date' => $allocation->bill_date?->format('d M Y') ?: '-',
                         'bill_total' => (float) $allocation->bill_total,
                         'amount' => (float) $allocation->amount,
-                        'outsource_expense_amount' => round((float) $payment->outsource_expense_amount * $ratio, 2),
-                        'received_amount' => round((float) $payment->total_amount * $ratio, 2),
+                        'outsource_expense_amount' => (float) $allocation->outsource_expense_amount,
+                        'received_amount' => round((float) $allocation->amount - (float) $allocation->outsource_expense_amount - (float) $payment->discount_amount * $ratio, 2),
                     ];
                 })->values()->all(),
             ]);

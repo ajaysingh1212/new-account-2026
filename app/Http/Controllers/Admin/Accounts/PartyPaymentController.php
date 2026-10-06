@@ -215,6 +215,7 @@ class PartyPaymentController extends Controller
             'allocations' => ['nullable','array'],
             'allocations.*.bill_id' => ['required_with:allocations','integer'],
             'allocations.*.amount' => ['required_with:allocations','numeric','min:0.01'],
+            'allocations.*.outsource_expense_amount' => ['nullable','numeric','min:0','lte:allocations.*.amount'],
             'settlement_source' => ['nullable', Rule::in(['bills','opening_balance','advance'])],
             'opening_balance_amount' => ['nullable','numeric','min:0.01'],
             'adjustment_type' => ['nullable', Rule::in(['increase','decrease'])],
@@ -225,7 +226,7 @@ class PartyPaymentController extends Controller
 
         $data['discount_amount'] = (float) ($data['discount_amount'] ?? 0);
         $data['outsource_expense_amount'] = $data['payment_type'] === 'payment_in'
-            ? (float) ($data['outsource_expense_amount'] ?? 0)
+            ? round(collect($data['allocations'] ?? [])->sum(fn($row) => round((float) ($row['outsource_expense_amount'] ?? 0), 2)), 2)
             : 0;
         $data['total_amount'] = max(0, (float) $data['amount'] - $data['discount_amount'] - $data['outsource_expense_amount']);
         if (($data['payment_mode'] ?? null) !== 'Cheque') {
@@ -351,6 +352,7 @@ class PartyPaymentController extends Controller
                     'bill_date' => $bill->billing_date,
                     'bill_total' => $bill->grand_total,
                     'amount' => $amount,
+                    'outsource_expense_amount' => $payment->payment_type === 'payment_in' ? round((float) ($row['outsource_expense_amount'] ?? 0), 2) : 0,
                 ]);
             }
         }

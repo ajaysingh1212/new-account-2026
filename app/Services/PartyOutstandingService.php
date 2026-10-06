@@ -211,6 +211,9 @@ class PartyOutstandingService
                     'date' => $allocation->payment?->payment_date?->format('d M Y'),
                     'reference_no' => $allocation->payment?->reference_no ?: '-',
                     'amount' => round((float) $allocation->amount, 2),
+                    'outsource_expense_amount' => (float) $allocation->outsource_expense_amount,
+                    'received_amount' => round((float) $allocation->amount - (float) $allocation->outsource_expense_amount - (float) ($allocation->payment?->discount_amount ?? 0) * (float) $allocation->amount / max(0.01, (float) ($allocation->payment?->amount ?? 0)), 2),
+                    'description' => $allocation->payment?->description ?? '',
                     'mode' => $allocation->payment?->payment_mode ?: '-',
                 ])->values(),
             ];
