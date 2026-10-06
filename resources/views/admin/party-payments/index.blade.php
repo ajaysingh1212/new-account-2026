@@ -14,7 +14,7 @@
         @if(session('success'))<div class="alert alert-success">{{ session('success') }}</div>@endif
         <div class="table-responsive">
             <table id="paymentsTable" class="table table-hover">
-                <thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Bank/Cash</th><th>Bills</th><th>Reference</th><th>Amount</th><th>Discount</th><th>Total</th><th>Mode</th><th>Created By</th><th>Actions</th></tr></thead>
+                <thead><tr><th>Date</th><th>Type</th><th>Party</th><th>Bank/Cash</th><th>Bills</th><th>Reference</th><th>Invoice Amount</th><th>Discount</th><th>Outsource Expense</th><th>Final Collection</th><th>Mode</th><th>Created By</th><th>Actions</th></tr></thead>
                 <tbody>
                 @foreach($payments as $payment)
                     <tr>
@@ -37,6 +37,7 @@
                         <td>{{ $payment->reference_no ?: '-' }}</td>
                         <td>Rs {{ number_format((float) $payment->amount, 2) }}</td>
                         <td>Rs {{ number_format((float) $payment->discount_amount, 2) }}</td>
+                        <td>Rs {{ number_format((float) $payment->outsource_expense_amount, 2) }}</td>
                         <td><strong>Rs {{ number_format((float) $payment->total_amount, 2) }}</strong></td>
                         <td>{{ $payment->payment_mode ?: '-' }}</td>
                         <td><strong>{{ $payment->creator?->name ?? 'System' }}</strong><br><small class="text-muted">{{ $payment->creator?->rolesForCompany($payment->company_id)->pluck('name')->join(', ') ?: 'No role' }}</small></td>

@@ -274,16 +274,27 @@ class DashboardController extends Controller
                 'mode' => $payment->payment_mode ?: '-',
                 'bank' => $payment->bankAccount?->account_name ?: '-',
                 'amount' => (float) $payment->total_amount,
+                'invoice_amount' => (float) $payment->amount,
+                'discount_amount' => (float) $payment->discount_amount,
+                'outsource_expense_amount' => (float) $payment->outsource_expense_amount,
+                'description' => $payment->description ?: '-',
                 'state' => $payment->party?->state ?: '',
                 'district' => $payment->party?->district ?: '',
                 'city' => $payment->party?->city ?: '',
-                'allocations' => $payment->allocations->map(fn(PartyPaymentAllocation $allocation) => [
-                    'bill_no' => $allocation->bill_no ?: '-',
-                    'bill_type' => $allocation->bill_type ?: '-',
-                    'bill_date' => $allocation->bill_date?->format('d M Y') ?: '-',
-                    'bill_total' => (float) $allocation->bill_total,
-                    'amount' => (float) $allocation->amount,
-                ])->values()->all(),
+                'allocations' => $payment->allocations->map(function (PartyPaymentAllocation $allocation) use ($payment) {
+                    $paymentAmount = max(0.01, (float) $payment->amount);
+                    $ratio = (float) $allocation->amount / $paymentAmount;
+
+                    return [
+                        'bill_no' => $allocation->bill_no ?: '-',
+                        'bill_type' => $allocation->bill_type ?: '-',
+                        'bill_date' => $allocation->bill_date?->format('d M Y') ?: '-',
+                        'bill_total' => (float) $allocation->bill_total,
+                        'amount' => (float) $allocation->amount,
+                        'outsource_expense_amount' => round((float) $payment->outsource_expense_amount * $ratio, 2),
+                        'received_amount' => round((float) $payment->total_amount * $ratio, 2),
+                    ];
+                })->values()->all(),
             ]);
 
         $companyName = $companyId ? Company::find($companyId)?->name : 'All Companies';

@@ -159,6 +159,57 @@ class PartyPaymentCrudTest extends TestCase
         $this->assertSame(0, BankTransaction::where('reference_type', PartyPayment::class)->where('reference_id', $payment->id)->count());
     }
 
+    public function test_payment_in_outsource_expense_closes_invoice_but_collects_net_amount(): void
+    {
+        [$user, $party, $account] = $this->invoiceContext();
+
+        $invoice = SalesInvoice::create([
+            'company_id' => $party->company_id,
+            'party_id' => $party->id,
+            'invoice_no' => 'SI-2500',
+            'billing_date' => '2026-07-12',
+            'sale_type' => 'credit',
+            'grand_total' => 2500,
+            'created_by' => $user->id,
+        ]);
+
+        $this->actingAs($user)->withoutMiddleware()->post(route('admin.party-payments.store'), [
+            'payment_type' => 'payment_in',
+            'party_id' => $party->id,
+            'bank_account_id' => $account->id,
+            'payment_date' => '2026-07-20',
+            'amount' => 2500,
+            'discount_amount' => 0,
+            'outsource_expense_amount' => 300,
+            'payment_mode' => 'UPI',
+            'description' => 'Outsource installation paid directly',
+            'settlement_source' => 'bills',
+            'allocations' => [
+                ['bill_id' => $invoice->id, 'amount' => 2500],
+            ],
+        ])->assertRedirect(route('admin.party-payments.index', ['type' => 'payment_in']));
+
+        $payment = PartyPayment::firstOrFail();
+        $this->assertSame(2500.0, (float) $payment->amount);
+        $this->assertSame(300.0, (float) $payment->outsource_expense_amount);
+        $this->assertSame(2200.0, (float) $payment->total_amount);
+        $this->assertSame(3200.0, (float) $account->fresh()->current_balance);
+
+        $this->assertDatabaseHas('party_payment_allocations', [
+            'party_payment_id' => $payment->id,
+            'bill_id' => $invoice->id,
+            'amount' => 2500,
+        ]);
+
+        $this->actingAs($user)->withoutMiddleware()
+            ->getJson(route('admin.party-payments.open-bills', [
+                'party_id' => $party->id,
+                'payment_type' => 'payment_in',
+            ]))
+            ->assertOk()
+            ->assertJsonMissing(['invoice_no' => 'SI-2500']);
+    }
+
     private function openingBalanceContext(): array
     {
         $user = User::factory()->create(['user_type' => 'super_admin', 'name' => 'Receivable Admin']);

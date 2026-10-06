@@ -43,9 +43,12 @@
             </div>
             <div class="row">
                 <div class="col-md-3 form-group"><label>Amount *</label><input type="number" step="0.01" min="0.01" name="amount" id="payAmount" class="form-control" readonly required value="{{ old('amount', isset($payment) ? number_format((float) $payment->amount, 2, '.', '') : '') }}"></div>
-                <div class="col-md-3 form-group"><label>Discount</label><input type="number" step="0.01" min="0" name="discount_amount" id="payDiscount" class="form-control" value="{{ old('discount_amount', isset($payment) ? number_format((float) $payment->discount_amount, 2, '.', '') : 0) }}"></div>
-                <div class="col-md-3 form-group"><label>Payment Mode</label><select name="payment_mode" id="paymentModeSelect" class="form-control">@foreach(['UPI','NEFT','RTGS','IMPS','Cash','Cheque','Card','Other'] as $mode)<option @selected(old('payment_mode', $payment->payment_mode ?? '') === $mode)>{{ $mode }}</option>@endforeach</select></div>
-                <div class="col-md-3"><div class="live-total"><div style="font-size:12px;color:#7a7194;">Net bank settlement</div><div class="amount" id="payTotal">Rs 0.00</div></div></div>
+                <div class="col-md-{{ $type === 'payment_in' ? '2' : '3' }} form-group"><label>Discount</label><input type="number" step="0.01" min="0" name="discount_amount" id="payDiscount" class="form-control" value="{{ old('discount_amount', isset($payment) ? number_format((float) $payment->discount_amount, 2, '.', '') : 0) }}"></div>
+                @if($type === 'payment_in')
+                <div class="col-md-2 form-group"><label>Outsource Expense</label><input type="number" step="0.01" min="0" name="outsource_expense_amount" id="outsourceExpense" class="form-control" value="{{ old('outsource_expense_amount', isset($payment) ? number_format((float) $payment->outsource_expense_amount, 2, '.', '') : 0) }}"><small class="text-muted">Collection se minus hoga, invoice full clear rahega.</small></div>
+                @endif
+                <div class="col-md-{{ $type === 'payment_in' ? '2' : '3' }} form-group"><label>Payment Mode</label><select name="payment_mode" id="paymentModeSelect" class="form-control">@foreach(['UPI','NEFT','RTGS','IMPS','Cash','Cheque','Card','Other'] as $mode)<option @selected(old('payment_mode', $payment->payment_mode ?? '') === $mode)>{{ $mode }}</option>@endforeach</select></div>
+                <div class="col-md-{{ $type === 'payment_in' ? '2' : '3' }}"><div class="live-total"><div style="font-size:12px;color:#7a7194;">Final collection</div><div class="amount" id="payTotal">Rs 0.00</div></div></div>
             </div>
             @if($type === 'payment_out')
             <div id="chequePaymentBox" class="opening-action" style="display:block">
@@ -214,7 +217,8 @@ function renderTotal(){
     else if($('#settlementSource').val()==='opening_balance' || $('#settlementSource').val()==='advance') total=parseFloat(($('#settlementSource').val()==='advance' ? $('#advanceAmount').val() : $('#openingBalanceAmount').val())||0);
     else $('.bill-check:checked').each(function(){total+=parseFloat($(this).closest('.bill-row').find('.allocation-input').val()||0)});
     $('#payAmount').val(total ? total.toFixed(2) : '');
-    $('#payTotal').text(fmt(Math.max(0,total-parseFloat($('#payDiscount').val()||0))));
+    const outsource = '{{ $type }}' === 'payment_in' ? parseFloat($('#outsourceExpense').val()||0) : 0;
+    $('#payTotal').text(fmt(Math.max(0,total-parseFloat($('#payDiscount').val()||0)-outsource)));
     syncBankRequirement();
 }
 function renderChequeBox(){
@@ -437,15 +441,14 @@ $('#confirmAdvanceSettlement').on('click',function(){
     $('#openingAction').hide();
     $('#billList').show();
     $('#advanceModal').modal('hide');
-    $('#payTotal').text(fmt(Math.max(0, amount-parseFloat($('#payDiscount').val()||0))));
-    syncBankRequirement();
+    renderTotal();
 });
 $('#clearOpeningSettlement').on('click',clearOpeningSettlement);
 $(document).on('change','.bill-check',function(){
     if(this.checked&&$('#settlementSource').val()==='opening_balance')clearOpeningSettlement();
     const row=$(this).closest('.bill-row'),due=parseFloat(row.data('due')||0);row.toggleClass('active',this.checked);row.find('.pay-box').toggle(this.checked);row.find('input[name]').prop('disabled',!this.checked);if(this.checked&&!row.find('.allocation-input').val())row.find('.allocation-input').val(due.toFixed(2));if(!this.checked)row.find('.allocation-input').val('');renderTotal();
 });
-$(document).on('input','.allocation-input,#payDiscount',function(){const row=$(this).closest('.bill-row');if(row.length&&parseFloat(this.value||0)>parseFloat(row.data('due')||0)){alert('Aap bill due amount se jyada payment nahi kar sakte.');this.value=parseFloat(row.data('due')||0).toFixed(2)}renderTotal()});
+$(document).on('input','.allocation-input,#payDiscount,#outsourceExpense',function(){const row=$(this).closest('.bill-row');if(row.length&&parseFloat(this.value||0)>parseFloat(row.data('due')||0)){alert('Aap bill due amount se jyada payment nahi kar sakte.');this.value=parseFloat(row.data('due')||0).toFixed(2)}renderTotal()});
 renderChequeBox();renderTotal();renderAdjustmentButton();syncBankRequirement();if($('#partySelect').val())fetchBills();if($('#chequeLeafSelect').val())applyChequeSelection();
 </script>
 @endpush

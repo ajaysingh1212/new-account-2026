@@ -207,6 +207,7 @@ class PartyPaymentController extends Controller
             'reference_no' => ['nullable','string','max:255'],
             'amount' => ['nullable','numeric','min:0'],
             'discount_amount' => ['nullable','numeric','min:0'],
+            'outsource_expense_amount' => ['nullable','numeric','min:0'],
             'payment_mode' => ['nullable','string','max:40'],
             'cheque_leaf_id' => ['nullable', Rule::exists('cheque_leaves', 'id')->where('company_id', $companyId)],
             'description' => ['nullable','string'],
@@ -223,7 +224,10 @@ class PartyPaymentController extends Controller
         ]);
 
         $data['discount_amount'] = (float) ($data['discount_amount'] ?? 0);
-        $data['total_amount'] = max(0, (float) $data['amount'] - $data['discount_amount']);
+        $data['outsource_expense_amount'] = $data['payment_type'] === 'payment_in'
+            ? (float) ($data['outsource_expense_amount'] ?? 0)
+            : 0;
+        $data['total_amount'] = max(0, (float) $data['amount'] - $data['discount_amount'] - $data['outsource_expense_amount']);
         if (($data['payment_mode'] ?? null) !== 'Cheque') {
             $data['cheque_leaf_id'] = null;
         }
@@ -238,6 +242,7 @@ class PartyPaymentController extends Controller
                 && !empty($data['cheque_leaf_id']);
             abort_if(empty($data['bank_account_id']) && !$isChequePaymentOut, 422, 'Bank/Cash account select karein.');
             abort_if((float) ($data['amount'] ?? 0) <= 0, 422, 'Payment amount enter karein.');
+            abort_if((float) $data['outsource_expense_amount'] + (float) $data['discount_amount'] > (float) ($data['amount'] ?? 0), 422, 'Outsource expense/discount payment amount se jyada nahi ho sakta.');
         }
 
         return $data;
@@ -556,6 +561,7 @@ class PartyPaymentController extends Controller
             $payment->fill([
                 'amount' => 0,
                 'discount_amount' => 0,
+                'outsource_expense_amount' => 0,
                 'total_amount' => 0,
             ]);
         }

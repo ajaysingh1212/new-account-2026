@@ -8,13 +8,14 @@ class PartyPayment extends Model
 {
     protected $fillable = [
         'company_id','party_id','bank_account_id','payment_date','payment_type','reference_no',
-        'amount','discount_amount','total_amount','payment_mode','description','attachment','cheque_leaf_id','created_by',
+        'amount','discount_amount','outsource_expense_amount','total_amount','payment_mode','description','attachment','cheque_leaf_id','created_by',
     ];
 
     protected $casts = [
         'payment_date' => 'date',
         'amount' => 'decimal:2',
         'discount_amount' => 'decimal:2',
+        'outsource_expense_amount' => 'decimal:2',
         'total_amount' => 'decimal:2',
     ];
 
