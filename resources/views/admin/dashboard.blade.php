@@ -682,7 +682,7 @@
                 </div>
                 <div class="modal-table-wrap">
                     <table class="table table-sm mb-0">
-                        <thead><tr><th>Party</th><th>Payment Date</th><th>Reference</th><th>Final Collection</th><th>Expense</th><th>State</th><th>District</th><th>City</th><th>Bills</th></tr></thead>
+                        <thead><tr><th>Party</th><th>Payment Date</th><th>Dfthgfgescription</th><th>Final Collection</th><th>Expense</th><th>State</th><th>District</th><th>City</th><th>Bills</th></tr></thead>
                         <tbody id="collectionRows"></tbody>
                     </table>
                 </div>
@@ -731,7 +731,7 @@ function renderCollectionRows(){
     $('#collectionFilteredTotal').text(dashMoney(rows.reduce((sum,row)=>sum + Number(row.amount || 0), 0)));
     const groups = collectionGroups(rows);
     $('#collectionPartyRows').html(groups.length ? groups.map(group => `<tr><td>${group.party}</td><td><button class="collection-payment-link collection-party-detail" data-party="${group.party}">${group.rows.length}</button></td><td>${dashMoney(group.amount)}</td><td><button class="btn btn-sm btn-outline-primary collection-party-detail" data-party="${group.party}">Open</button></td></tr>`).join('') : '<tr><td colspan="4" class="text-center text-muted py-4">No collection for selected filters.</td></tr>');
-    $('#collectionRows').html(rows.length ? rows.map(row => `<tr><td>${row.party || '-'}</td><td>${row.date_label || '-'}</td><td>${row.reference_no || '-'}</td><td>${dashMoney(row.amount)}</td><td>${dashMoney(row.outsource_expense_amount)}</td><td>${row.state || '-'}</td><td>${row.district || '-'}</td><td>${row.city || '-'}</td><td>${(row.allocations||[]).map(a=>`${a.bill_no} (${dashMoney(a.amount)} invoice, ${dashMoney(a.received_amount)} received)`).join('<br>') || '-'}</td></tr>`).join('') : '<tr><td colspan="9" class="text-center text-muted py-4">No Payment In records for selected filters.</td></tr>');
+    $('#collectionRows').html(rows.length ? rows.map(row => `<tr><td>${row.party || '-'}</td><td>${row.date_label || '-'}</td><td>${row.description || '-'}</td><td>${dashMoney(row.amount)}</td><td>${dashMoney(row.outsource_expense_amount)}</td><td>${row.state || '-'}</td><td>${row.district || '-'}</td><td>${row.city || '-'}</td><td>${(row.allocations||[]).map(a=>`${a.bill_no} (${dashMoney(a.amount)} invoice, ${dashMoney(a.received_amount)} received)`).join('<br>') || '-'}</td></tr>`).join('') : '<tr><td colspan="9" class="text-center text-muted py-4">No Payment In records for selected filters.</td></tr>');
     renderCollectionChart(groups);
 }
 function renderCollectionChart(groups){
