@@ -103,7 +103,7 @@ class EstimateController extends Controller
             'sourceLabel' => 'Estimate / Quotation',
             'source' => $estimate,
             'parties' => Party::where('company_id', $companyId)->where('status', 'active')->orderBy('display_name')->get(),
-            'items' => Item::where('company_id', $companyId)->where('status', 'active')->whereHas('productType', fn($q) => $q->where('nature', 'finished_goods'))->orderBy('name')->get(),
+            'items' => Item::where('company_id', $companyId)->where('status', 'active')->whereHas('productType', fn($q) => $q->whereIn('nature', Item::SALEABLE_PRODUCT_NATURES))->orderBy('name')->get(),
             'lineData' => $items,
             'unitPool' => $serialUnits->unitPool($companyId, 'estimate_conversion', $estimate->converted_sales_invoice_id),
             'itemMeta' => Item::where('company_id', $companyId)->where('status', 'active')->get()->mapWithKeys(fn(Item $item) => [
@@ -248,7 +248,7 @@ class EstimateController extends Controller
                 $item = Item::with('productType')->lockForUpdate()->findOrFail($itemId);
                 $qty = (float) $request->quantity[$i];
                 abort_if((float) ((int) $qty) !== $qty && $item->track_stock, 422, "Quantity must be a whole number for {$item->name}.");
-                abort_if($item->track_stock && $item->productType?->nature !== 'finished_goods', 422, 'Only finished goods can be sold from Estimate conversion.');
+                abort_if($item->track_stock && ! $item->isSaleableProduct(), 422, 'Only finished goods or readymade products can be sold from Estimate conversion.');
                 abort_if($item->track_stock && (float) $item->current_stock < $qty, 422, "Insufficient stock for {$item->name}");
                 $selectedUnits = $item->track_stock
                     ? $serialUnits->reconcile(
@@ -349,7 +349,7 @@ class EstimateController extends Controller
             'parties' => Party::where('company_id', $companyId)->where('status', 'active')->orderBy('display_name')->get(),
             'items' => Item::where('company_id', $companyId)
                 ->where('status', 'active')
-                ->whereHas('productType', fn($q) => $q->where('nature', 'finished_goods'))
+                ->whereHas('productType', fn($q) => $q->whereIn('nature', Item::SALEABLE_PRODUCT_NATURES))
                 ->orderBy('name')
                 ->get(),
             'costCenters' => CostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
@@ -394,7 +394,7 @@ class EstimateController extends Controller
         foreach ($request->item_id as $i => $itemId) {
             $item = Item::with('productType')->findOrFail($itemId);
             $qty = (float) $request->quantity[$i];
-            abort_if($item->productType?->nature !== 'finished_goods', 422, 'Only finished goods can be used in Estimate / Quotation.');
+            abort_if(! $item->isSaleableProduct(), 422, 'Only finished goods or readymade products can be used in Estimate / Quotation.');
             $price = (float) $request->unit_price[$i];
             $base = $qty * $price;
             $discount = (($request->discount_type[$i] ?? 'percent') === 'flat') ? (float) ($request->discount_value[$i] ?? 0) : $base * (float) ($request->discount_value[$i] ?? 0) / 100;

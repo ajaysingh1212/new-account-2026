@@ -576,7 +576,7 @@ class SalesInvoiceController extends Controller
         $companyId = auth()->user()->current_company_id;
         $items = Item::where('company_id', $companyId)
             ->where('status', 'active')
-            ->whereHas('productType', fn ($q) => $q->where('nature', 'finished_goods'))
+            ->whereHas('productType', fn ($q) => $q->whereIn('nature', Item::SALEABLE_PRODUCT_NATURES))
             ->orderBy('name')
             ->get();
 
@@ -672,7 +672,7 @@ class SalesInvoiceController extends Controller
             $effectiveStock = (float) $item->current_stock + $reversedQty;
 
             abort_if($item->track_stock && $effectiveStock < $qty, 422, "Insufficient stock for {$item->name}");
-            abort_if($item->productType?->nature !== 'finished_goods', 422, 'Only finished goods can be sold from Sales.');
+            abort_if(! $item->isSaleableProduct(), 422, 'Only finished goods or readymade products can be sold from Sales.');
             abort_if((float) ((int) $qty) !== $qty, 422, "Quantity must be a whole number for {$item->name}.");
 
             $requestedUnits = $this->decodeSelectedUnits($request->selected_units[$i] ?? null);
@@ -692,7 +692,7 @@ class SalesInvoiceController extends Controller
             );
             abort_if($this->isGpsItem($item) && collect($selectedUnits)->contains(fn ($unit) => empty($unit['vts_sim'])), 422, "VTS/SIM number is required for selected GPS units of {$item->name}.");
             $selectedKeys = collect($selectedUnits)->pluck('key')->filter()->values()->all();
-            abort_if(count($selectedKeys) !== (int) $qty, 422, 'Only '.count($selectedKeys)." available finished goods unit(s) found for {$item->name}; {$qty} required.");
+            abort_if(count($selectedKeys) !== (int) $qty, 422, 'Only '.count($selectedKeys)." available product unit(s) found for {$item->name}; {$qty} required.");
             $availableKeys = collect($unitPool[$item->id] ?? [])
                 ->filter(fn ($unit) => empty($unit['sold']) || in_array($unit['key'] ?? null, $originalKeysForItem, true))
                 ->pluck('key')
@@ -794,7 +794,7 @@ class SalesInvoiceController extends Controller
                 $this->isGpsItem($item)
             );
 
-            abort_if(count($selectedUnits) !== $quantity, 422, 'Only '.count($selectedUnits)." available finished goods unit(s) found for {$item->name}; {$quantity} required.");
+            abort_if(count($selectedUnits) !== $quantity, 422, 'Only '.count($selectedUnits)." available product unit(s) found for {$item->name}; {$quantity} required.");
             abort_if(
                 $this->isGpsItem($item) && collect($selectedUnits)->contains(fn ($unit) => empty($unit['vts_sim'])),
                 422,
@@ -1049,7 +1049,7 @@ class SalesInvoiceController extends Controller
     {
         return PurchaseBillItem::with(['purchaseBill', 'item.productType'])
             ->whereHas('purchaseBill', fn ($q) => $q->where('company_id', $companyId))
-            ->whereHas('item.productType', fn ($q) => $q->where('nature', 'finished_goods'))
+            ->whereHas('item.productType', fn ($q) => $q->whereIn('nature', Item::SALEABLE_PRODUCT_NATURES))
             ->get()
             ->flatMap(function (PurchaseBillItem $line) use ($soldKeys) {
                 return collect($line->selected_units ?? [])->map(function ($unit, $index) use ($line, $soldKeys) {

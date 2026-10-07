@@ -667,7 +667,7 @@ class PurchaseBillController extends Controller
             ->values();
 
         if ($rows->isEmpty()) {
-            if ($item->productType?->nature !== 'finished_goods') {
+            if (! $item->isSaleableProduct()) {
                 return [];
             }
 

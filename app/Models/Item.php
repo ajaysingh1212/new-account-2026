@@ -9,6 +9,13 @@ class Item extends Model
 {
     use SoftDeletes;
 
+    public const SALEABLE_PRODUCT_NATURES = ['finished_goods', 'readymade'];
+
+    public function isSaleableProduct(): bool
+    {
+        return in_array($this->productType?->nature, self::SALEABLE_PRODUCT_NATURES, true);
+    }
+
     protected $fillable = [
         'company_id','product_type_id','product_category_id','item_type','item_code','hsn_code','barcode','qr_code',
         'name','sku','unit','brand','model','size','color','description','purchase_price',

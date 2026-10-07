@@ -151,7 +151,7 @@ class DeliveryChallanController extends Controller
             ->where('status', 'active')
             ->where(function ($query) use ($sourceItemIds) {
                 $query->whereIn('id', $sourceItemIds)
-                    ->orWhereHas('productType', fn($q) => $q->where('nature', 'finished_goods'));
+                    ->orWhereHas('productType', fn($q) => $q->whereIn('nature', Item::SALEABLE_PRODUCT_NATURES));
             })
             ->orderBy('name')
             ->get();

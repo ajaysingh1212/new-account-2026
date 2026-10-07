@@ -150,7 +150,7 @@ class SerialUnitService
         StockMovement::with(['item.productType', 'party'])
             ->where('company_id', $companyId)
             ->when($itemId, fn($query) => $query->where('item_id', $itemId))
-            ->whereHas('item.productType', fn($query) => $query->where('nature', 'finished_goods'))
+            ->whereHas('item.productType', fn($query) => $query->whereIn('nature', Item::SALEABLE_PRODUCT_NATURES))
             ->orderBy('movement_date')
             ->orderBy('id')
             ->get()
@@ -325,7 +325,7 @@ class SerialUnitService
 
         $purchased = PurchaseBillItem::with(['purchaseBill','item.productType'])
             ->whereHas('purchaseBill', fn($q) => $q->where('company_id', $companyId))
-            ->whereHas('item.productType', fn($q) => $q->where('nature', 'finished_goods'))
+            ->whereHas('item.productType', fn($q) => $q->whereIn('nature', Item::SALEABLE_PRODUCT_NATURES))
             ->get()
             ->flatMap(fn(PurchaseBillItem $line) => collect($line->selected_units ?? [])
                 ->map(function ($unit, $index) use ($line) {

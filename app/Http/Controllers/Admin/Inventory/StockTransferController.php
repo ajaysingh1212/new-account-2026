@@ -60,9 +60,9 @@ class StockTransferController extends Controller
                 ->get();
         }
 
-        // Finished goods with stock > 0 for current company
+        // Saleable products with stock > 0 for current company
         $finishedItems = Item::where('company_id', $companyId)
-            ->whereHas('productType', fn($q) => $q->where('nature', 'finished_goods'))
+            ->whereHas('productType', fn($q) => $q->whereIn('nature', Item::SALEABLE_PRODUCT_NATURES))
             ->where('track_stock', true)
             ->where('current_stock', '>', 0)
             ->orderBy('name')
@@ -258,7 +258,7 @@ class StockTransferController extends Controller
     {
         $companyId = auth()->user()->current_company_id;
         $items = Item::where('company_id', $companyId)
-            ->whereHas('productType', fn($q) => $q->where('nature', 'finished_goods'))
+            ->whereHas('productType', fn($q) => $q->whereIn('nature', Item::SALEABLE_PRODUCT_NATURES))
             ->where('track_stock', true)
             ->where('current_stock', '>', 0)
             ->whereNotIn('id', $request->input('exclude', []))
