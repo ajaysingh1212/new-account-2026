@@ -178,7 +178,8 @@
                     $natureMap = [
                         'finished_goods' => ['cls'=>'nb-finished','icon'=>'fa-industry',    'label'=>'Finished Goods'],
                         'raw_material'   => ['cls'=>'nb-raw',     'icon'=>'fa-cubes',       'label'=>'Raw Material'],
-                        'readymade'      => ['cls'=>'nb-readymade','icon'=>'fa-check-circle','label'=>'Readymade'],
+                        'traded_goods'   => ['cls'=>'nb-readymade','icon'=>'fa-check-circle','label'=>'Other Brand / Traded Goods'],
+                'readymade'      => ['cls'=>'nb-readymade','icon'=>'fa-check-circle','label'=>'Other Brand / Readymade'],
                         'service'        => ['cls'=>'nb-service', 'icon'=>'fa-tools',       'label'=>'Service'],
                     ];
                     $nm = $nature ? ($natureMap[$nature] ?? ['cls'=>'nb-raw','icon'=>'fa-tag','label'=>ucfirst($nature)]) : null;

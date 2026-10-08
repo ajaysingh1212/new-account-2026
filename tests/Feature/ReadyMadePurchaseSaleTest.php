@@ -20,6 +20,11 @@ class ReadyMadePurchaseSaleTest extends TestCase
     {
         return [
             'finished goods with serials' => ['finished_goods', true],
+            'traded goods with serials' => ['traded_goods', true],
+            'traded goods without serials' => ['traded_goods', false],
+            'legacy traded goods purchase' => ['traded_goods', false, true],
+            'other brand backdated repost with serials' => ['readymade', true, false, true],
+            'other brand backdated repost without serials' => ['readymade', false, false, true],
             'other brand with serials' => ['readymade', true],
             'other brand without serials' => ['readymade', false],
             'legacy purchase without unit metadata' => ['readymade', false, true],
@@ -27,7 +32,7 @@ class ReadyMadePurchaseSaleTest extends TestCase
     }
 
     #[DataProvider('productNatures')]
-    public function test_ready_made_product_can_be_purchased_sold_returned_and_resold(string $nature, bool $withSerials, bool $legacyPurchase = false): void
+    public function test_ready_made_product_can_be_purchased_sold_returned_and_resold(string $nature, bool $withSerials, bool $legacyPurchase = false, bool $backdatedRepost = false): void
     {
         $user = User::factory()->create(['user_type' => 'super_admin']);
         $company = Company::create(['name' => 'Ready Made Company', 'created_by' => $user->id]);
@@ -74,6 +79,24 @@ class ReadyMadePurchaseSaleTest extends TestCase
             'tax_percent' => [0],
             'selected_units' => [$withSerials ? 'READY-SERIAL-1' . PHP_EOL . 'READY-SERIAL-2' : ''],
         ])->assertRedirect(route('admin.purchases.index'));
+
+        if ($backdatedRepost) {
+            $purchaseMovement = \App\Models\StockMovement::where('item_id', $item->id)->firstOrFail();
+            $accounting = app(\App\Services\AccountingService::class);
+            foreach ([['out', '2026-09-25', 'inter_company_purchase_reversal'], ['in', '2026-09-24', 'inter_company_purchase']] as [$direction, $date, $type]) {
+                $accounting->moveStock($item->fresh(), [
+                    'movement_date' => $date,
+                    'movement_type' => $type,
+                    'direction' => $direction,
+                    'quantity' => 2,
+                    'unit_price' => 500,
+                    'total_value' => 1000,
+                    'reference_type' => $purchaseMovement->reference_type,
+                    'reference_id' => $purchaseMovement->reference_id,
+                    'movement_units' => $purchaseMovement->movement_units,
+                ]);
+            }
+        }
 
         if ($legacyPurchase) {
             // Older purchase entries recorded quantity without individual units.

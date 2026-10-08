@@ -722,7 +722,8 @@ $('.iw-tab').click(function(){ step = +$(this).data('step'); renderStep(); });
 const natureMeta = {
     finished_goods: { cls:'nature-finished', icon:'fa-industry',     label:'Finished Goods' },
     raw_material:   { cls:'nature-raw',      icon:'fa-cubes',        label:'Raw Material'   },
-    readymade:      { cls:'nature-readymade',icon:'fa-check-circle', label:'Readymade'      },
+    traded_goods:   { cls:'nature-readymade',icon:'fa-check-circle', label:'Other Brand / Traded Goods' },
+    readymade:      { cls:'nature-readymade',icon:'fa-check-circle', label:'Other Brand / Readymade'      },
     service:        { cls:'nature-service',  icon:'fa-tools',        label:'Service'        },
 };
 

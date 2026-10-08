@@ -81,7 +81,7 @@
     <div class="trade-head">
         <div>
             <h2><i class="fas fa-file-invoice-dollar mr-2"></i>{{ $isEdit ? 'Edit Sales Invoice' : 'Sales Invoice' }}</h2>
-            <small>Finished goods only, serial-aware selection, stock out and party ledger posting.</small>
+            <small>Finished goods and Other Brand products, stock out and party ledger posting.</small>
         </div>
         <a href="{{ route('admin.sales.index') }}" class="btn btn-outline-light btn-sm"><i class="fas fa-arrow-left mr-1"></i> Back</a>
     </div>

@@ -9,7 +9,9 @@ class Item extends Model
 {
     use SoftDeletes;
 
-    public const SALEABLE_PRODUCT_NATURES = ['finished_goods', 'readymade'];
+    public const OTHER_BRAND_PRODUCT_NATURES = ['readymade', 'traded_goods'];
+
+    public const SALEABLE_PRODUCT_NATURES = ['finished_goods', 'readymade', 'traded_goods'];
 
     public function isSaleableProduct(): bool
     {

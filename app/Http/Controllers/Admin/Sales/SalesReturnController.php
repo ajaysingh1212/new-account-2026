@@ -27,24 +27,28 @@ class SalesReturnController extends Controller
     public function create(EntryVisibilityService $visibility, SerialUnitService $serialUnits)
     {
         $invoices = $visibility->scopeForUser(
-            SalesInvoice::with(['party','items.item'])->latest(),
+            SalesInvoice::with(['party','items.item','returns.items'])->latest(),
             SalesInvoice::class
         )->get();
 
         $invoiceData = [];
+        $stockUnitsByCompany = [];
 
         foreach ($invoices as $invoice) {
             $invoiceData[$invoice->id] = [];
 
             foreach ($invoice->items as $line) {
-                $alreadyReturned = (float) SalesReturnItem::where('sales_invoice_item_id', $line->id)->sum('quantity');
-                $returnedKeys = $serialUnits->returnedKeysForInvoiceLine($line->id);
+                $returnLines = $invoice->returns->flatMap(fn($return) => $return->items)
+                    ->where('sales_invoice_item_id', $line->id);
+                $alreadyReturned = (float) $returnLines->sum('quantity');
+                $returnedKeys = $returnLines->flatMap(fn($returnLine) => collect($returnLine->selected_units ?? [])->pluck('key'))
+                    ->filter()->values()->all();
                 $soldUnits = collect($line->selected_units ?? [])->values();
                 $availableUnits = $soldUnits
                     ->reject(fn($unit) => in_array($unit['key'] ?? null, $returnedKeys, true))
                     ->values();
                 if ($invoice->inter_company_transfer) {
-                    $availableKeys = $this->interCompanyAvailableUnits($invoice, $line)
+                    $availableKeys = $this->interCompanyAvailableUnits($invoice, $line, $stockUnitsByCompany)
                         ->pluck('unit.key')
                         ->filter()
                         ->flip();
@@ -363,7 +367,7 @@ class SalesReturnController extends Controller
         return 'SR-' . str_pad((string) (SalesReturn::where('company_id', auth()->user()->current_company_id)->withTrashed()->count() + 1), 5, '0', STR_PAD_LEFT);
     }
 
-    private function interCompanyAvailableUnits(SalesInvoice $invoice, $invoiceLine): \Illuminate\Support\Collection
+    private function interCompanyAvailableUnits(SalesInvoice $invoice, $invoiceLine, ?array &$stockUnitsByCompany = null): \Illuminate\Support\Collection
     {
         if (!$invoice->inter_company_transfer || !$invoiceLine->item) {
             return collect();
@@ -378,14 +382,21 @@ class SalesReturnController extends Controller
         return PurchaseBill::with(['items.item'])
             ->where('source_sales_invoice_id', $invoice->id)
             ->get()
-            ->flatMap(function (PurchaseBill $bill) use ($invoiceLine, $serialUnits, $soldUnits) {
+            ->flatMap(function (PurchaseBill $bill) use ($invoiceLine, $serialUnits, $soldUnits, &$stockUnitsByCompany) {
                 return $bill->items
                     ->filter(fn($line) => $line->item?->item_code === $invoiceLine->item?->item_code)
-                    ->flatMap(function ($targetLine) use ($bill, $serialUnits, $soldUnits) {
-                        $currentUnits = collect($serialUnits->currentStockUnitsByItem(
-                            (int) $bill->company_id,
-                            (int) $targetLine->item_id
-                        )[$targetLine->item_id] ?? []);
+                    ->flatMap(function ($targetLine) use ($bill, $serialUnits, $soldUnits, &$stockUnitsByCompany) {
+                        if ($stockUnitsByCompany !== null) {
+                            // Reuse stock only while building this read-only form.
+                            // Posting returns still reads fresh balances per item.
+                            $stockUnitsByCompany[$bill->company_id] ??= $serialUnits->currentStockUnitsByItem((int) $bill->company_id);
+                            $currentUnits = collect($stockUnitsByCompany[$bill->company_id][$targetLine->item_id] ?? []);
+                        } else {
+                            $currentUnits = collect($serialUnits->currentStockUnitsByItem(
+                                (int) $bill->company_id,
+                                (int) $targetLine->item_id
+                            )[$targetLine->item_id] ?? []);
+                        }
 
                         return $soldUnits->map(function ($soldUnit) use ($currentUnits, $targetLine) {
                             $currentUnit = $currentUnits->first(fn($unit) => $this->unitsMatch($soldUnit, $unit));

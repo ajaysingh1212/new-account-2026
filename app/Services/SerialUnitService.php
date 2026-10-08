@@ -159,7 +159,7 @@ class SerialUnitService
                 if (empty($units)) {
                     // Quantity-only legacy outflows have no selected identities.
                     // Consume only anonymous units; never infer a serial/GPS unit.
-                    if ($movement->direction === 'out' && $movement->item?->productType?->nature === 'readymade') {
+                    if ($movement->direction === 'out' && in_array($movement->item?->productType?->nature, Item::OTHER_BRAND_PRODUCT_NATURES, true)) {
                         $remaining = (int) floor((float) $movement->quantity);
                         foreach (($balances[(int) $movement->item_id] ?? []) as $identity => $row) {
                             if ($remaining <= 0) {
@@ -215,7 +215,12 @@ class SerialUnitService
 
         return collect($balances)
             ->map(fn($rows) => collect($rows)
-                ->filter(fn($row) => (int) $row['balance'] > 0 && ($row['last_direction'] ?? null) === 'in')
+                // A backdated repost can sort before its later-dated reversal.
+                // That reversal cancels one purchase, not the remaining repost.
+                ->filter(fn($row) => (int) $row['balance'] > 0 && (
+                    ($row['last_direction'] ?? null) === 'in'
+                    || ($row['last_movement']?->movement_type ?? null) === 'inter_company_purchase_reversal'
+                ))
                 ->map(fn($row) => $row['unit'])
                 ->values()
                 ->all())
@@ -294,7 +299,7 @@ class SerialUnitService
     {
         $item = $movement->item;
         $quantity = (float) $movement->quantity;
-        if ($movement->direction !== 'in' || $item?->productType?->nature !== 'readymade'
+        if ($movement->direction !== 'in' || ! in_array($item?->productType?->nature, Item::OTHER_BRAND_PRODUCT_NATURES, true)
             || $this->isGpsItem($item) || $quantity <= 0 || (float) (int) $quantity !== $quantity) {
             return [];
         }

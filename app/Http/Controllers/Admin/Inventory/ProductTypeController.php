@@ -92,7 +92,7 @@ class ProductTypeController extends Controller
         $data = $request->validate([
             'code' => ['required','max:30', Rule::unique('product_types')->where('company_id', $companyId)->ignore($id)],
             'name' => ['required','max:255'],
-            'nature' => ['required', Rule::in(['finished_goods','raw_material','readymade','service'])],
+            'nature' => ['required', Rule::in(['finished_goods','raw_material','readymade','traded_goods','service'])],
             'product_category_id' => [
                 'nullable',
                 'required_if:nature,finished_goods',
