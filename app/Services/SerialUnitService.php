@@ -157,6 +157,22 @@ class SerialUnitService
             ->each(function (StockMovement $movement) use (&$balances) {
                 $units = $this->movementUnits($movement);
                 if (empty($units)) {
+                    // Quantity-only legacy outflows have no selected identities.
+                    // Consume only anonymous units; never infer a serial/GPS unit.
+                    if ($movement->direction === 'out' && $movement->item?->productType?->nature === 'readymade') {
+                        $remaining = (int) floor((float) $movement->quantity);
+                        foreach (($balances[(int) $movement->item_id] ?? []) as $identity => $row) {
+                            if ($remaining <= 0) {
+                                break;
+                            }
+                            if (empty($row['unit']['quantity_only']) || (int) $row['balance'] <= 0) {
+                                continue;
+                            }
+                            $balances[(int) $movement->item_id][$identity]['balance']--;
+                            $balances[(int) $movement->item_id][$identity]['last_direction'] = 'out';
+                            $remaining--;
+                        }
+                    }
                     return;
                 }
 
@@ -237,11 +253,13 @@ class SerialUnitService
         if ($movement->reference_type === PurchaseBill::class && $movement->reference_id) {
             $purchase = PurchaseBill::with('items')->find($movement->reference_id);
 
-            return collect($purchase?->items ?? [])
+            $purchaseUnits = collect($purchase?->items ?? [])
                 ->flatMap(fn($line) => (int) $line->item_id === (int) $movement->item_id ? ($line->selected_units ?? []) : [])
                 ->filter(fn($unit) => is_array($unit))
                 ->values()
                 ->all();
+
+            return $purchaseUnits ?: $this->quantityOnlyMovementUnits($movement);
         }
 
         if ($movement->reference_type === SalesInvoice::class && $movement->reference_id) {
@@ -270,6 +288,31 @@ class SerialUnitService
         }
 
         return [];
+    }
+
+    private function quantityOnlyMovementUnits(StockMovement $movement): array
+    {
+        $item = $movement->item;
+        $quantity = (float) $movement->quantity;
+        if ($movement->direction !== 'in' || $item?->productType?->nature !== 'readymade'
+            || $this->isGpsItem($item) || $quantity <= 0 || (float) (int) $quantity !== $quantity) {
+            return [];
+        }
+
+        // Legacy purchases stored quantity without serial/unit metadata. Use the
+        // immutable movement ID so sales and returns retain the same identities.
+        return array_map(fn(int $index) => [
+            'key' => 'SM-' . $movement->id . '-' . $index,
+            'item_id' => $movement->item_id,
+            'item_name' => $item->name,
+            'serial_no' => null,
+            'vts_sim' => null,
+            'sku' => $item->sku,
+            'batch_no' => $movement->reference_no,
+            'production_batch_no' => $movement->reference_no,
+            'cost_per_unit' => (float) $movement->unit_price,
+            'quantity_only' => true,
+        ], range(1, (int) $quantity));
     }
 
     public function unitIdentity(array $unit, ?int $itemId = null): ?string

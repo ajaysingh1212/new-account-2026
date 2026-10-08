@@ -22,11 +22,12 @@ class ReadyMadePurchaseSaleTest extends TestCase
             'finished goods with serials' => ['finished_goods', true],
             'other brand with serials' => ['readymade', true],
             'other brand without serials' => ['readymade', false],
+            'legacy purchase without unit metadata' => ['readymade', false, true],
         ];
     }
 
     #[DataProvider('productNatures')]
-    public function test_ready_made_product_can_be_purchased_sold_returned_and_resold(string $nature, bool $withSerials): void
+    public function test_ready_made_product_can_be_purchased_sold_returned_and_resold(string $nature, bool $withSerials, bool $legacyPurchase = false): void
     {
         $user = User::factory()->create(['user_type' => 'super_admin']);
         $company = Company::create(['name' => 'Ready Made Company', 'created_by' => $user->id]);
@@ -65,7 +66,7 @@ class ReadyMadePurchaseSaleTest extends TestCase
             'billing_date' => '2026-09-24',
             'item_id' => [$item->id],
             'description' => ['Ready-made purchase'],
-            'quantity' => [2],
+            'quantity' => [$legacyPurchase ? 3 : 2],
             'unit' => ['PCS'],
             'unit_price' => [500],
             'discount_type' => ['percent'],
@@ -73,6 +74,20 @@ class ReadyMadePurchaseSaleTest extends TestCase
             'tax_percent' => [0],
             'selected_units' => [$withSerials ? 'READY-SERIAL-1' . PHP_EOL . 'READY-SERIAL-2' : ''],
         ])->assertRedirect(route('admin.purchases.index'));
+
+        if ($legacyPurchase) {
+            // Older purchase entries recorded quantity without individual units.
+            \App\Models\PurchaseBillItem::where('item_id', $item->id)->update(['selected_units' => null]);
+            \App\Models\StockMovement::where('item_id', $item->id)->update(['movement_units' => null]);
+            app(\App\Services\AccountingService::class)->moveStock($item->fresh(), [
+                'movement_date' => '2026-09-24',
+                'movement_type' => 'purchase_return',
+                'direction' => 'out',
+                'quantity' => 1,
+                'unit_price' => 500,
+                'total_value' => 500,
+            ]);
+        }
 
         $this->assertSame(2.0, (float) $item->fresh()->current_stock);
         $available = app(SerialUnitService::class)->currentStockUnitsByItem($company->id, $item->id)[$item->id] ?? [];
