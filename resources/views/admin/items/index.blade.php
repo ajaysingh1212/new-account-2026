@@ -159,6 +159,7 @@
         <table id="itemsTable" class="table im-table mb-0">
             <thead>
                 <tr>
+                    <th>ID</th>
                     <th>Code</th>
                     <th>Item</th>
                     <th>Category / Nature</th>
@@ -187,6 +188,8 @@
                     $isZero = $item->item_type === 'product' && (float)$item->current_stock <= 0;
                 @endphp
                 <tr>
+                    {{-- ID --}}
+                    <td>{{ $item->id }}</td>
                     {{-- Code --}}
                     <td>
                         <span class="item-code-badge">{{ $item->item_code }}</span>
