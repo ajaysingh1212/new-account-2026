@@ -213,6 +213,23 @@ class SerialUnitService
                 }
             });
 
+        // Invoice dates can be backdated before the return that made a unit
+        // resellable. Active invoice allocations still take it out of stock.
+        $soldKeys = array_fill_keys($this->activeSoldKeysWithoutOtherDocuments($companyId), true);
+        $soldRepairAliases = SalesInvoiceItem::whereHas('salesInvoice', fn($query) => $query->where('company_id', $companyId))
+            ->when($itemId, fn($query) => $query->where('item_id', $itemId))
+            ->get()
+            ->flatMap(function ($line) use ($soldKeys) {
+                return collect($line->selected_units ?? [])
+                    ->filter(fn($unit) => is_array($unit)
+                        && isset($soldKeys[$this->scopeUnitKey((int) $line->item_id, $unit)])
+                        && str_starts_with((string) ($unit['key'] ?? ''), 'repair-'))
+                    ->map(fn($unit) => $this->repairSerialAlias((int) $line->item_id, $unit))
+                    ->filter();
+            })
+            ->flip()
+            ->all();
+
         return collect($balances)
             ->map(fn($rows) => collect($rows)
                 // A backdated repost can sort before its later-dated reversal.
@@ -222,6 +239,8 @@ class SerialUnitService
                     || ($row['last_movement']?->movement_type ?? null) === 'inter_company_purchase_reversal'
                 ))
                 ->map(fn($row) => $row['unit'])
+                ->reject(fn($unit) => isset($soldKeys[$this->scopeUnitKey((int) $unit['item_id'], $unit)])
+                    || isset($soldRepairAliases[$this->repairSerialAlias((int) $unit['item_id'], $unit)]))
                 ->values()
                 ->all())
             ->filter(fn($rows) => !empty($rows))
@@ -293,6 +312,18 @@ class SerialUnitService
         }
 
         return [];
+    }
+
+    private function repairSerialAlias(int $itemId, array $unit): ?string
+    {
+        if (empty($unit['serial_no'])) {
+            return null;
+        }
+
+        // Repair keys are regenerated for the same serial during legacy
+        // inter-company repairs. Do not merge ordinary units by visible serial.
+        return json_encode([$itemId, (string) $unit['serial_no'],
+            (string) ($unit['vts_sim'] ?? ''), (string) ($unit['batch_no'] ?? '')]);
     }
 
     private function quantityOnlyMovementUnits(StockMovement $movement): array

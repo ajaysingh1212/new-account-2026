@@ -265,6 +265,77 @@ class SalesReturnSerialLifecycleTest extends TestCase
         $this->assertEmpty(app(SerialUnitService::class)->currentStockUnitsByItem($target->id, $targetItem->id));
     }
 
+    public function test_backdated_resale_hides_returned_serial_and_legacy_repair_aliases(): void
+    {
+        [$company, $item, $invoiceLine, $units, $user] = $this->serialSaleContext(2);
+        $original = $units[0];
+        $repair = array_merge($original, ['key' => 'repair-1-1-resale']);
+        $return = SalesReturn::create([
+            'company_id' => $company->id, 'sales_invoice_id' => $invoiceLine->sales_invoice_id,
+            'return_no' => 'SR-RESALE', 'return_date' => '2026-06-19',
+        ]);
+        SalesReturnItem::create([
+            'sales_return_id' => $return->id, 'sales_invoice_item_id' => $invoiceLine->id,
+            'item_id' => $item->id, 'quantity' => 1, 'unit' => 'PCS',
+            'unit_price' => 100, 'line_total' => 100, 'selected_units' => [$original],
+        ]);
+        foreach ([
+            ['2026-06-01', 'purchase', 'in', [$original]],
+            ['2026-06-10', 'sale', 'out', [$original]],
+            ['2026-06-19', 'sales_return', 'in', [$original]],
+        ] as [$date, $type, $direction, $movementUnits]) {
+            StockMovement::create([
+                'company_id' => $company->id, 'item_id' => $item->id,
+                'movement_date' => $date, 'movement_type' => $type, 'direction' => $direction,
+                'quantity' => 1, 'unit_price' => 50, 'total_value' => 50,
+                'stock_after' => 1, 'movement_units' => $movementUnits,
+            ]);
+        }
+        $service = app(SerialUnitService::class);
+        $this->assertSame(['1-0'], array_column($service->currentStockUnitsByItem($company->id)[$item->id], 'key'));
+
+        $resale = SalesInvoice::create([
+            'company_id' => $company->id, 'sale_type' => 'cash', 'invoice_no' => 'SI-RESALE',
+            'billing_date' => '2026-06-10', 'subtotal' => 100, 'grand_total' => 100,
+        ]);
+        $resaleLine = $invoiceLine->replicate();
+        $resaleLine->fill([
+            'sales_invoice_id' => $resale->id, 'quantity' => 1,
+            'line_total' => 100, 'selected_units' => [$original],
+        ])->save();
+        // A legacy duplicate inbound leaves a positive ledger balance, and
+        // the old invoice date sorts the resale before the later return.
+        foreach ([['purchase', 'in'], ['sale', 'out']] as [$type, $direction]) {
+            StockMovement::create([
+                'company_id' => $company->id, 'item_id' => $item->id,
+                'movement_date' => '2026-06-10', 'movement_type' => $type, 'direction' => $direction,
+                'quantity' => 1, 'unit_price' => 50, 'total_value' => 50,
+                'stock_after' => 0, 'movement_units' => [$original],
+            ]);
+        }
+        $this->assertSame([], $service->currentStockUnitsByItem($company->id));
+
+        // The same physical serial may also have an old key left behind by
+        // an inter-company repair while the resale uses the regenerated key.
+        $resaleLine->update(['selected_units' => [$repair]]);
+        $this->assertSame([], $service->currentStockUnitsByItem($company->id));
+        $item->update(['current_stock' => 5]);
+        $this->actingAs($user)->withoutMiddleware()->get(route('admin.stocks.index'))
+            ->assertOk()->assertViewHas('items', fn($items) => $items->isEmpty())
+            ->assertViewHas('overallQty', 0);
+
+        $resaleReturn = SalesReturn::create([
+            'company_id' => $company->id, 'sales_invoice_id' => $resale->id,
+            'return_no' => 'SR-RESALE-2', 'return_date' => '2026-06-20',
+        ]);
+        SalesReturnItem::create([
+            'sales_return_id' => $resaleReturn->id, 'sales_invoice_item_id' => $resaleLine->id,
+            'item_id' => $item->id, 'quantity' => 1, 'unit' => 'PCS',
+            'unit_price' => 100, 'line_total' => 100, 'selected_units' => [$repair],
+        ]);
+        $this->assertSame(['1-0'], array_column($service->currentStockUnitsByItem($company->id)[$item->id], 'key'));
+    }
+
     private function serialSaleContext(int $qty): array
     {
         $user = User::factory()->create(['user_type' => 'super_admin']);

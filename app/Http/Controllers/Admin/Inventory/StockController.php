@@ -73,6 +73,10 @@ class StockController extends Controller
             $item->calculated_avg_rate = (float) $item->purchase_price;
         });
 
+        $items = $items->filter(fn($item) => (float) $item->current_stock > 0
+            || (float) ($incomingByItem[$item->id] ?? 0) > 0
+            || $item->productType?->nature === 'raw_material')->values();
+
         $itemIds = $items->pluck('id');
         $latestMovementDates = StockMovement::where('company_id', $companyId)
             ->whereIn('item_id', $itemIds)
