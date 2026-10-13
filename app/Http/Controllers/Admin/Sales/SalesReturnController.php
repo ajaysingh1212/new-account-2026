@@ -76,10 +76,6 @@ class SalesReturnController extends Controller
                     'item' => optional($line->item)->name ?? 'N/A',
                     'qty' => (float) $line->quantity,
                     'already_returned' => round($alreadyReturned, 3),
-                    'returned_keys' => $returnedKeys,
-                    'unavailable_reason' => $invoice->inter_company_transfer
-                        ? 'Company B (merged company) ke stock mein ye item/serial nahi hai, isliye sales return nahi le sakte.'
-                        : 'This item/serial is not available for return.',
                     'remaining_qty' => $remainingQty,
                     'unit' => $line->unit ?? '',
                     'price' => (float) $line->unit_price,
