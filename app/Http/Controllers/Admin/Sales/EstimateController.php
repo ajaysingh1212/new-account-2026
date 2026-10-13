@@ -93,6 +93,7 @@ class EstimateController extends Controller
                 'discount_value' => (float) $line->discount_value,
                 'tax_percent' => (float) $line->tax_percent,
                 'description' => $line->description,
+                'selected_units' => $line->selected_units ?? [],
                 'weight' => (float) ($item?->per_quantity_weight ?? 0),
                 'current_stock' => (float) ($item?->current_stock ?? 0),
             ];
@@ -355,6 +356,10 @@ class EstimateController extends Controller
             'costCenters' => CostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
             'subCostCenters' => SubCostCenter::where('company_id', $companyId)->where('status', 'active')->get(),
             'estimateNo' => $this->nextNo(),
+            'unitPool' => app(SerialUnitService::class)->unitPool($companyId),
+            'itemMeta' => Item::where('company_id', $companyId)->get()->mapWithKeys(fn(Item $item) => [
+                $item->id => ['requires_gps' => app(SerialUnitService::class)->isGpsItem($item)],
+            ])->all(),
         ];
     }
 
@@ -385,16 +390,35 @@ class EstimateController extends Controller
             'discount_value.*' => ['nullable','numeric','min:0'],
             'tax_mode.*' => ['nullable','in:with_gst,without_gst'],
             'tax_percent.*' => ['nullable','numeric','min:0'],
+            'selected_units.*' => ['nullable','json'],
         ]);
     }
 
     private function storeLines(Request $request, Estimate $estimate): array
     {
         $subtotal = $tax = $lineDiscount = 0;
+        $serialUnits = app(SerialUnitService::class);
+        $unitPool = $serialUnits->unitPool($estimate->company_id);
+        $selectedKeys = [];
         foreach ($request->item_id as $i => $itemId) {
             $item = Item::with('productType')->findOrFail($itemId);
             $qty = (float) $request->quantity[$i];
+            abort_unless((int) $item->company_id === (int) $estimate->company_id, 422, 'Item must belong to the estimate company.');
             abort_if(! $item->isSaleableProduct(), 422, 'Only finished goods or readymade products can be used in Estimate / Quotation.');
+            $requested = json_decode($request->input("selected_units.$i", '[]'), true) ?? [];
+            abort_unless(is_array($requested) && collect($requested)->every(fn($unit) => is_array($unit)), 422, 'Invalid quotation units.');
+            abort_if(count($requested) > (int) $qty, 422, "Select at most {$qty} unit(s) for {$item->name}.");
+            $available = collect($unitPool[$item->id] ?? [])->where('sold', false)->keyBy('key');
+            $selectedUnits = [];
+            foreach ($requested as $unit) {
+                $canonical = $available->get($unit['key'] ?? '');
+                abort_unless($canonical, 422, "Selected unit for {$item->name} is no longer available. Please select it again.");
+                $scopeKey = $serialUnits->scopeUnitKey((int) $item->id, $canonical);
+                abort_if(in_array($scopeKey, $selectedKeys, true), 422, "The same unit cannot be selected twice for {$item->name}.");
+                abort_if($serialUnits->isGpsItem($item) && empty($canonical['vts_sim']), 422, "Select a SIM/VTS unit for GPS item {$item->name}.");
+                $selectedKeys[] = $scopeKey;
+                $selectedUnits[] = $canonical;
+            }
             $price = (float) $request->unit_price[$i];
             $base = $qty * $price;
             $discount = (($request->discount_type[$i] ?? 'percent') === 'flat') ? (float) ($request->discount_value[$i] ?? 0) : $base * (float) ($request->discount_value[$i] ?? 0) / 100;
@@ -408,6 +432,7 @@ class EstimateController extends Controller
 
             EstimateItem::create([
                 'estimate_id' => $estimate->id,
+                'selected_units' => $selectedUnits,
                 'item_id' => $item->id,
                 'description' => $request->description[$i] ?? $item->description,
                 'quantity' => $qty,

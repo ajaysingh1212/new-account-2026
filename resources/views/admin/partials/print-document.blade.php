@@ -20,7 +20,7 @@
     $shippingAddress = $shippingAddress ?: (($party ?? null)?->shipping_address ?? '');
 
     /* ── Amount in Words ── */
-    function numberToWordsIN(float $amount): string {
+    $numberToWordsIN = function(float $amount): string {
         $ones  = ['','One','Two','Three','Four','Five','Six','Seven','Eight','Nine','Ten',
                   'Eleven','Twelve','Thirteen','Fourteen','Fifteen','Sixteen','Seventeen',
                   'Eighteen','Nineteen'];
@@ -41,8 +41,8 @@
         $result .= ' Rupees';
         if ($paise)  $result .= ' and '.$words($paise).' Paise';
         return $result.' Only';
-    }
-    $amountInWords = numberToWordsIN($grandTotal);
+    };
+    $amountInWords = $numberToWordsIN($grandTotal);
 @endphp
 <!DOCTYPE html>
 <html lang="en" data-theme="light">
@@ -228,6 +228,8 @@ table.items td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-
 table.items td:not(:last-child){border-right:1px solid var(--border)}
 .item-name{font-weight:600;color:var(--text)}
 .item-desc{font-size:11px;color:var(--muted);margin-top:2px}
+.item-identifiers{font-size:11px;color:var(--text);margin-top:4px;overflow-wrap:anywhere}
+.item-code{overflow-wrap:anywhere}
 .amount-cell{font-weight:700;color:var(--text);text-align:right;white-space:nowrap}
 .num-cell{text-align:right;white-space:nowrap}
 .tfoot-row td{
@@ -443,7 +445,7 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
           <tr>
             <th style="width:36px">#</th>
             <th>Item &amp; Description</th>
-            <th>HSN/SAC</th>
+            <th>Item Code</th>
             <th class="num-cell">Qty</th>
             <th>Unit</th>
             <th class="num-cell">Rate (₹)</th>
@@ -458,8 +460,18 @@ table.items td:not(:last-child){border-right:1px solid var(--border)}
             <td>
               <div class="item-name">{{ $line->item?->name }}</div>
               @if($line->description)<div class="item-desc">{{ $line->description }}</div>@endif
+              @foreach(($line->selected_units ?? []) as $unit)
+                @php
+                    $identifiers = [];
+                    foreach (['serial_no' => 'Serial No.', 'vts_sim' => 'SIM / VTS No.'] as $field => $label) {
+                        $value = trim((string) ($unit[$field] ?? ''));
+                        if ($value !== '') $identifiers[] = $label.': '.$value;
+                    }
+                @endphp
+                @if($identifiers)<div class="item-identifiers">{{ implode(' | ', $identifiers) }}</div>@endif
+              @endforeach
             </td>
-            <td style="color:var(--muted);font-size:12px">{{ $line->item?->hsn_code }}</td>
+            <td class="item-code" style="color:var(--muted);font-size:12px">{{ $line->item?->item_code }}</td>
             <td class="num-cell">{{ number_format((float)$line->quantity,2) }}</td>
             <td style="color:var(--muted);font-size:12px">{{ $line->unit }}</td>
             <td class="num-cell">{{ number_format((float)$line->unit_price,2) }}</td>
