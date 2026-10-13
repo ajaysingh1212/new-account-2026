@@ -55,6 +55,7 @@ function setSelected(index,units){
     $(`.serial-count[data-index="${index}"]`).text(units.length);
 }
 function requiredQty(index){return Math.max(0,Math.floor(parseFloat($(`.return-qty[data-index="${index}"]`).val()||0)))}
+function unavailableMessage(line,unit){return `${line.item}${unit?' / '+unitLabel(unit):''}: ${line.unavailable_reason||'Not available for return.'}`}
 function reconcileSelection(index){
     const line=$(`.return-row[data-index="${index}"]`).data('line'),required=requiredQty(index),available=line.available_units||[];
     let chosen=selectedFor(index).filter(selected=>available.some(u=>u.key===selected.key)).slice(0,required);
@@ -63,29 +64,29 @@ function reconcileSelection(index){
     setSelected(index,chosen);
 }
 function renderLines(lines){
-    const returnable=lines.filter(line=>Number(line.remaining_qty)>0);
-    if(!returnable.length){$('#returnLines').html('<div class="alert alert-info">This invoice has no remaining quantity available for return.</div>');return}
-    const rows=returnable.map((line,index)=>{
+    if(!lines.length){$('#returnLines').html('<div class="alert alert-info">This invoice has no items.</div>');return}
+    const rows=lines.map((line,index)=>{
         const hasSerials=(line.sold_units||[]).length>0;
         return `<tr class="return-row" data-index="${index}">
-            <td><b>${line.item}</b><input type="hidden" name="line_id[]" value="${line.id}"><input type="hidden" name="returned_units[]" class="returned-units" data-index="${index}" value="[]"><div class="qty-note">${hasSerials?'Serial tracked item':'Non-serial item'}</div></td>
+            <td><input type="checkbox" class="line-select mr-2" data-index="${index}" aria-label="Select item"><b>${line.item}</b><input type="hidden" name="line_id[]" value="${line.id}"><input type="hidden" name="returned_units[]" class="returned-units" data-index="${index}" value="[]"><div class="qty-note">${hasSerials?'Serial tracked item':'Non-serial item'}</div></td>
             <td>${Number(line.qty).toLocaleString('en-IN')} ${line.unit}</td>
             <td>${Number(line.already_returned).toLocaleString('en-IN')} ${line.unit}</td>
-            <td style="max-width:150px"><input type="number" name="quantity[]" class="form-control return-qty" data-index="${index}" min="0" max="${line.remaining_qty}" step="${hasSerials?'1':'0.001'}" value="${line.remaining_qty}"><div class="qty-note">Max ${line.remaining_qty}</div></td>
+            <td style="max-width:150px"><input type="number" name="quantity[]" class="form-control return-qty" data-index="${index}" min="0" max="${line.remaining_qty}" step="${hasSerials?'1':'0.001'}" value="0"><div class="qty-note">Available: ${line.remaining_qty} ${line.unit}</div>${Number(line.remaining_qty)===0?'<div class="small text-danger">'+(Number(line.already_returned)>=Number(line.qty)?'Already returned':line.unavailable_reason)+'</div>':''}</td>
             <td>${hasSerials?`<button type="button" class="btn btn-outline-primary serial-btn open-serials" data-index="${index}" title="View or change serials"><i class="fas fa-barcode"></i><span class="serial-count" data-index="${index}">0</span></button>`:'<span class="text-muted">Not applicable</span>'}</td>
             <td><div class="serial-summary" data-index="${index}"></div></td>
             <td>Rs ${Number(line.price).toFixed(2)}</td>
         </tr>`;
     }).join('');
-    $('#returnLines').html(`<div class="table-responsive"><table class="table return-table"><thead><tr><th>Item</th><th>Sold Qty</th><th>Already Returned</th><th>Return Qty</th><th>Serials</th><th>Returning Serials</th><th>Unit Price</th></tr></thead><tbody>${rows}</tbody></table></div>`);
-    returnable.forEach((line,index)=>{$(`.return-row[data-index="${index}"]`).data('line',line);reconcileSelection(index)});
+    $('#returnLines').html(`<div class="mb-3"><label><input type="checkbox" id="selectAllReturnItems" class="mr-2">Select All</label></div><div class="table-responsive"><table class="table return-table"><thead><tr><th>Item</th><th>Sold Qty</th><th>Already Returned</th><th>Return Qty</th><th>Serials</th><th>Returning Serials</th><th>Unit Price</th></tr></thead><tbody>${rows}</tbody></table></div>`);
+    lines.forEach((line,index)=>{$(`.return-row[data-index="${index}"]`).data('line',line);reconcileSelection(index)});
 }
 function renderSerialModal(){
     const line=$(`.return-row[data-index="${activeLineIndex}"]`).data('line'),required=requiredQty(activeLineIndex),selectedKeys=modalSelection.map(u=>u.key),availableKeys=(line.available_units||[]).map(u=>u.key);
     $('#serialRequirement').text(`Select exactly ${required} serial${required===1?'':'s'} (${modalSelection.length} selected)`);
-    $('#serialGrid').html((line.available_units||[]).map(unit=>{
+    $('#serialGrid').html((line.sold_units||[]).map(unit=>{
         const returned=!availableKeys.includes(unit.key),selected=selectedKeys.includes(unit.key);
-        return `<label class="serial-card ${returned?'returned':''} ${selected?'selected':''}"><input type="checkbox" class="modal-serial-check" data-key="${unit.key}" ${selected?'checked':''} ${returned?'disabled':''}><span><b>${unitLabel(unit)}</b><div class="serial-meta">Batch ${unit.batch_no||'-'} | VTS/SIM ${unit.vts_sim||'-'} | Buyer ${unit.buyer_code||'-'}</div><div class="return-status ${returned?'text-muted':'text-success'}">${returned?'Already returned':'Available to return'}</div></span></label>`;
+        const status=(line.returned_keys||[]).includes(unit.key)?'Already returned':(returned?line.unavailable_reason:'Available to return');
+        return `<label class="serial-card ${returned?'returned':''} ${selected?'selected':''}"><input type="checkbox" class="modal-serial-check" data-key="${unit.key}" ${selected?'checked':''}><span><b>${unitLabel(unit)}</b><div class="serial-meta">Batch ${unit.batch_no||'-'} | VTS/SIM ${unit.vts_sim||'-'} | Buyer ${unit.buyer_code||'-'}</div><div class="return-status ${returned?'text-danger':'text-success'}">${status}</div></span></label>`;
     }).join(''));
 }
 $('#sourceInvoice').on('change',function(){
@@ -112,20 +113,35 @@ $('#sourceInvoice').on('change',function(){
 });
 $(document).on('input change','.return-qty',function(){
     const index=$(this).data('index'),line=$(`.return-row[data-index="${index}"]`).data('line'),max=Number(line.remaining_qty);
-    if(Number(this.value)>max){alert('Return quantity remaining quantity se jyada nahi ho sakti.');this.value=max}
+    if(Number(this.value)>max){alert(unavailableMessage(line)+' Available quantity: '+max);this.value=max}
     if((line.sold_units||[]).length&&Number(this.value)%1!==0){alert('Serial item quantity whole number me honi chahiye.');this.value=Math.floor(Number(this.value)||0)}
     reconcileSelection(index);
+    $(`.line-select[data-index="${index}"]`).prop('checked',Number(this.value)>0);
+});
+function selectReturnLine(index,checked){
+    const line=$(`.return-row[data-index="${index}"]`).data('line');
+    const qty=checked?Number(line.remaining_qty):0;
+    $(`.return-qty[data-index="${index}"]`).val(qty);
+    $(`.line-select[data-index="${index}"]`).prop('checked',qty>0);
+    reconcileSelection(index);
+    return checked && Number(line.qty)-Number(line.already_returned)>qty ? unavailableMessage(line) : null;
+}
+$(document).on('change','.line-select',function(){const message=selectReturnLine($(this).data('index'),this.checked);if(message)alert(message)});
+$(document).on('change','#selectAllReturnItems',function(){
+    const checked=this.checked,messages=[];
+    $('.return-row').each(function(){const message=selectReturnLine($(this).data('index'),checked);if(message)messages.push(message)});
+    if(messages.length)alert(messages.join('\n'));
 });
 $(document).on('click','.open-serials',function(){activeLineIndex=$(this).data('index');const line=$(`.return-row[data-index="${activeLineIndex}"]`).data('line');modalSelection=selectedFor(activeLineIndex);$('#serialModalTitle').text(line.item);renderSerialModal();$('#returnSerialModal').modal('show')});
 $(document).on('change','.modal-serial-check',function(){
     const line=$(`.return-row[data-index="${activeLineIndex}"]`).data('line'),required=requiredQty(activeLineIndex),unit=(line.available_units||[]).find(u=>u.key===$(this).data('key'));
-    if(this.checked){if(modalSelection.length>=required){alert(`Aap sirf ${required} serial select kar sakte hain.`);this.checked=false;return}if(unit)modalSelection.push(unit)}
+    if(this.checked){if(!unit){const sold=(line.sold_units||[]).find(u=>u.key===$(this).data('key'));alert((line.returned_keys||[]).includes($(this).data('key'))?'This serial has already been returned.':unavailableMessage(line,sold));this.checked=false;return}if(modalSelection.length>=required){alert(`Aap sirf ${required} serial select kar sakte hain.`);this.checked=false;return}modalSelection.push(unit)}
     else modalSelection=modalSelection.filter(u=>u.key!==$(this).data('key'));
     renderSerialModal();
 });
 $('#autoSelectSerials').on('click',function(){const line=$(`.return-row[data-index="${activeLineIndex}"]`).data('line');modalSelection=(line.available_units||[]).slice(0,requiredQty(activeLineIndex));renderSerialModal()});
 $('#saveSerialSelection').on('click',function(){const required=requiredQty(activeLineIndex);if(modalSelection.length!==required){alert(`Return quantity ke liye exactly ${required} serial select karein.`);return}setSelected(activeLineIndex,modalSelection);$('#returnSerialModal').modal('hide')});
-$('#salesReturnForm').on('submit',function(e){if(availabilityLoading||!$('.return-row').length){e.preventDefault();return}let valid=true;$('.return-row').each(function(){const index=$(this).data('index'),line=$(this).data('line'),qty=requiredQty(index);if((line.sold_units||[]).length&&selectedFor(index).length!==qty)valid=false});if(!valid){e.preventDefault();alert('Har serialised item ke return quantity ke barabar serial select karein.')}});
+$('#salesReturnForm').on('submit',function(e){if(availabilityLoading||!$('.return-row').length){e.preventDefault();return}let valid=true,total=0;$('.return-row').each(function(){const index=$(this).data('index'),line=$(this).data('line'),qty=requiredQty(index);total+=Number($(`.return-qty[data-index="${index}"]`).val())||0;if((line.sold_units||[]).length&&selectedFor(index).length!==qty)valid=false});if(!total){e.preventDefault();alert('Select at least one available item to return.');return}if(!valid){e.preventDefault();alert('Har serialised item ke return quantity ke barabar serial select karein.')}});
 if($('#sourceInvoice').val())$('#sourceInvoice').trigger('change');
 </script>
 @endpush

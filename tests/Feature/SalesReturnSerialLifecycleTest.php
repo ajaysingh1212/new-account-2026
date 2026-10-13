@@ -100,6 +100,20 @@ class SalesReturnSerialLifecycleTest extends TestCase
                 $this->assertEqualsCanonicalizing(['SERIAL-1', 'SERIAL-2', 'SERIAL-4'], array_column($line['available_units'], 'serial_no'));
                 return true;
             });
+        $this->postJson(route('admin.sales-returns.store'), [
+            'sales_invoice_id' => $invoice->id, 'return_no' => 'SR-UNAVAILABLE',
+            'return_date' => '2026-09-10', 'line_id' => [$invoice->items()->firstOrFail()->id],
+            'quantity' => [1], 'returned_units' => [json_encode([$units[2]])],
+        ])->assertUnprocessable()->assertJsonValidationErrors('returned_units');
+        $this->assertDatabaseMissing('sales_returns', ['return_no' => 'SR-UNAVAILABLE']);
+        StockMovement::create(array_merge($movement, [
+            'movement_date' => '2026-09-11', 'movement_type' => 'sale', 'direction' => 'out',
+            'quantity' => 3, 'movement_units' => [$units[0], $units[1], $units[3]],
+        ]));
+        $this->getJson(route('admin.sales-returns.create', ['sales_invoice_id' => $invoice->id]))
+            ->assertOk()->assertJsonCount(1, 'lines')->assertJsonCount(4, 'lines.0.sold_units')
+            ->assertJsonCount(0, 'lines.0.available_units')->assertJsonPath('lines.0.remaining_qty', 0)
+            ->assertJsonPath('lines.0.unavailable_reason', 'Company B (merged company) ke stock mein ye item/serial nahi hai, isliye sales return nahi le sakte.');
         $this->getJson(route('admin.sales-returns.create'))->assertUnprocessable();
         $user->update(['current_company_id' => $target->id]);
         $this->getJson(route('admin.sales-returns.create', ['sales_invoice_id' => $invoice->id]))->assertNotFound();
