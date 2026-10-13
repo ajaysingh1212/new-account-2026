@@ -26,7 +26,7 @@
         <div id="returnLines"><div class="text-center text-muted py-5"><i class="fas fa-file-invoice fa-2x mb-2"></i><div>Select a sales invoice to view returnable items.</div></div></div>
         @include('admin.partials.entry-visibility')
     </div>
-    <div class="p-4 text-right" style="border-top:1px solid #edf1f7"><button class="btn btn-primary px-4"><i class="fas fa-check mr-1"></i> Post Sales Return</button></div>
+    <div class="p-4 text-right" style="border-top:1px solid #edf1f7"><button type="submit" id="postSalesReturn" class="btn btn-primary px-4" disabled><i class="fas fa-check mr-1"></i> Post Sales Return</button></div>
 </div>
 </form>
 
@@ -44,8 +44,8 @@
 
 @push('scripts')
 <script>
-const INVOICES=@json($invoiceData);
-let activeLineIndex=null, modalSelection=[];
+const AVAILABILITY_URL=@json(route('admin.sales-returns.create'));
+let activeLineIndex=null, modalSelection=[], availabilityRequest=null, availabilityLoading=false;
 function unitLabel(unit){return unit.serial_no||unit.vts_sim||unit.buyer_code||unit.batch_no||unit.key||'Serial unit'}
 function selectedFor(index){try{return JSON.parse($(`.returned-units[data-index="${index}"]`).val()||'[]')}catch(e){return[]}}
 function setSelected(index,units){
@@ -83,12 +83,33 @@ function renderLines(lines){
 function renderSerialModal(){
     const line=$(`.return-row[data-index="${activeLineIndex}"]`).data('line'),required=requiredQty(activeLineIndex),selectedKeys=modalSelection.map(u=>u.key),availableKeys=(line.available_units||[]).map(u=>u.key);
     $('#serialRequirement').text(`Select exactly ${required} serial${required===1?'':'s'} (${modalSelection.length} selected)`);
-    $('#serialGrid').html((line.sold_units||[]).map(unit=>{
+    $('#serialGrid').html((line.available_units||[]).map(unit=>{
         const returned=!availableKeys.includes(unit.key),selected=selectedKeys.includes(unit.key);
         return `<label class="serial-card ${returned?'returned':''} ${selected?'selected':''}"><input type="checkbox" class="modal-serial-check" data-key="${unit.key}" ${selected?'checked':''} ${returned?'disabled':''}><span><b>${unitLabel(unit)}</b><div class="serial-meta">Batch ${unit.batch_no||'-'} | VTS/SIM ${unit.vts_sim||'-'} | Buyer ${unit.buyer_code||'-'}</div><div class="return-status ${returned?'text-muted':'text-success'}">${returned?'Already returned':'Available to return'}</div></span></label>`;
     }).join(''));
 }
-$('#sourceInvoice').on('change',function(){renderLines(INVOICES[this.value]||[])});
+$('#sourceInvoice').on('change',function(){
+    if(availabilityRequest)availabilityRequest.abort();
+    activeLineIndex=null;modalSelection=[];
+    $('#returnSerialModal').modal('hide');
+    const invoiceId=this.value;
+    availabilityLoading=!!invoiceId;
+    $('#postSalesReturn').prop('disabled',true);
+    if(!invoiceId){$('#returnLines').empty();return}
+    $('#returnLines').html('<div class="text-center text-muted py-4">Loading available stock...</div>');
+    availabilityRequest=$.ajax({url:AVAILABILITY_URL,data:{sales_invoice_id:invoiceId},dataType:'json',cache:false})
+        .done(function(data){
+            if($('#sourceInvoice').val()!==invoiceId)return;
+            renderLines(data.lines||[]);
+            availabilityLoading=false;
+            $('#postSalesReturn').prop('disabled',!(data.lines||[]).some(line=>Number(line.remaining_qty)>0));
+        })
+        .fail(function(xhr,status){
+            if(status==='abort'||$('#sourceInvoice').val()!==invoiceId)return;
+            availabilityLoading=false;
+            $('#returnLines').html('<div class="alert alert-danger">Could not load current stock. Select the invoice again to retry.</div>');
+        });
+});
 $(document).on('input change','.return-qty',function(){
     const index=$(this).data('index'),line=$(`.return-row[data-index="${index}"]`).data('line'),max=Number(line.remaining_qty);
     if(Number(this.value)>max){alert('Return quantity remaining quantity se jyada nahi ho sakti.');this.value=max}
@@ -104,7 +125,7 @@ $(document).on('change','.modal-serial-check',function(){
 });
 $('#autoSelectSerials').on('click',function(){const line=$(`.return-row[data-index="${activeLineIndex}"]`).data('line');modalSelection=(line.available_units||[]).slice(0,requiredQty(activeLineIndex));renderSerialModal()});
 $('#saveSerialSelection').on('click',function(){const required=requiredQty(activeLineIndex);if(modalSelection.length!==required){alert(`Return quantity ke liye exactly ${required} serial select karein.`);return}setSelected(activeLineIndex,modalSelection);$('#returnSerialModal').modal('hide')});
-$('#salesReturnForm').on('submit',function(e){let valid=true;$('.return-row').each(function(){const index=$(this).data('index'),line=$(this).data('line'),qty=requiredQty(index);if((line.sold_units||[]).length&&selectedFor(index).length!==qty)valid=false});if(!valid){e.preventDefault();alert('Har serialised item ke return quantity ke barabar serial select karein.')}});
+$('#salesReturnForm').on('submit',function(e){if(availabilityLoading||!$('.return-row').length){e.preventDefault();return}let valid=true;$('.return-row').each(function(){const index=$(this).data('index'),line=$(this).data('line'),qty=requiredQty(index);if((line.sold_units||[]).length&&selectedFor(index).length!==qty)valid=false});if(!valid){e.preventDefault();alert('Har serialised item ke return quantity ke barabar serial select karein.')}});
 if($('#sourceInvoice').val())$('#sourceInvoice').trigger('change');
 </script>
 @endpush

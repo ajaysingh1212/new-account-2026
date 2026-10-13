@@ -24,12 +24,19 @@ class SalesReturnController extends Controller
         return view('admin.sales-returns.index', compact('returns'));
     }
 
-    public function create(EntryVisibilityService $visibility, SerialUnitService $serialUnits)
+    public function create(Request $request, EntryVisibilityService $visibility, SerialUnitService $serialUnits)
     {
+        if ($request->expectsJson()) {
+            $request->validate(['sales_invoice_id' => ['required', 'integer']]);
+        }
         $invoices = $visibility->scopeForUser(
-            SalesInvoice::with(['party','items.item','returns.items'])->latest(),
+            SalesInvoice::with(['party','items.item','returns.items'])->where('company_id', auth()->user()->current_company_id)->latest(),
             SalesInvoice::class
-        )->get();
+        )->when($request->expectsJson(), fn($query) => $query->whereKey($request->integer('sales_invoice_id')))->get();
+
+        if ($request->expectsJson() && $invoices->isEmpty()) {
+            abort(404);
+        }
 
         $invoiceData = [];
         $stockUnitsByCompany = [];
@@ -77,6 +84,11 @@ class SalesReturnController extends Controller
                     'available_units' => $availableUnits->all(),
                 ];
             }
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json(['lines' => $invoiceData[$request->integer('sales_invoice_id')] ?? []])
+                ->header('Cache-Control', 'no-store');
         }
 
         return view('admin.sales-returns.create', [

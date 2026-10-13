@@ -23,6 +23,88 @@ class SalesReturnSerialLifecycleTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_inter_company_return_selection_includes_stock_returned_on_multiple_dates(): void
+    {
+        $user = User::factory()->create(['user_type' => 'super_admin']);
+        $source = Company::create(['name' => 'Company A', 'created_by' => $user->id]);
+        $target = Company::create(['name' => 'Company B', 'created_by' => $user->id]);
+        $user->update(['current_company_id' => $source->id]);
+        $items = [];
+        foreach ([$source, $target] as $company) {
+            $type = ProductType::create(['company_id' => $company->id, 'code' => 'FG', 'name' => 'Finished Goods', 'nature' => 'finished_goods']);
+            $items[] = Item::create([
+                'company_id' => $company->id, 'product_type_id' => $type->id,
+                'item_code' => 'GPS-MULTI', 'name' => 'GPS Device', 'unit' => 'PCS',
+                'track_stock' => true, 'status' => 'active', 'current_stock' => 3,
+            ]);
+        }
+        [$sourceItem, $targetItem] = $items;
+        $units = collect(range(1, 4))->map(fn($number) => [
+            'key' => 'SOURCE-' . $number, 'serial_no' => 'SERIAL-' . $number,
+            'item_id' => $sourceItem->id,
+        ])->all();
+        $invoice = SalesInvoice::create([
+            'company_id' => $source->id, 'sale_type' => 'cash', 'invoice_no' => 'SI-MULTI',
+            'billing_date' => '2026-09-01', 'inter_company_transfer' => true,
+            'inter_company_target_company_ids' => [$target->id], 'created_by' => $user->id,
+        ]);
+        SalesInvoiceItem::create([
+            'sales_invoice_id' => $invoice->id, 'item_id' => $sourceItem->id,
+            'quantity' => 4, 'unit' => 'PCS', 'unit_price' => 100, 'line_total' => 400,
+            'selected_units' => $units,
+        ]);
+        $bill = PurchaseBill::create([
+            'company_id' => $target->id, 'purchase_type' => 'credit', 'invoice_no' => 'AUTO-MULTI',
+            'billing_date' => '2026-09-01', 'source_sales_invoice_id' => $invoice->id,
+            'inter_company_source_company_id' => $source->id,
+        ]);
+        PurchaseBillItem::create([
+            'purchase_bill_id' => $bill->id, 'item_id' => $targetItem->id,
+            'quantity' => 4, 'unit' => 'PCS', 'unit_price' => 100, 'line_total' => 400,
+            'selected_units' => $units,
+        ]);
+        $movement = [
+            'company_id' => $target->id, 'item_id' => $targetItem->id,
+            'unit_price' => 100, 'total_value' => 100, 'stock_after' => 3,
+        ];
+        StockMovement::create(array_merge($movement, [
+            'movement_date' => '2026-09-01', 'movement_type' => 'purchase', 'direction' => 'in',
+            'quantity' => 4, 'movement_units' => $units,
+        ]));
+        StockMovement::create(array_merge($movement, [
+            'movement_date' => '2026-09-02', 'movement_type' => 'sale', 'direction' => 'out',
+            'quantity' => 3, 'movement_units' => array_slice($units, 0, 3),
+        ]));
+        $this->actingAs($user)->get(route('admin.sales-returns.create'))->assertOk();
+        foreach ([0 => '2026-09-03', 1 => '2026-09-09'] as $index => $date) {
+            StockMovement::create(array_merge($movement, [
+                'movement_date' => $date, 'movement_type' => 'sales_return', 'direction' => 'in',
+                'quantity' => 1, 'movement_units' => [$units[$index]],
+            ]));
+            $response = $this->getJson(route('admin.sales-returns.create', ['sales_invoice_id' => $invoice->id]))
+                ->assertOk()
+                ->assertHeader('Cache-Control', 'no-store, private')
+                ->assertJsonPath('lines.0.remaining_qty', $index + 2);
+            $this->assertEqualsCanonicalizing(
+                array_merge(array_column(array_slice($units, 0, $index + 1), 'serial_no'), ['SERIAL-4']),
+                array_column($response->json('lines.0.available_units'), 'serial_no')
+            );
+        }
+
+        $this->actingAs($user)
+            ->get(route('admin.sales-returns.create'))
+            ->assertOk()
+            ->assertViewHas('invoiceData', function ($data) use ($invoice) {
+                $line = $data[$invoice->id][0];
+                $this->assertSame(3, (int) $line['remaining_qty']);
+                $this->assertEqualsCanonicalizing(['SERIAL-1', 'SERIAL-2', 'SERIAL-4'], array_column($line['available_units'], 'serial_no'));
+                return true;
+            });
+        $this->getJson(route('admin.sales-returns.create'))->assertUnprocessable();
+        $user->update(['current_company_id' => $target->id]);
+        $this->getJson(route('admin.sales-returns.create', ['sales_invoice_id' => $invoice->id]))->assertNotFound();
+    }
+
     public function test_inter_company_matching_does_not_treat_shared_buyer_code_as_serial_identity(): void
     {
         $controller = app(SalesReturnController::class);
