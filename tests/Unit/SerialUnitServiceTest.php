@@ -108,6 +108,7 @@ class SerialUnitServiceTest extends TestCase
         ]);
 
         $this->assertSame([], app(SerialUnitService::class)->currentStockUnitsByItem($company->id));
+        $this->assertSame([], app(SerialUnitService::class)->unitPool($company->id));
     }
 
     #[Test]

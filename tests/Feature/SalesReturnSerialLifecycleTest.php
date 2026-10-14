@@ -336,6 +336,129 @@ class SalesReturnSerialLifecycleTest extends TestCase
         $this->assertSame(['1-0'], array_column($service->currentStockUnitsByItem($company->id)[$item->id], 'key'));
     }
 
+    public function test_shared_sku_does_not_match_different_sim_or_unit_keys(): void
+    {
+        $controller = app(SalesReturnController::class);
+        $method = new \ReflectionMethod($controller, 'unitsMatch');
+        $this->assertFalse($method->invoke($controller,
+            ['key' => 'UNIT-1', 'sku' => 'GPS', 'vts_sim' => 'SIM-1'],
+            ['key' => 'UNIT-2', 'sku' => 'GPS', 'vts_sim' => 'SIM-2']
+        ));
+        $this->assertFalse($method->invoke($controller,
+            ['key' => 'UNIT-1', 'sku' => 'GPS'],
+            ['key' => 'UNIT-2', 'sku' => 'GPS']
+        ));
+    }
+
+    public function test_all_partial_customer_returns_are_available_to_source_company_and_leave_buyer_stock_on_return(): void
+    {
+        [$buyer, $buyerItem, $customerLine, $units, $user] = $this->serialSaleContext(20);
+        $units = array_map(fn($unit) => array_merge($unit, ['sku' => 'SHARED-GPS-SKU']), $units);
+        $customerLine->update(['selected_units' => $units]);
+        $seller = Company::create(['name' => 'Company A', 'created_by' => $user->id]);
+        $sellerType = $buyerItem->productType->replicate();
+        $sellerType->fill(['company_id' => $seller->id])->save();
+        $sellerItem = $buyerItem->replicate();
+        $sellerItem->fill(['company_id' => $seller->id, 'product_type_id' => $sellerType->id])->save();
+        $sellerUnits = array_map(fn($unit) => array_merge($unit, ['item_id' => $sellerItem->id]), $units);
+        $sourceInvoice = $customerLine->salesInvoice->replicate();
+        $sourceInvoice->fill([
+            'company_id' => $seller->id, 'invoice_no' => 'SI-A-B',
+            'inter_company_transfer' => true, 'inter_company_target_company_ids' => [$buyer->id],
+        ])->save();
+        $sourceLine = $customerLine->replicate();
+        $sourceLine->fill([
+            'sales_invoice_id' => $sourceInvoice->id, 'item_id' => $sellerItem->id,
+            'selected_units' => $sellerUnits,
+        ])->save();
+        $bill = PurchaseBill::create([
+            'company_id' => $buyer->id, 'purchase_type' => 'cash', 'invoice_no' => 'AUTO-A-B',
+            'billing_date' => '2026-06-01', 'source_sales_invoice_id' => $sourceInvoice->id,
+            'inter_company_source_company_id' => $seller->id,
+        ]);
+        $purchaseLine = PurchaseBillItem::create([
+            'purchase_bill_id' => $bill->id, 'item_id' => $buyerItem->id, 'quantity' => 20,
+            'unit' => 'PCS', 'unit_price' => 50, 'line_total' => 1000, 'selected_units' => $units,
+        ]);
+        foreach ([['purchase', 'in', '2026-06-01'], ['sale', 'out', '2026-06-10']] as [$type, $direction, $date]) {
+            StockMovement::create([
+                'company_id' => $buyer->id, 'item_id' => $buyerItem->id,
+                'movement_date' => $date, 'movement_type' => $type, 'direction' => $direction,
+                'quantity' => 20, 'unit_price' => 50, 'total_value' => 1000,
+                'stock_after' => $direction === 'in' ? 20 : 0, 'movement_units' => $units,
+            ]);
+        }
+        $service = app(SerialUnitService::class);
+        $this->assertSame([], $service->unitPool($buyer->id));
+        $offset = 0;
+        foreach ([5, 4, 2] as $index => $qty) {
+            $this->actingAs($user)->withoutMiddleware()->post(route('admin.sales-returns.store'), [
+                'sales_invoice_id' => $customerLine->sales_invoice_id,
+                'return_no' => 'SR-B-' . $index, 'return_date' => '2026-06-' . (15 + $index),
+                'line_id' => [$customerLine->id], 'quantity' => [$qty],
+                'returned_units' => [json_encode(array_slice($units, $offset, $qty))],
+            ])->assertSessionHasNoErrors()->assertRedirect(route('admin.sales-returns.index'));
+            $offset += $qty;
+            $this->assertCount($offset, $service->currentStockUnitsByItem($buyer->id)[$buyerItem->id]);
+        }
+        $user->update(['current_company_id' => $seller->id]);
+        $this->withMiddleware();
+        $this->actingAs($user)->get(route('admin.sales-returns.create'))->assertOk()
+            ->assertViewHas('invoiceData', function ($data) use ($sourceInvoice, $units) {
+                $line = $data[$sourceInvoice->id][0];
+                return $line['qty'] === 20.0 && $line['remaining_qty'] === 11
+                    && array_column($line['available_units'], 'key') === array_column(array_slice($units, 0, 11), 'key');
+            });
+        foreach ([5, 4] as $index => $qty) {
+            $start = $index === 0 ? 0 : 5;
+            $this->post(route('admin.sales-returns.store'), [
+                'sales_invoice_id' => $sourceInvoice->id, 'return_no' => 'SR-A-' . $index,
+                'return_date' => '2026-06-' . (20 + $index),
+                'line_id' => [$sourceLine->id], 'quantity' => [$qty],
+                'returned_units' => [json_encode(array_slice($sellerUnits, $start, $qty))],
+            ])->assertSessionHasNoErrors()->assertRedirect(route('admin.sales-returns.index'));
+        }
+        $this->assertSame(array_column(array_slice($units, 9, 2), 'key'),
+            array_column($service->currentStockUnitsByItem($buyer->id)[$buyerItem->id], 'key'));
+        $this->assertCount(9, $service->currentStockUnitsByItem($seller->id)[$sellerItem->id]);
+        $user->update(['current_company_id' => $buyer->id]);
+        $this->actingAs($user)->post(route('admin.purchase-returns.store'), [
+            'purchase_bill_id' => $bill->id, 'return_no' => 'PR-B-A', 'return_date' => '2026-06-22',
+            'line_id' => [$purchaseLine->id], 'quantity' => [2],
+            'returned_units' => [json_encode(array_slice($units, 9, 2))],
+        ])->assertSessionHasNoErrors()->assertRedirect(route('admin.purchase-returns.index'));
+        $this->assertSame([], $service->currentStockUnitsByItem($buyer->id));
+        $this->assertSame([], $service->unitPool($buyer->id));
+        $this->assertCount(11, $service->currentStockUnitsByItem($seller->id)[$sellerItem->id]);
+        $this->get(route('admin.stocks.index'))->assertOk()
+            ->assertViewHas('items', fn($items) => $items->isEmpty());
+
+        // Editing the purchase return must cancel its previous allocation
+        // release, so only the unit still returned belongs to Company A.
+        $purchaseReturn = \App\Models\PurchaseReturn::where('return_no', 'PR-B-A')->firstOrFail();
+        $this->put(route('admin.purchase-returns.update', $purchaseReturn), [
+            'return_no' => 'PR-B-A', 'return_date' => '2026-06-23',
+            'line_id' => [$purchaseLine->id], 'quantity' => [1],
+            'returned_units' => [json_encode([$units[9]])],
+        ])->assertSessionHasNoErrors()->assertRedirect(route('admin.purchase-returns.show', $purchaseReturn));
+        $this->assertCount(10, $service->currentStockUnitsByItem($seller->id)[$sellerItem->id]);
+        $this->assertSame([$units[10]['key']], array_column($service->currentStockUnitsByItem($buyer->id)[$buyerItem->id], 'key'));
+
+        $resale = $customerLine->salesInvoice->replicate();
+        $resale->fill(['invoice_no' => 'SI-B-RESALE', 'billing_date' => '2026-06-24'])->save();
+        $resaleLine = $customerLine->replicate();
+        $resaleLine->fill(['sales_invoice_id' => $resale->id, 'quantity' => 1, 'selected_units' => [$units[10]]])->save();
+        StockMovement::create([
+            'company_id' => $buyer->id, 'item_id' => $buyerItem->id, 'movement_date' => '2026-06-24',
+            'movement_type' => 'sale', 'direction' => 'out', 'quantity' => 1, 'unit_price' => 100,
+            'total_value' => 100, 'stock_after' => 0, 'movement_units' => [$units[10]],
+        ]);
+        $this->assertSame([], $service->currentStockUnitsByItem($buyer->id));
+        $this->assertSame([], $service->unitPool($buyer->id));
+        $this->get(route('admin.stocks.index'))->assertOk()
+            ->assertViewHas('items', fn($items) => $items->isEmpty());
+    }
+
     private function serialSaleContext(int $qty): array
     {
         $user = User::factory()->create(['user_type' => 'super_admin']);

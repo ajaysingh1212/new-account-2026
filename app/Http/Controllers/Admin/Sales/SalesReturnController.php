@@ -75,6 +75,8 @@ class SalesReturnController extends Controller
                     'tax' => (float) $line->tax_percent,
                     'sold_units' => $soldUnits->all(),
                     'available_units' => $availableUnits->all(),
+                    'returned_keys' => $returnedKeys,
+                    'inter_company' => (bool) $invoice->inter_company_transfer,
                 ];
             }
         }
@@ -666,12 +668,25 @@ class SalesReturnController extends Controller
 
     private function unitsMatch(array $left, array $right): bool
     {
-        foreach (['serial_no', 'sku', 'vts_sim', 'key'] as $field) {
+        // Auto purchases preserve the source key. Prefer it over display
+        // identifiers, which can be shared by different physical units.
+        if (!empty($left['key']) && !empty($right['key'])
+            && (string) $left['key'] === (string) $right['key']) {
+            return true;
+        }
+
+        // Legacy repairs may regenerate keys; use serial/SIM before SKU.
+        foreach (['serial_no', 'vts_sim'] as $field) {
             if (!empty($left[$field]) && !empty($right[$field])) {
                 return strcasecmp(trim((string) $left[$field]), trim((string) $right[$field])) === 0;
             }
         }
 
-        return false;
+        if (!empty($left['key']) && !empty($right['key'])) {
+            return false;
+        }
+
+        return !empty($left['sku']) && !empty($right['sku'])
+            && strcasecmp(trim((string) $left['sku']), trim((string) $right['sku'])) === 0;
     }
 }

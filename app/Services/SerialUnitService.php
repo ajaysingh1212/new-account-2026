@@ -57,6 +57,10 @@ class SerialUnitService
             })
             ->countBy();
 
+        foreach ($this->interCompanyPurchaseReturnedCounts($companyId, $excludeInvoiceId) as $key => $count) {
+            $returnedCounts->put($key, (int) $returnedCounts->get($key, 0) + $count);
+        }
+
         $salesKeys = $soldCounts
             ->filter(fn($count, $key) => $count > (int) $returnedCounts->get($key, 0))
             ->keys()
@@ -100,9 +104,12 @@ class SerialUnitService
         $usedKeys = $this->allocatedKeys($companyId, $excludeType, $excludeId);
 
         $currentUnits = collect($this->currentStockUnitsByItem($companyId));
-        if ($currentUnits->isEmpty()) {
-            $currentUnits = $this->postedFinishedGoodsUnits($companyId);
-        }
+        // Legacy documents without a stock ledger may supply units. Once an
+        // item has movements, its ledger is authoritative even when empty.
+        $ledgerItemIds = StockMovement::where('company_id', $companyId)->pluck('item_id')->all();
+        $legacyUnits = $this->postedFinishedGoodsUnits($companyId)
+            ->reject(fn($rows, $itemId) => in_array((int) $itemId, $ledgerItemIds));
+        $currentUnits = $currentUnits->union($legacyUnits);
 
         return $currentUnits
             ->map(fn(array $rows, int $itemId) => collect($rows)
@@ -377,7 +384,33 @@ class SerialUnitService
             ->flatMap(fn($line) => collect($line->selected_units ?? [])->map(fn($unit) => $this->scopeUnitKey((int) ($line->item_id ?? 0), $unit)))
             ->filter()
             ->countBy();
+        foreach ($this->interCompanyPurchaseReturnedCounts($companyId) as $key => $count) {
+            $returned->put($key, (int) $returned->get($key, 0) + $count);
+        }
         return $sold->filter(fn($count, $key) => $count > (int) $returned->get($key, 0))->keys()->values()->all();
+    }
+
+    private function interCompanyPurchaseReturnedCounts(int $companyId, ?int $excludeInvoiceId = null): array
+    {
+        // A buyer's purchase return also releases the source company's sale
+        // allocation. Update reversals cancel the old return before reposting.
+        $counts = [];
+        StockMovement::where('company_id', $companyId)
+            ->whereIn('movement_type', ['inter_company_purchase_return_in', 'inter_company_purchase_return_reversal'])
+            ->when($excludeInvoiceId, fn($query) => $query->whereNotIn('reference_id',
+                PurchaseReturn::whereHas('bill', fn($bill) => $bill->where('source_sales_invoice_id', $excludeInvoiceId))->select('id')
+            ))
+            ->get()
+            ->each(function (StockMovement $movement) use (&$counts) {
+                foreach ($this->movementUnits($movement) as $unit) {
+                    $key = $this->scopeUnitKey((int) $movement->item_id, $unit);
+                    if ($key) {
+                        $counts[$key] = ($counts[$key] ?? 0) + ($movement->direction === 'in' ? 1 : -1);
+                    }
+                }
+            });
+
+        return array_map(fn($count) => max(0, $count), $counts);
     }
 
     private function postedFinishedGoodsUnits(int $companyId): \Illuminate\Support\Collection
