@@ -43,16 +43,20 @@ class SalesReturnController extends Controller
 
         foreach ($invoices as $invoice) {
             $invoiceData[$invoice->id] = [];
+            $purchaseReturns = $this->interCompanyPurchaseReturns($invoice);
 
             foreach ($invoice->items as $line) {
                 $returnLines = $invoice->returns->flatMap(fn($return) => $return->items)
                     ->where('sales_invoice_item_id', $line->id);
-                $alreadyReturned = (float) $returnLines->sum('quantity');
+                $salesReturned = (float) $returnLines->sum('quantity');
+                $purchaseReturnDetails = $this->purchaseReturnDetailsForLine($line, $purchaseReturns);
+                $alreadyReturned = $salesReturned + $purchaseReturnDetails['quantity'];
                 $returnedKeys = $returnLines->flatMap(fn($returnLine) => collect($returnLine->selected_units ?? [])->pluck('key'))
                     ->filter()->values()->all();
                 $soldUnits = collect($line->selected_units ?? [])->values();
                 $availableUnits = $soldUnits
-                    ->reject(fn($unit) => in_array($unit['key'] ?? null, $returnedKeys, true))
+                    ->reject(fn($unit) => in_array($unit['key'] ?? null, $returnedKeys, true)
+                        || in_array($unit['key'] ?? null, $purchaseReturnDetails['keys'], true))
                     ->values();
                 if ($invoice->inter_company_transfer) {
                     $availableKeys = $this->interCompanyAvailableUnits($invoice, $line, $stockUnitsByCompany)
@@ -76,6 +80,10 @@ class SalesReturnController extends Controller
                     'item' => optional($line->item)->name ?? 'N/A',
                     'qty' => (float) $line->quantity,
                     'already_returned' => round($alreadyReturned, 3),
+                    'sales_returned_qty' => round($salesReturned, 3),
+                    'purchase_returned_qty' => $purchaseReturnDetails['quantity'],
+                    'purchase_returned_keys' => $purchaseReturnDetails['keys'],
+                    'purchase_return_refs' => $purchaseReturnDetails['references'],
                     'remaining_qty' => $remainingQty,
                     'unit' => $line->unit ?? '',
                     'price' => (float) $line->unit_price,
@@ -132,12 +140,15 @@ class SalesReturnController extends Controller
 
             $subtotal = $tax = 0;
             $storedLines = 0;
+            $purchaseReturns = $this->interCompanyPurchaseReturns($invoice);
             foreach ($request->line_id as $i => $lineId) {
                 $line = $invoice->items->firstWhere('id', (int) $lineId);
                 if (!$line) continue;
                 $alreadyReturned = (float) SalesReturnItem::where('sales_invoice_item_id', $line->id)
                     ->lockForUpdate()
                     ->sum('quantity');
+                $purchaseReturnDetails = $this->purchaseReturnDetailsForLine($line, $purchaseReturns);
+                $alreadyReturned += $purchaseReturnDetails['quantity'];
                 $remainingQty = max(0, (float) $line->quantity - $alreadyReturned);
                 $qty = round((float) ($request->quantity[$i] ?? 0), 3);
                 if ($qty <= 0) continue;
@@ -153,6 +164,7 @@ class SalesReturnController extends Controller
                     ->flatMap(fn($returnLine) => collect($returnLine->selected_units ?? [])->pluck('key'))
                     ->filter()
                     ->all();
+                $returnedKeys = array_merge($returnedKeys, $purchaseReturnDetails['keys']);
                 $availableUnits = $soldUnits
                     ->reject(fn($unit) => in_array($unit['key'], $returnedKeys, true))
                     ->keyBy('key');
@@ -379,6 +391,41 @@ class SalesReturnController extends Controller
     private function nextNo(): string
     {
         return 'SR-' . str_pad((string) (SalesReturn::where('company_id', auth()->user()->current_company_id)->withTrashed()->count() + 1), 5, '0', STR_PAD_LEFT);
+    }
+
+    private function interCompanyPurchaseReturns(SalesInvoice $invoice): \Illuminate\Support\Collection
+    {
+        if (!$invoice->inter_company_transfer) {
+            return collect();
+        }
+
+        return PurchaseBill::with(['returns.items.item'])
+            ->where('source_sales_invoice_id', $invoice->id)
+            ->get()
+            ->flatMap(fn($bill) => $bill->returns);
+    }
+
+    private function purchaseReturnDetailsForLine($invoiceLine, \Illuminate\Support\Collection $returns): array
+    {
+        $soldUnits = collect($invoiceLine->selected_units ?? []);
+        $keys = collect();
+        $references = collect();
+        foreach ($returns as $return) {
+            $returnedUnits = $return->items
+                ->filter(fn($line) => $line->item?->item_code === $invoiceLine->item?->item_code)
+                ->flatMap(fn($line) => $line->selected_units ?? []);
+            $matching = $soldUnits->filter(fn($sold) => $returnedUnits->contains(
+                fn($returned) => $this->unitsMatch($sold, $returned)
+            ))->pluck('key')->filter();
+            if ($matching->isNotEmpty()) {
+                $keys = $keys->concat($matching);
+                $references->push($return->return_no);
+            }
+        }
+
+        return ['keys' => $keys->unique()->values()->all(),
+            'quantity' => $keys->unique()->count(),
+            'references' => $references->unique()->values()->all()];
     }
 
     private function interCompanyAvailableUnits(SalesInvoice $invoice, $invoiceLine, ?array &$stockUnitsByCompany = null): \Illuminate\Support\Collection

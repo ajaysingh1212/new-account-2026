@@ -71,7 +71,7 @@ function renderLines(lines){
         return `<tr class="return-row" data-index="${index}">
             <td><b>${line.item}</b><input type="hidden" name="line_id[]" value="${line.id}"><input type="hidden" name="returned_units[]" class="returned-units" data-index="${index}" value="[]"><div class="qty-note">${hasSerials?'Serial tracked item':'Non-serial item'}</div></td>
             <td>${Number(line.qty).toLocaleString('en-IN')} ${line.unit}</td>
-            <td>${Number(line.already_returned).toLocaleString('en-IN')} ${line.unit}</td>
+            <td>${Number(line.already_returned).toLocaleString('en-IN')} ${line.unit}${Number(line.purchase_returned_qty)>0?`<div class="qty-note">Purchase return to source: ${line.purchase_returned_qty}<br>${(line.purchase_return_refs||[]).join(', ')}</div>`:''}</td>
             <td style="max-width:150px"><input type="number" name="quantity[]" class="form-control return-qty" data-index="${index}" min="0" max="${line.remaining_qty}" step="${hasSerials?'1':'0.001'}" value="${line.remaining_qty}" ${Number(line.remaining_qty)<=0?'readonly':''}><div class="qty-note">${line.inter_company?'Available in merged company:':'Max'} ${line.remaining_qty}</div></td>
             <td>${hasSerials?`<button type="button" class="btn btn-outline-primary serial-btn open-serials" data-index="${index}" title="View or change serials"><i class="fas fa-barcode"></i><span class="serial-count" data-index="${index}">0</span></button>`:'<span class="text-muted">Not applicable</span>'}</td>
             <td><div class="serial-summary" data-index="${index}"></div></td>
@@ -85,8 +85,8 @@ function renderSerialModal(){
     const line=$(`.return-row[data-index="${activeLineIndex}"]`).data('line'),required=requiredQty(activeLineIndex),selectedKeys=modalSelection.map(u=>u.key),availableKeys=(line.available_units||[]).map(u=>u.key);
     $('#serialRequirement').text(`Select exactly ${required} serial${required===1?'':'s'} (${modalSelection.length} selected)`);
     $('#serialGrid').html((line.sold_units||[]).map(unit=>{
-        const unavailable=!availableKeys.includes(unit.key),returned=(line.returned_keys||[]).includes(unit.key),selected=selectedKeys.includes(unit.key);
-        return `<label class="serial-card ${unavailable?'returned':''} ${selected?'selected':''}"><input type="checkbox" class="modal-serial-check" data-key="${unit.key}" ${selected?'checked':''} ${unavailable?'disabled':''}><span><b>${unitLabel(unit)}</b><div class="serial-meta">SKU ${unit.sku||'-'} | Batch ${unit.batch_no||'-'} | VTS/SIM ${unit.vts_sim||'-'} | Buyer ${unit.buyer_code||'-'}</div><div class="return-status ${unavailable?'text-muted':'text-success'}">${returned?'Already returned':unavailable?'Not currently in merged company stock':'Available to return'}</div></span></label>`;
+        const unavailable=!availableKeys.includes(unit.key),returned=(line.returned_keys||[]).includes(unit.key),purchaseReturned=(line.purchase_returned_keys||[]).includes(unit.key),selected=selectedKeys.includes(unit.key);
+        return `<label class="serial-card ${unavailable?'returned':''} ${selected?'selected':''}"><input type="checkbox" class="modal-serial-check" data-key="${unit.key}" ${selected?'checked':''} ${unavailable?'disabled':''}><span><b>${unitLabel(unit)}</b><div class="serial-meta">SKU ${unit.sku||'-'} | Batch ${unit.batch_no||'-'} | VTS/SIM ${unit.vts_sim||'-'} | Buyer ${unit.buyer_code||'-'}</div><div class="return-status ${unavailable?'text-muted':'text-success'}">${purchaseReturned?'Already sent to source by purchase return':returned?'Already returned':unavailable?'Not currently in merged company stock':'Available to return'}</div></span></label>`;
     }).join(''));
 }
 $('#sourceInvoice').on('change',function(){

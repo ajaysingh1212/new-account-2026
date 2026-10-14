@@ -92,3 +92,17 @@ test('serial picker shows SKU and separates unavailable stock from completed ret
     assert.match(f.$('#serialGrid').content, /Already returned/);
     assert.equal(vm.runInContext('unitLabel({sku:"SKU-ONLY"})', f.context), 'SKU-ONLY');
 });
+
+test('purchase returns explain stock already sent to the source company', () => {
+    const f = form();
+    const returned = { ...line, remaining_qty: 0, already_returned: 1,
+        purchase_returned_qty: 1, purchase_return_refs: ['PR-00020'],
+        purchase_returned_keys: [unit.key], available_units: [] };
+    f.select('1');
+    f.requests[0].success({ lines: [returned] });
+    assert.match(f.$('#returnLines').content, /Purchase return to source: 1/);
+    assert.match(f.$('#returnLines').content, /PR-00020/);
+    vm.runInContext('activeLineIndex=0; renderSerialModal();', f.context);
+    assert.match(f.$('#serialGrid').content, /Already sent to source by purchase return/);
+    assert.equal(f.$('#postSalesReturn').props.disabled, true);
+});

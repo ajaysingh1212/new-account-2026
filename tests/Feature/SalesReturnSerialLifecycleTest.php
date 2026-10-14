@@ -512,6 +512,15 @@ class SalesReturnSerialLifecycleTest extends TestCase
         $this->assertSame([], $service->currentStockUnitsByItem($buyer->id));
         $this->assertSame([], $service->unitPool($buyer->id));
         $this->assertCount(11, $service->currentStockUnitsByItem($seller->id)[$sellerItem->id]);
+        $user->update(['current_company_id' => $seller->id]);
+        $this->actingAs($user)->getJson(route('admin.sales-returns.create', ['sales_invoice_id' => $sourceInvoice->id]))
+            ->assertOk()->assertJsonPath('lines.0.already_returned', 11)
+            ->assertJsonPath('lines.0.sales_returned_qty', 9)
+            ->assertJsonPath('lines.0.purchase_returned_qty', 2)
+            ->assertJsonPath('lines.0.purchase_return_refs.0', 'PR-B-A')
+            ->assertJsonPath('lines.0.remaining_qty', 0);
+        $user->update(['current_company_id' => $buyer->id]);
+        $this->actingAs($user);
         $this->get(route('admin.stocks.index'))->assertOk()
             ->assertViewHas('items', fn($items) => $items->isEmpty());
 
@@ -524,6 +533,14 @@ class SalesReturnSerialLifecycleTest extends TestCase
             'returned_units' => [json_encode([$units[9]])],
         ])->assertSessionHasNoErrors()->assertRedirect(route('admin.purchase-returns.show', $purchaseReturn));
         $this->assertCount(10, $service->currentStockUnitsByItem($seller->id)[$sellerItem->id]);
+        $user->update(['current_company_id' => $seller->id]);
+        $this->actingAs($user)->getJson(route('admin.sales-returns.create', ['sales_invoice_id' => $sourceInvoice->id]))
+            ->assertOk()->assertJsonPath('lines.0.already_returned', 10)
+            ->assertJsonPath('lines.0.purchase_returned_qty', 1)
+            ->assertJsonPath('lines.0.purchase_returned_keys.0', $units[9]['key'])
+            ->assertJsonPath('lines.0.remaining_qty', 1);
+        $user->update(['current_company_id' => $buyer->id]);
+        $this->actingAs($user);
         $this->assertSame([$units[10]['key']], array_column($service->currentStockUnitsByItem($buyer->id)[$buyerItem->id], 'key'));
 
         $resale = $customerLine->salesInvoice->replicate();
