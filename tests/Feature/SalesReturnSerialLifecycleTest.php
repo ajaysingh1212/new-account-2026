@@ -16,6 +16,7 @@ use App\Models\StockMovement;
 use App\Models\User;
 use App\Http\Controllers\Admin\Sales\SalesReturnController;
 use App\Services\SerialUnitService;
+use App\Services\InvoiceSerialHistoryService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -512,6 +513,11 @@ class SalesReturnSerialLifecycleTest extends TestCase
         $this->assertSame([], $service->currentStockUnitsByItem($buyer->id));
         $this->assertSame([], $service->unitPool($buyer->id));
         $this->assertCount(11, $service->currentStockUnitsByItem($seller->id)[$sellerItem->id]);
+        $history = app(InvoiceSerialHistoryService::class)->forInvoice($sourceInvoice->fresh());
+        $this->assertCount(20, $history[$sourceLine->id]);
+        $this->assertSame($seller->id, $history[$sourceLine->id][9]['stock_locations'][0]['company_id']);
+        $this->assertContains('Customer sales return', array_column($history[$sourceLine->id][9]['events'], 'action'));
+        $this->assertContains('Received purchase return from buyer company', array_column($history[$sourceLine->id][9]['events'], 'action'));
         $user->update(['current_company_id' => $seller->id]);
         $this->actingAs($user)->getJson(route('admin.sales-returns.create', ['sales_invoice_id' => $sourceInvoice->id]))
             ->assertOk()->assertJsonPath('lines.0.already_returned', 11)
@@ -556,6 +562,34 @@ class SalesReturnSerialLifecycleTest extends TestCase
         $this->assertSame([], $service->unitPool($buyer->id));
         $this->get(route('admin.stocks.index'))->assertOk()
             ->assertViewHas('items', fn($items) => $items->isEmpty());
+
+        $history = app(InvoiceSerialHistoryService::class)->forInvoice($sourceInvoice->fresh());
+        $this->assertSame('SI-B-RESALE', $history[$sourceLine->id][10]['active_customer_sale']['reference']);
+        $this->assertSame([], $history[$sourceLine->id][10]['stock_locations']);
+
+        // A can sell a returned serial again. Removing that serial from the
+        // original invoice by a later edit must not erase its circulation.
+        $sellerResale = $sourceInvoice->replicate();
+        $sellerResale->fill(['invoice_no' => 'SI-A-RESALE', 'billing_date' => '2026-06-25', 'inter_company_transfer' => false])->save();
+        $sellerResaleLine = $sourceLine->replicate();
+        $sellerResaleLine->fill(['sales_invoice_id' => $sellerResale->id, 'quantity' => 1, 'selected_units' => [$sellerUnits[9]]])->save();
+        foreach ([['purchase', 'in', '2026-06-01'], ['sale', 'out', '2026-06-10'], ['sale', 'out', '2026-06-25']] as [$type, $direction, $date]) {
+            StockMovement::create([
+                'company_id' => $seller->id, 'item_id' => $sellerItem->id, 'movement_date' => $date,
+                'movement_type' => $type, 'direction' => $direction, 'quantity' => 1, 'unit_price' => 50,
+                'total_value' => 50, 'stock_after' => 0, 'movement_units' => [$sellerUnits[9]],
+                'reference_type' => SalesInvoice::class,
+                'reference_id' => $date === '2026-06-25' ? $sellerResale->id : $sourceInvoice->id,
+            ]);
+        }
+        $sourceLine->update(['selected_units' => array_values(array_filter($sellerUnits, fn($unit) => $unit['key'] !== $sellerUnits[9]['key']))]);
+        $history = app(InvoiceSerialHistoryService::class)->forInvoice($sourceInvoice->fresh());
+        $historical = $history[-$sellerItem->id][0];
+        $this->assertTrue($historical['historical_only']);
+        $this->assertSame($sellerUnits[9]['key'], $historical['key']);
+        $this->assertSame('SI-A-RESALE', $historical['active_customer_sale']['reference']);
+        $this->assertSame([], $historical['stock_locations']);
+        $this->assertContains('Original invoice sale (line later edited)', array_column($historical['events'], 'action'));
     }
 
     private function serialSaleContext(int $qty): array

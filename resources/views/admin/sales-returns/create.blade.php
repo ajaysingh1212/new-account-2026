@@ -48,6 +48,13 @@ const INVOICES=@json($invoiceData);
 const AVAILABILITY_URL=@json(route('admin.sales-returns.create'));
 let activeLineIndex=null, modalSelection=[], availabilityRequest=null, availabilityLoading=false;
 function unitLabel(unit){return unit.serial_no||unit.vts_sim||unit.sku||unit.buyer_code||unit.batch_no||unit.key||'Serial unit'}
+function historyText(value){return String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function historyEvents(events){return events.length?events.map(event=>`<div class="mb-2"><b>${historyText(event.date)} · ${historyText(event.action)}</b><div class="small text-muted">${historyText(event.company)} · ${historyText(event.reference)}${event.party?` · ${historyText(event.party)}`:''}</div></div>`).join(''):'<span class="text-muted">No recorded activity</span>'}
+function renderHistory(lines){
+    const rows=lines.flatMap(line=>(line.serial_history||[]).map(unit=>`<tr><td><b>${historyText(unitLabel(unit))}</b><div class="small text-muted">${historyText(line.item)}<br>SKU: ${historyText(unit.sku||'-')}<br>VTS/SIM: ${historyText(unit.vts_sim||'-')}${unit.historical_only?'<br>Historical serial: removed from current invoice by edit':''}</div></td><td><b>${historyText(unit.status)}</b>${unit.active_customer_sale?`<div class="small text-muted">Active sale: ${historyText(unit.active_customer_sale.reference)} · ${historyText(unit.active_customer_sale.date)}</div>`:''}</td><td>${historyEvents((unit.events||[]).filter(event=>Number(event.company_id)===Number(unit.source_company_id)))}</td><td>${historyEvents((unit.events||[]).filter(event=>Number(event.company_id)!==Number(unit.source_company_id)))}</td></tr>`));
+    if(!rows.length)return '';
+    return `<details class="mt-4" open><summary class="font-weight-bold mb-3">Serial history and current location (${rows.length} units)</summary><div class="small text-muted mb-3">Har sold serial ka source company aur merged company mein sale, return aur current stock. Dates aur document numbers neeche diye hain.</div><div class="table-responsive"><table class="table return-table"><thead><tr><th>Serial / SKU / VTS-SIM</th><th>Current status</th><th>Source company history</th><th>Merged company history</th></tr></thead><tbody>${rows.join('')}</tbody></table></div></details>`;
+}
 function selectedFor(index){try{return JSON.parse($(`.returned-units[data-index="${index}"]`).val()||'[]')}catch(e){return[]}}
 function setSelected(index,units){
     $(`.returned-units[data-index="${index}"]`).val(JSON.stringify(units));
@@ -63,9 +70,9 @@ function reconcileSelection(index){
     if(chosen.length<required)chosen=chosen.concat(available.filter(u=>!keys.includes(u.key)).slice(0,required-chosen.length));
     setSelected(index,chosen);
 }
-function renderLines(lines){
+function renderLines(lines,historyLines=null){
     const returnable=lines;
-    if(!returnable.length){$('#returnLines').html('<div class="alert alert-info">This invoice has no remaining quantity available for return.</div>');return}
+    if(!returnable.length){$('#returnLines').html('<div class="alert alert-info">This invoice has no remaining quantity available for return.</div>'+renderHistory(historyLines||lines));return}
     const rows=returnable.map((line,index)=>{
         const hasSerials=(line.sold_units||[]).length>0;
         return `<tr class="return-row" data-index="${index}">
@@ -78,7 +85,7 @@ function renderLines(lines){
             <td>Rs ${Number(line.price).toFixed(2)}</td>
         </tr>`;
     }).join('');
-    $('#returnLines').html(`<div class="table-responsive"><table class="table return-table"><thead><tr><th>Item</th><th>Sold Qty</th><th>Already Returned</th><th>Return Qty</th><th>Serials</th><th>Returning Serials</th><th>Unit Price</th></tr></thead><tbody>${rows}</tbody></table></div>`);
+    $('#returnLines').html(`<div class="table-responsive"><table class="table return-table"><thead><tr><th>Item</th><th>Sold Qty</th><th>Already Returned</th><th>Return Qty</th><th>Serials</th><th>Returning Serials</th><th>Unit Price</th></tr></thead><tbody>${rows}</tbody></table></div>${renderHistory(historyLines||lines)}`);
     returnable.forEach((line,index)=>{$(`.return-row[data-index="${index}"]`).data('line',line);reconcileSelection(index)});
 }
 function renderSerialModal(){
@@ -101,7 +108,7 @@ $('#sourceInvoice').on('change',function(){
     availabilityRequest=$.ajax({url:AVAILABILITY_URL,data:{sales_invoice_id:invoiceId},dataType:'json',cache:false})
         .done(function(data){
             if($('#sourceInvoice').val()!==invoiceId)return;
-            renderLines(data.lines||[]);
+            renderLines(data.lines||[],data.history_lines||null);
             availabilityLoading=false;
             $('#postSalesReturn').prop('disabled',!(data.lines||[]).some(line=>Number(line.remaining_qty)>0));
         })

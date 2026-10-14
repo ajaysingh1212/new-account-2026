@@ -11,6 +11,7 @@ use App\Models\SalesReturnItem;
 use App\Models\StockMovement;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
+use App\Services\InvoiceSerialHistoryService;
 use App\Services\SerialUnitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -44,6 +45,7 @@ class SalesReturnController extends Controller
         foreach ($invoices as $invoice) {
             $invoiceData[$invoice->id] = [];
             $purchaseReturns = $this->interCompanyPurchaseReturns($invoice);
+            $serialHistory = $request->expectsJson() ? app(InvoiceSerialHistoryService::class)->forInvoice($invoice) : [];
 
             foreach ($invoice->items as $line) {
                 $returnLines = $invoice->returns->flatMap(fn($return) => $return->items)
@@ -92,12 +94,16 @@ class SalesReturnController extends Controller
                     'available_units' => $availableUnits->all(),
                     'returned_keys' => $returnedKeys,
                     'inter_company' => (bool) $invoice->inter_company_transfer,
+                    'serial_history' => $serialHistory[$line->id] ?? [],
                 ];
             }
         }
 
         if ($request->expectsJson()) {
-            return response()->json(['lines' => $invoiceData[$request->integer('sales_invoice_id')] ?? []])
+            return response()->json(['lines' => $invoiceData[$request->integer('sales_invoice_id')] ?? [],
+                'history_lines' => collect($serialHistory)->map(fn($units) => [
+                    'item' => $units[0]['item_name'] ?? 'N/A', 'serial_history' => $units,
+                ])->values()->all()])
                 ->header('Cache-Control', 'no-store');
         }
 

@@ -106,3 +106,24 @@ test('purchase returns explain stock already sent to the source company', () => 
     assert.match(f.$('#serialGrid').content, /Already sent to source by purchase return/);
     assert.equal(f.$('#postSalesReturn').props.disabled, true);
 });
+
+test('invoice selection shows both companies history, current status and edited serials', () => {
+    const f = form();
+    f.select('1');
+    f.requests[0].success({ lines: [line], history_lines: [{ item: 'GPS', serial_history: [{
+        ...unit, source_company_id: 1, historical_only: true, status: 'Sold by Company B to Customer <One>',
+        active_customer_sale: { reference: 'B-192', date: '2026-10-10' },
+        events: [
+            { company_id: 1, company: 'Company A', date: '2026-09-21', action: 'Received purchase return from buyer company', reference: 'PR-18' },
+            { company_id: 2, company: 'Company B', date: '2026-10-10', action: 'Customer sale', reference: 'B-192', party: 'Customer <One>' },
+        ],
+    }] }] });
+    const html = f.$('#returnLines').content;
+    assert.match(html, /Serial history and current location \(1 units\)/);
+    assert.match(html, /Historical serial: removed from current invoice by edit/);
+    assert.match(html, /2026-09-21/);
+    assert.match(html, /PR-18/);
+    assert.match(html, /B-192/);
+    assert.match(html, /Customer &lt;One&gt;/);
+    assert.doesNotMatch(html, /Customer <One>/);
+});
