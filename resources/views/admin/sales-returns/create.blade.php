@@ -45,8 +45,9 @@
 @push('scripts')
 <script>
 const INVOICES=@json($invoiceData);
-let activeLineIndex=null, modalSelection=[];
-function unitLabel(unit){return unit.serial_no||unit.vts_sim||unit.buyer_code||unit.batch_no||unit.key||'Serial unit'}
+const AVAILABILITY_URL=@json(route('admin.sales-returns.create'));
+let activeLineIndex=null, modalSelection=[], availabilityRequest=null, availabilityLoading=false;
+function unitLabel(unit){return unit.serial_no||unit.vts_sim||unit.sku||unit.buyer_code||unit.batch_no||unit.key||'Serial unit'}
 function selectedFor(index){try{return JSON.parse($(`.returned-units[data-index="${index}"]`).val()||'[]')}catch(e){return[]}}
 function setSelected(index,units){
     $(`.returned-units[data-index="${index}"]`).val(JSON.stringify(units));
@@ -84,8 +85,8 @@ function renderSerialModal(){
     const line=$(`.return-row[data-index="${activeLineIndex}"]`).data('line'),required=requiredQty(activeLineIndex),selectedKeys=modalSelection.map(u=>u.key),availableKeys=(line.available_units||[]).map(u=>u.key);
     $('#serialRequirement').text(`Select exactly ${required} serial${required===1?'':'s'} (${modalSelection.length} selected)`);
     $('#serialGrid').html((line.sold_units||[]).map(unit=>{
-        const returned=!availableKeys.includes(unit.key),selected=selectedKeys.includes(unit.key);
-        return `<label class="serial-card ${returned?'returned':''} ${selected?'selected':''}"><input type="checkbox" class="modal-serial-check" data-key="${unit.key}" ${selected?'checked':''} ${returned?'disabled':''}><span><b>${unitLabel(unit)}</b><div class="serial-meta">Batch ${unit.batch_no||'-'} | VTS/SIM ${unit.vts_sim||'-'} | Buyer ${unit.buyer_code||'-'}</div><div class="return-status ${returned?'text-muted':'text-success'}">${returned?'Already returned':'Available to return'}</div></span></label>`;
+        const unavailable=!availableKeys.includes(unit.key),returned=(line.returned_keys||[]).includes(unit.key),selected=selectedKeys.includes(unit.key);
+        return `<label class="serial-card ${unavailable?'returned':''} ${selected?'selected':''}"><input type="checkbox" class="modal-serial-check" data-key="${unit.key}" ${selected?'checked':''} ${unavailable?'disabled':''}><span><b>${unitLabel(unit)}</b><div class="serial-meta">SKU ${unit.sku||'-'} | Batch ${unit.batch_no||'-'} | VTS/SIM ${unit.vts_sim||'-'} | Buyer ${unit.buyer_code||'-'}</div><div class="return-status ${unavailable?'text-muted':'text-success'}">${returned?'Already returned':unavailable?'Not currently in merged company stock':'Available to return'}</div></span></label>`;
     }).join(''));
 }
 $('#sourceInvoice').on('change',function(){

@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\Company;
 use App\Models\Item;
+use App\Models\Permission;
 use App\Models\ProductType;
 use App\Models\Role;
 use App\Models\StockAdjustment;
@@ -40,6 +41,9 @@ class StockAdjustmentTest extends TestCase
             'role_id' => $role->id,
             'company_id' => $company->id,
         ]);
+        $role->permissions()->attach(Permission::create([
+            'name' => 'View Stocks', 'slug' => 'stocks.view', 'module' => 'stocks',
+        ]));
 
         $type = ProductType::create([
             'company_id' => $company->id,
@@ -66,7 +70,7 @@ class StockAdjustmentTest extends TestCase
             'created_by' => $user->id,
         ]);
 
-        $this->actingAs($user)->withoutMiddleware()->post(route('admin.stocks.adjust', $item), [
+        $this->actingAs($user)->post(route('admin.stocks.adjust', $item), [
             'target_stock' => 15.5,
             'note' => 'Physical count update',
         ])->assertRedirect();
@@ -86,7 +90,7 @@ class StockAdjustmentTest extends TestCase
             'adjusted_by' => $user->id,
         ]);
 
-        $this->actingAs($user)->withoutMiddleware()
+        $this->actingAs($user)
             ->get(route('admin.stocks.history', ['item_id' => $item->id]))
             ->assertOk()
             ->assertSee('Manual Stock Adjustment')
@@ -108,6 +112,14 @@ class StockAdjustmentTest extends TestCase
         ]);
 
         $user->update(['current_company_id' => $company->id]);
+
+        $role = Role::create([
+            'name' => 'Stock Viewer', 'slug' => 'stock-viewer', 'company_id' => $company->id, 'is_active' => true,
+        ]);
+        UserRole::create(['user_id' => $user->id, 'role_id' => $role->id, 'company_id' => $company->id]);
+        $role->permissions()->attach(Permission::create([
+            'name' => 'View Stocks', 'slug' => 'stocks.view', 'module' => 'stocks',
+        ]));
 
         $type = ProductType::create([
             'company_id' => $company->id,
@@ -134,7 +146,7 @@ class StockAdjustmentTest extends TestCase
             'created_by' => $user->id,
         ]);
 
-        $this->actingAs($user)->withoutMiddleware()
+        $this->actingAs($user)
             ->post(route('admin.stocks.adjust', $item), [
                 'target_stock' => 8,
             ])->assertForbidden();
