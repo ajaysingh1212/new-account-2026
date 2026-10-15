@@ -29,15 +29,26 @@
 
 @push('styles')
 <style>
-.trade-shell{background:#fff;border:1px solid #e8edf5;border-radius:8px;box-shadow:0 16px 36px rgba(15,23,42,.08);overflow:hidden}
-.trade-head{background:#122033;color:#fff;padding:22px 24px;display:flex;justify-content:space-between;gap:16px;align-items:center}
+.trade-shell{background:#f7f9fc;border:1px solid #e8edf5;border-radius:20px;box-shadow:0 16px 36px rgba(15,23,42,.08);overflow:hidden}
+.trade-head{background:linear-gradient(120deg,#17233b,#34316a 65%,#0f766e);color:#fff;padding:30px;display:flex;justify-content:space-between;gap:16px;align-items:center}
 .trade-head h2{font-weight:800;margin:0;font-size:24px;letter-spacing:0}
 .trade-head small{color:#a9b7ca}
-.trade-section{padding:20px 24px;border-bottom:1px solid #edf1f7}
+.trade-section{padding:24px;margin:18px;background:#fff;border:1px solid #e8edf5;border-radius:14px}
 .trade-title{font-size:12px;font-weight:800;color:#0f766e;text-transform:uppercase;letter-spacing:.6px;margin-bottom:12px}
-.trade-table{border-collapse:separate;border-spacing:0 14px}
+.trade-table{display:block;width:100%;margin:0}
+.trade-table tbody{display:grid;gap:16px;width:100%}
 .trade-table thead{display:none}
-.trade-table tbody tr{display:grid;grid-template-columns:minmax(320px,1.8fr) minmax(190px,1fr) 80px minmax(230px,1.3fr) 75px 105px 85px 120px 70px 46px;gap:12px;align-items:end;background:#fbfdff;border:1px solid #e5ebf3;border-radius:8px;padding:14px}
+.trade-table tbody tr{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:16px;align-items:start;background:#fbfdff;border:1px solid #e5ebf3;border-left:3px solid #7c3aed;border-radius:12px;padding:20px}
+.trade-table tbody td{grid-column:span 2;min-width:0}
+.trade-table tbody td:nth-child(1){grid-column:span 5}
+.trade-table tbody td:nth-child(2){grid-column:span 4}
+.trade-table tbody td:nth-child(3){grid-column:span 3}
+.trade-table tbody td:nth-child(4){grid-column:span 12;border-bottom:1px solid #e8edf5!important;padding-bottom:14px!important}
+.trade-table tbody td:last-child{grid-column:span 2;justify-self:end}
+.trade-table .select2-container{width:100%!important}
+.line-add-bar{margin-top:18px;padding:14px 16px;border:1px dashed #c4b5fd;border-radius:12px;background:#faf8ff;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.trade-shell input.form-control,.trade-shell select.form-control{height:44px}
+.trade-shell .form-control:focus{background:#fff}
 .trade-table td{display:block;border:0!important;padding:0!important}
 .trade-table td:before{content:attr(data-label);display:block;font-size:10px;text-transform:uppercase;color:#667085;font-weight:800;margin-bottom:5px}
 .trade-table .item-cell,.trade-table .desc-cell{min-width:0}
@@ -69,8 +80,8 @@
 .disc-limit-badge{display:none;font-size:10px;font-weight:700;color:#0f766e;margin-top:3px}
 .disc-limit-badge.show{display:block}
 
-@media(max-width:1400px){.trade-table tbody tr{grid-template-columns:1fr 1fr 80px 1fr 75px 105px 85px 120px 70px 46px}}
-@media(max-width:768px){.trade-table tbody tr{grid-template-columns:1fr}}
+@media(max-width:991px){.trade-table tbody tr{grid-template-columns:repeat(6,minmax(0,1fr))}.trade-table tbody td:nth-child(1),.trade-table tbody td:nth-child(2),.trade-table tbody td:nth-child(4){grid-column:span 6}.trade-table tbody td:nth-child(3){grid-column:span 2}}
+@media(max-width:575px){.trade-section{margin:10px;padding:16px}.trade-head{padding:22px 16px;align-items:start}.trade-head h2{font-size:20px}.trade-table tbody tr{padding:14px;gap:12px;grid-template-columns:repeat(2,minmax(0,1fr))}.trade-table tbody td{grid-column:span 1!important}.trade-table tbody td:nth-child(1),.trade-table tbody td:nth-child(2),.trade-table tbody td:nth-child(4){grid-column:span 2!important}}
 </style>
 @endpush
 
@@ -81,7 +92,7 @@
     <div class="trade-head">
         <div>
             <h2><i class="fas fa-file-invoice-dollar mr-2"></i>{{ $isEdit ? 'Edit Sales Invoice' : 'Sales Invoice' }}</h2>
-            <small>Finished goods and Other Brand products, stock out and party ledger posting.</small>
+            <small>Create a clear, complete invoice. Add products, select serials and review your totals.</small>
         </div>
         <a href="{{ route('admin.sales.index') }}" class="btn btn-outline-light btn-sm"><i class="fas fa-arrow-left mr-1"></i> Back</a>
     </div>
@@ -226,8 +237,7 @@
     {{-- ── Line Items ── --}}
     <div class="trade-section">
         <div class="d-flex justify-content-between align-items-center mb-2">
-            <div class="trade-title mb-0">Items</div>
-            <button type="button" id="addLine" class="btn btn-outline-primary btn-sm"><i class="fas fa-plus"></i> Add Row</button>
+            <div><div class="trade-title mb-1">Invoice items</div><small class="text-muted">Choose products, pricing and serial numbers for each line.</small></div>
         </div>
         <div class="table-responsive">
             <table class="table trade-table" id="lineTable">
@@ -247,6 +257,10 @@
                 </thead>
                 <tbody></tbody>
             </table>
+        </div>
+        <div class="line-add-bar">
+            <span class="text-muted small">Add another product to this invoice</span>
+            <button type="button" id="addLine" class="btn btn-outline-primary"><i class="fas fa-plus mr-1"></i> Add Row</button>
         </div>
     </div>
 
@@ -325,7 +339,7 @@
 
 {{-- ── Unit serial drawer ── --}}
 <div class="unit-backdrop" id="unitBackdrop"></div>
-<aside class="unit-drawer" id="unitDrawer">
+<aside class="unit-drawer" id="unitDrawer" aria-label="Select serial numbers">
     <div class="unit-head">
         <div class="d-flex justify-content-between align-items-start">
             <div>
@@ -340,6 +354,9 @@
             <button type="button" class="btn btn-outline-secondary unit-filter" data-filter="sold">Sold</button>
             <button type="button" class="btn btn-outline-secondary unit-filter" data-filter="all">All</button>
         </div>
+        <label for="unitSearch" class="small font-weight-bold mt-3 mb-1">Search serial numbers</label>
+        <input type="search" id="unitSearch" class="form-control" placeholder="Serial, VTS/SIM, SKU, batch or buyer..." aria-controls="unitList">
+        <div id="unitSearchCount" class="unit-meta mt-2" role="status" aria-live="polite"></div>
     </div>
     <div class="unit-list" id="unitList"></div>
 </aside>
@@ -691,35 +708,43 @@ function renderDrawer(){
     $('#drawerTitle').text(activeRow.find('.item-select option:selected').text() || 'Finished Goods Units');
     $('#drawerHint').text(`Select ${qty} unit(s). ${selected.length} selected.`);
 
+    const query = ($('#unitSearch').val() || '').trim().toLowerCase();
     const filtered = units.filter(u =>
         activeFilter === 'all' ||
         (activeFilter === 'sold'      && u.sold) ||
         (activeFilter === 'selected'  && selectedKeys.includes(u.key)) ||
         (activeFilter === 'available' && !u.sold && !usedElsewhere.includes(u.key))
-    );
+    ).filter(u => !query || [u.serial_no, u.vts_sim, u.sku, u.batch_no, u.production_batch_no, u.buyer_code, u.warehouse, u.production_date, u.key]
+        .some(value => String(value ?? '').toLowerCase().includes(query)));
+    $('#unitSearchCount').text(`${filtered.length} of ${units.length} units · ${selected.length} selected`);
 
     $('#unitList').html(filtered.map(u => {
         const checked     = selectedKeys.includes(u.key);
         const unavailable = (u.sold || usedElsewhere.includes(u.key)) && !checked;
+        const text = value => String(value ?? '').replace(/[&<>"']/g, char => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+        const view = Object.fromEntries(Object.entries(u).map(([key, value]) => [key, text(value)]));
         return `<label class="unit-card ${unavailable?'sold':''} ${checked?'selected':''}">
-            <input type="checkbox" class="unit-check" data-key="${u.key}"
+            <input type="checkbox" class="unit-check" data-key="${view.key}"
                 ${checked?'checked':''} ${unavailable?'disabled':''}>
             <span>
-                <b>${u.serial_no||'No serial'} / ${u.batch_no||'No purchase batch'}</b>
-                <div class="unit-meta">VTS/SIM ${u.vts_sim||'-'} | Buyer ${u.buyer_code||'-'} | Production ${u.production_batch_no||'-'} | ${u.production_date||'-'}</div>
-                <div class="unit-meta">${unavailable?'Unavailable':(checked?'Selected':'Available')} | Warehouse ${u.warehouse||'-'} | Cost ${money(u.cost_per_unit)}</div>
+                <b>${view.serial_no||'No serial'} / ${view.batch_no||'No purchase batch'}</b>
+                <div class="unit-meta">VTS/SIM ${view.vts_sim||'-'} | SKU ${view.sku||'-'} | Buyer ${view.buyer_code||'-'} | Production ${view.production_batch_no||'-'} | ${view.production_date||'-'}</div>
+                <div class="unit-meta">${unavailable?'Unavailable':(checked?'Selected':'Available')} | Warehouse ${view.warehouse||'-'} | Cost ${money(u.cost_per_unit)}</div>
             </span>
         </label>`;
     }).join('') || '<div class="text-muted p-3">No units found for this filter.</div>');
+    window.AppSearchHighlight?.apply(document.getElementById('unitList'), query);
 }
 
 function openDrawer($row){
     activeRow    = $row;
     activeFilter = 'available';
+    $('#unitSearch').val('');
     $('.unit-filter').removeClass('btn-primary').addClass('btn-outline-secondary');
     $('.unit-filter[data-filter="available"]').addClass('btn-primary').removeClass('btn-outline-secondary');
     $('#unitDrawer,#unitBackdrop').addClass('open');
     renderDrawer();
+    $('#unitSearch').trigger('focus');
 }
 
 // ── Event bindings ────────────────────────────────────────────────────────────
@@ -821,6 +846,7 @@ $(document).on('change', '.unit-check', function(){
 $('#interCompanyTransfer').on('change', function(){ $('#mergedCompanyBox').toggle(this.checked); }).trigger('change');
 
 // Drawer filter pills
+$('#unitSearch').on('input', renderDrawer);
 $('.unit-filter').click(function(){
     activeFilter = $(this).data('filter');
     $('.unit-filter').removeClass('btn-primary').addClass('btn-outline-secondary');

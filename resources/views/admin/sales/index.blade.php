@@ -1,12 +1,34 @@
 @extends('layouts.admin')
 @section('title','Sales')
+@push('styles')
+<style>
+.sales-heading{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:20px;flex-wrap:wrap}
+.sales-heading h2{font-size:25px;font-weight:800;color:#17233b;margin:0 0 5px}
+.sales-toolbar{display:flex;align-items:end;gap:12px;flex-wrap:wrap;padding-bottom:18px}
+.sales-toolbar label{display:block;font-size:12px;font-weight:700;color:#64748b}
+.sales-toolbar .sales-search{flex:1;min-width:220px}
+.sales-table-window{max-height:520px;overflow:auto;border:1px solid #e8edf5;border-radius:12px}
+.sales-table-window.expanded{max-height:none}
+#salesTable{margin:0!important;min-width:1100px}
+#salesTable thead th{position:sticky;top:0;background:#f8fafc;z-index:2;white-space:nowrap}
+#salesTable td:last-child{min-width:190px}
+.sales-list-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding-top:16px}
+</style>
+@endpush
 @section('content')
+<div class="sales-heading">
+    <div><h2>Sales invoices</h2><div class="text-muted">Manage invoices, track sales and find every serial in one place.</div></div>
+    <a href="{{ route('admin.sales.create') }}" class="btn btn-primary"><i class="fas fa-plus mr-2"></i>Create invoice</a>
+</div>
 <div class="card">
-    <div class="card-header d-flex justify-content-between">
-        <h3 class="card-title m-0">Sales Invoices</h3>
-        <a href="{{ route('admin.sales.create') }}" class="btn btn-primary btn-sm">Add Sale</a>
-    </div>
-    <div class="card-body table-responsive">
+    <div class="card-body">
+        <div class="sales-toolbar">
+            <div class="sales-search"><label for="salesSearch">Search invoices</label><input type="search" id="salesSearch" class="form-control" placeholder="Invoice, party, item, serial, VTS or SKU..."></div>
+            <div><label for="salesMonth">Billing month</label><input type="month" id="salesMonth" class="form-control" value="{{ now()->format('Y-m') }}"></div>
+            <button type="button" id="salesCurrentMonth" class="btn btn-outline-primary">Current month</button>
+            <button type="button" id="salesAllMonths" class="btn btn-light">All months</button>
+        </div>
+        <div class="sales-table-window" id="salesTableWindow">
         <table id="salesTable" class="table table-hover">
             <thead><tr><th>No</th><th>Date</th><th>Party</th><th>Items Sold</th><th>Serial / VTS / SKU</th><th>Created By</th><th>Type</th><th>Total</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
@@ -18,7 +40,7 @@
                     $monthKey = $invoice->billing_date?->format('Y-m') ?? 'no-date';
                     $monthSerials[$monthKey] = ($monthSerials[$monthKey] ?? 0) + 1;
                 @endphp
-                <tr>
+                <tr data-month="{{ $monthKey }}">
                     <td>
                         {{ $monthSerials[$monthKey] }}
                         <div><small class="text-muted">{{ $invoice->invoice_no }}</small></div>
@@ -26,7 +48,16 @@
                     <td>{{ $invoice->billing_date?->format('d M Y') }}</td>
                     <td>{{ $invoice->party?->display_name ?: 'Cash' }}</td>
                     <td>@foreach($invoice->items as $line)<div><b>{{ $line->item?->name }}</b> <small class="text-muted">x {{ $line->quantity }}</small></div>@endforeach</td>
-                    <td>@foreach($invoice->items as $line)@foreach(($line->selected_units ?? []) as $unit)<span class="badge badge-info mr-1 mb-1">{{ $unit['serial_no'] ?? $unit['vts_sim'] ?? $unit['sku'] ?? $unit['key'] ?? 'Unit' }}</span>@endforeach @endforeach<span class="d-none">{{ $invoice->items->flatMap(fn($line) => collect($line->selected_units ?? [])->flatMap(fn($unit) => [$unit['serial_no'] ?? null, $unit['vts_sim'] ?? null, $unit['sku'] ?? null, $unit['batch_no'] ?? null, $unit['production_batch_no'] ?? null, $unit['key'] ?? null]))->filter()->join(' ') }}</span></td>
+                    <td>
+                        @foreach($invoice->items as $line)
+                            @foreach(($line->selected_units ?? []) as $unit)
+                                <div class="mb-2">
+                                    <span class="badge badge-info">{{ $unit['serial_no'] ?? $unit['vts_sim'] ?? $unit['sku'] ?? $unit['key'] ?? 'Unit' }}</span>
+                                    <small class="d-block text-muted">{{ collect(['VTS' => $unit['vts_sim'] ?? null, 'SKU' => $unit['sku'] ?? null, 'Batch' => $unit['batch_no'] ?? null, 'Production' => $unit['production_batch_no'] ?? null])->filter()->map(fn($value, $label) => $label.': '.$value)->join(' · ') }}</small>
+                                </div>
+                            @endforeach
+                        @endforeach
+                    </td>
                     <td>{{ $invoice->creator?->name ?? 'System' }}<br><small class="text-muted">{{ $invoice->creator?->rolesForCompany($invoice->company_id)->pluck('name')->join(', ') }}</small></td>
                     <td>{{ ucfirst($invoice->sale_type) }}</td>
                     <td>Rs {{ number_format((float)$invoice->grand_total,2) }}</td>
@@ -52,6 +83,11 @@
             @endforeach
             </tbody>
         </table>
+        </div>
+        <div class="sales-list-footer">
+            <span id="salesResultCount" class="text-muted small" role="status" aria-live="polite"></span>
+            <button type="button" id="salesSeeMore" class="btn btn-outline-primary" aria-expanded="false" aria-controls="salesTableWindow">See more <i class="fas fa-chevron-down ml-1"></i></button>
+        </div>
     </div>
 </div>
 <div class="modal fade" id="saleDetailModal" tabindex="-1" role="dialog" aria-hidden="true">
@@ -84,7 +120,30 @@
 </div>
 @endsection
 @push('scripts')<script>
-$('#salesTable').DataTable({pageLength:25, order:[], columnDefs:[{orderable:false, targets:[0,9]}]});
+const currentSalesMonth = @json(now()->format('Y-m'));
+$.fn.dataTable.ext.search.push(function(settings, data, index) {
+    if (settings.nTable.id !== 'salesTable') return true;
+    const month = document.getElementById('salesMonth').value;
+    return !month || settings.aoData[index].nTr.dataset.month === month;
+});
+const salesTable = $('#salesTable').DataTable({paging:false, info:false, dom:'t', order:[], columnDefs:[{orderable:false, targets:[0,9]}]});
+const salesWindow = document.getElementById('salesTableWindow');
+function updateSalesList() {
+    const count = salesTable.rows({search:'applied'}).count();
+    $('#salesResultCount').text(`${count} invoice${count === 1 ? '' : 's'} found · ${$('#salesMonth').val() || 'All months'}`);
+    const expanded = salesWindow.classList.contains('expanded');
+    $('#salesSeeMore').prop('hidden', !expanded && salesWindow.scrollHeight <= salesWindow.clientHeight + 1)
+        .attr('aria-expanded', String(expanded)).text(expanded ? 'See less ↑' : 'See more ↓');
+    window.AppSearchHighlight?.apply(salesTable.table().body(), $('#salesSearch').val());
+}
+$('#salesSearch').on('input', function(){ salesTable.search(this.value).draw(); });
+$('#salesMonth').on('change', function(){ salesWindow.scrollTop = 0; salesTable.draw(); });
+$('#salesCurrentMonth').on('click', function(){ $('#salesMonth').val(currentSalesMonth).trigger('change'); });
+$('#salesAllMonths').on('click', function(){ $('#salesMonth').val('').trigger('change'); });
+$('#salesSeeMore').on('click', function(){ salesWindow.classList.toggle('expanded'); updateSalesList(); });
+$('#salesTable').on('draw.dt', updateSalesList);
+window.addEventListener('resize', updateSalesList);
+updateSalesList();
 const money = value => 'Rs ' + Number(value || 0).toLocaleString('en-IN', {minimumFractionDigits:2, maximumFractionDigits:2});
 $(document).on('click', '.sale-detail-btn', function() {
     const detail = $(this).data('detail') || {};

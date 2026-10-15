@@ -178,6 +178,10 @@
     </style>
 
     @stack('styles')
+    <style>
+        mark.app-search-match{background:#fde68a!important;color:#713f12!important;border-radius:3px;padding:0 2px;box-shadow:0 0 0 1px rgba(245,158,11,.18);font-weight:inherit}
+        @media print{mark.app-search-match{background:transparent!important;color:inherit!important;box-shadow:none;padding:0}}
+    </style>
 </head>
 <body class="hold-transition sidebar-mini layout-fixed sidebar-collapse-lg">
 <div class="wrapper">
@@ -415,6 +419,7 @@
     @endif
 </script>
 
+<script src="{{ asset('js/search-highlight.js') }}"></script>
 @stack('scripts')
 </body>
 </html>
