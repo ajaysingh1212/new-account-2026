@@ -37,6 +37,8 @@ class SalesInvoiceWorkspaceTest extends TestCase
             $response->assertSee('data-month="'.$month.'"', false);
         }
         $response->assertSee('salesSeeMore')->assertSee('js/search-highlight.js');
+        $this->assertSame(3, substr_count($response->getContent(), 'class="btn btn-outline-primary btn-sm sale-row-toggle"'));
+        $response->assertSee('sale-cell-preview')->assertSee('sale-row-expanded');
         $this->travelBack();
     }
 }

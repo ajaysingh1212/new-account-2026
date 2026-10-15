@@ -4,6 +4,30 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const path = require('node:path');
 
+test('each invoice expands and collapses independently with accessible button state', () => {
+    const template = fs.readFileSync(path.join(__dirname, '../../resources/views/admin/sales/index.blade.php'), 'utf8');
+    const start = template.indexOf('function setInvoiceRowExpanded(');
+    const script = template.slice(start, template.indexOf('function updateSalesList()', start));
+    const context = vm.createContext({});
+    vm.runInContext(script, context);
+    function row() {
+        const classes = new Set();
+        const button = { textContent: 'See more', attributes: {}, setAttribute(name, value) { this.attributes[name] = value; } };
+        return { classes, button, classList: { toggle(name, on) { on ? classes.add(name) : classes.delete(name); } }, querySelector: () => button };
+    }
+    const first = row(), second = row();
+    context.setInvoiceRowExpanded(first, true);
+    assert.equal(first.classes.has('sale-row-expanded'), true);
+    assert.equal(first.button.textContent, 'See less');
+    assert.equal(first.button.attributes['aria-expanded'], 'true');
+    assert.equal(second.classes.size, 0);
+    assert.equal(second.button.textContent, 'See more');
+    context.setInvoiceRowExpanded(first, false);
+    assert.equal(first.classes.size, 0);
+    assert.equal(first.button.attributes['aria-expanded'], 'false');
+    assert.equal(first.button.textContent, 'See more');
+});
+
 function drawer({ query = '', filter = 'available', selected = [] } = {}) {
     const template = fs.readFileSync(path.join(__dirname, '../../resources/views/admin/sales/form.blade.php'), 'utf8');
     const script = template.slice(template.indexOf('function renderDrawer(){'), template.indexOf('function openDrawer('));

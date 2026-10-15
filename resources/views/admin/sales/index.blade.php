@@ -12,6 +12,11 @@
 #salesTable{margin:0!important;min-width:1100px}
 #salesTable thead th{position:sticky;top:0;background:#f8fafc;z-index:2;white-space:nowrap}
 #salesTable td:last-child{min-width:190px}
+#salesTable tbody td{vertical-align:top!important}
+.sale-cell-preview{height:104px;overflow:hidden;overflow-wrap:anywhere}
+.sale-row-expanded .sale-cell-preview{height:auto;min-height:104px;overflow:visible}
+.sale-row-toggle{display:block;margin-top:12px;font-size:12px;font-weight:600}
+.sale-row-actions{display:flex;gap:4px;flex-wrap:wrap;align-content:start}
 .sales-list-footer{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding-top:16px}
 </style>
 @endpush
@@ -40,15 +45,18 @@
                     $monthKey = $invoice->billing_date?->format('Y-m') ?? 'no-date';
                     $monthSerials[$monthKey] = ($monthSerials[$monthKey] ?? 0) + 1;
                 @endphp
-                <tr data-month="{{ $monthKey }}">
+                <tr data-month="{{ $monthKey }}" class="sale-invoice-row">
                     <td>
+                        <div class="sale-cell-preview" id="sale-row-{{ $invoice->id }}-number">
                         {{ $monthSerials[$monthKey] }}
                         <div><small class="text-muted">{{ $invoice->invoice_no }}</small></div>
+                        </div>
                     </td>
-                    <td>{{ $invoice->billing_date?->format('d M Y') }}</td>
-                    <td>{{ $invoice->party?->display_name ?: 'Cash' }}</td>
-                    <td>@foreach($invoice->items as $line)<div><b>{{ $line->item?->name }}</b> <small class="text-muted">x {{ $line->quantity }}</small></div>@endforeach</td>
+                    <td><div class="sale-cell-preview">{{ $invoice->billing_date?->format('d M Y') }}</div></td>
+                    <td><div class="sale-cell-preview">{{ $invoice->party?->display_name ?: 'Cash' }}</div></td>
+                    <td><div class="sale-cell-preview" id="sale-row-{{ $invoice->id }}-items">@foreach($invoice->items as $line)<div><b>{{ $line->item?->name }}</b> <small class="text-muted">x {{ $line->quantity }}</small></div>@endforeach</div></td>
                     <td>
+                        <div class="sale-cell-preview" id="sale-row-{{ $invoice->id }}-serials">
                         @foreach($invoice->items as $line)
                             @foreach(($line->selected_units ?? []) as $unit)
                                 <div class="mb-2">
@@ -57,11 +65,13 @@
                                 </div>
                             @endforeach
                         @endforeach
+                        </div>
                     </td>
-                    <td>{{ $invoice->creator?->name ?? 'System' }}<br><small class="text-muted">{{ $invoice->creator?->rolesForCompany($invoice->company_id)->pluck('name')->join(', ') }}</small></td>
-                    <td>{{ ucfirst($invoice->sale_type) }}</td>
-                    <td>Rs {{ number_format((float)$invoice->grand_total,2) }}</td>
+                    <td><div class="sale-cell-preview">{{ $invoice->creator?->name ?? 'System' }}<br><small class="text-muted">{{ $invoice->creator?->rolesForCompany($invoice->company_id)->pluck('name')->join(', ') }}</small></div></td>
+                    <td><div class="sale-cell-preview">{{ ucfirst($invoice->sale_type) }}</div></td>
+                    <td><div class="sale-cell-preview">Rs {{ number_format((float)$invoice->grand_total,2) }}</div></td>
                     <td>
+                        <div class="sale-cell-preview" id="sale-row-{{ $invoice->id }}-status">
                         <span class="badge-active">{{ ucfirst($invoice->status) }}</span>
                         @if(($invoiceReturnDetails[$invoice->id]['has_return'] ?? false))
                             <div><span class="badge badge-warning mt-1">Sales Return</span></div>
@@ -69,8 +79,11 @@
                         @foreach($invoice->creditNotes as $note)
                             <div><a href="{{ route('admin.credit-notes.show',$note) }}" class="badge badge-info mt-1">CN {{ $note->credit_note_no }}</a> @if(!$note->hasCompleteSalesReturn())<span class="badge badge-warning mt-1">Return pending</span>@endif</div>
                         @endforeach
+                        </div>
                     </td>
                     <td>
+                        <div class="sale-cell-preview">
+                        <div class="sale-row-actions">
                         <button type="button" class="btn btn-primary btn-sm sale-detail-btn" title="Profit and item details" data-detail='@json($invoiceDetails[$invoice->id] ?? [])' data-pdf="{{ route('admin.sales.detail-pdf',$invoice) }}"><i class="fas fa-chart-line"></i></button>
                         @if($invoice->inter_company_transfer)
                                     <button type="button" class="btn btn-success btn-sm inter-stock-btn" title="Auto purchase stock diagnostic" data-invoice="{{ $invoice->invoice_no }}" data-url="{{ route('admin.sales.inter-company-stock-status', $invoice) }}" data-repair-url="{{ route('admin.sales.repair-inter-company-stock', $invoice) }}"><i class="fas fa-barcode"></i></button>
@@ -78,6 +91,9 @@
                         <a href="{{ route('admin.sales.show',$invoice) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a>
                         @can('sales.edit')<a href="{{ route('admin.sales.edit',$invoice) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>@endcan
                         @can('sales.print')<a href="{{ route('admin.sales.print',$invoice) }}" target="_blank" class="btn btn-secondary btn-sm"><i class="fas fa-print"></i></a>@endcan
+                        </div>
+                        <button type="button" class="btn btn-outline-primary btn-sm sale-row-toggle" aria-expanded="false" aria-label="Show all details for invoice {{ $invoice->invoice_no }}" aria-controls="sale-row-{{ $invoice->id }}-items sale-row-{{ $invoice->id }}-serials sale-row-{{ $invoice->id }}-status">See more</button>
+                        </div>
                     </td>
                 </tr>
             @endforeach
@@ -128,7 +144,22 @@ $.fn.dataTable.ext.search.push(function(settings, data, index) {
 });
 const salesTable = $('#salesTable').DataTable({paging:false, info:false, dom:'t', order:[], columnDefs:[{orderable:false, targets:[0,9]}]});
 const salesWindow = document.getElementById('salesTableWindow');
+let lastSalesSearch = '';
+function setInvoiceRowExpanded(row, expanded) {
+    row.classList.toggle('sale-row-expanded', expanded);
+    const button = row.querySelector('.sale-row-toggle');
+    if (button) {
+        button.setAttribute('aria-expanded', String(expanded));
+        button.textContent = expanded ? 'See less' : 'See more';
+    }
+}
 function updateSalesList() {
+    const query = $('#salesSearch').val().trim();
+    if (query !== lastSalesSearch) {
+        // Keep every item in the search index and reveal matches beyond the preview.
+        salesTable.rows().nodes().each(row => setInvoiceRowExpanded(row, Boolean(query)));
+        lastSalesSearch = query;
+    }
     const count = salesTable.rows({search:'applied'}).count();
     $('#salesResultCount').text(`${count} invoice${count === 1 ? '' : 's'} found · ${$('#salesMonth').val() || 'All months'}`);
     const expanded = salesWindow.classList.contains('expanded');
@@ -141,6 +172,11 @@ $('#salesMonth').on('change', function(){ salesWindow.scrollTop = 0; salesTable.
 $('#salesCurrentMonth').on('click', function(){ $('#salesMonth').val(currentSalesMonth).trigger('change'); });
 $('#salesAllMonths').on('click', function(){ $('#salesMonth').val('').trigger('change'); });
 $('#salesSeeMore').on('click', function(){ salesWindow.classList.toggle('expanded'); updateSalesList(); });
+$('#salesTable').on('click', '.sale-row-toggle', function() {
+    const row = this.closest('tr');
+    setInvoiceRowExpanded(row, !row.classList.contains('sale-row-expanded'));
+    updateSalesList();
+});
 $('#salesTable').on('draw.dt', updateSalesList);
 window.addEventListener('resize', updateSalesList);
 updateSalesList();
