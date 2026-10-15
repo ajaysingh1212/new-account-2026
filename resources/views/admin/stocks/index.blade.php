@@ -18,8 +18,15 @@
         <a href="{{ route('admin.stocks.history') }}" class="btn btn-outline-light btn-sm"><i class="fas fa-clock-rotate-left mr-1"></i>History</a>
         <button type="button" id="openReplacementItems" class="btn btn-info btn-sm"><i class="fas fa-sync-alt mr-1"></i>Replacement Items</button>
         <a href="{{ route('admin.stocks.special-stock-out') }}" class="btn btn-warning btn-sm"><i class="fas fa-dolly mr-1"></i>Special Stock Out</a>
+        @if($canManageMarutiStockOut)
+            <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#marutiStockOutModal"><i class="fas fa-box-open mr-1"></i>Zero Available Stock</button>
+        @endif
     </div>
 </div>
+
+@if($canManageMarutiStockOut)
+    @include('admin.stocks.partials.maruti-stock-out-modal')
+@endif
 
 <div class="metric-grid">
     <div class="metric"><small>Overall Stock Value</small><b>Rs {{ number_format($overallValue,2) }}</b></div>

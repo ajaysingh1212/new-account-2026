@@ -133,6 +133,9 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::get('stocks/history', [StockController::class, 'history'])->name('stocks.history');
         Route::post('stocks/{item}/adjust', [StockController::class, 'adjustRawMaterial'])->middleware('company_admin')->name('stocks.adjust');
         Route::get('stocks/special-stock-out', [StockController::class, 'specialStockOut'])->name('stocks.special-stock-out');
+        Route::get('stocks/maruti-stock-out/available', [\App\Http\Controllers\Admin\Inventory\MarutiStockOutController::class, 'available'])->middleware('company_admin')->name('stocks.maruti-stock-out.available');
+        Route::post('stocks/maruti-stock-out', [\App\Http\Controllers\Admin\Inventory\MarutiStockOutController::class, 'store'])->middleware('company_admin')->name('stocks.maruti-stock-out.store');
+        Route::post('stocks/maruti-stock-out/{id}/restore', [\App\Http\Controllers\Admin\Inventory\MarutiStockOutController::class, 'restore'])->middleware('company_admin')->whereNumber('id')->name('stocks.maruti-stock-out.restore');
     });
     Route::middleware('permission:replacements.view')->group(function () {
         Route::get('replacements/lookup', [ReplacementController::class, 'lookup'])->middleware('permission:replacements.create')->name('replacements.lookup');

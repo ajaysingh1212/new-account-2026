@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin\Inventory;
 
 use App\Http\Controllers\Controller;
 use App\Models\Item;
+use App\Models\MarutiStockOut;
 use App\Models\ProductCategory;
 use App\Models\ProductType;
 use App\Models\PurchaseBillItem;
@@ -14,6 +15,7 @@ use App\Models\StockMovement;
 use App\Models\StockOutChallan;
 use App\Services\EntryVisibilityService;
 use App\Services\SerialUnitService;
+use App\Services\MarutiStockOutService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
@@ -29,6 +31,7 @@ class StockController extends Controller
         $companyAdmin = auth()->user()?->isSuperAdmin() || auth()->user()?->isAdmin();
 
         $companyId = auth()->user()->current_company_id;
+        $canManageMarutiStockOut = $companyAdmin && app(MarutiStockOutService::class)->enabled($companyId);
         $serialsByItem = $this->currentSerialsByItem();
         $serialItemIds = $this->serialTrackedItemIds($companyId);
         $incomingByItem = PurchaseEstimateItem::whereHas('purchaseEstimate', fn($q) => $q->where('company_id',$companyId)->where('status','transit'))
@@ -128,7 +131,7 @@ class StockController extends Controller
             ])
             ->values();
 
-        return view('admin.stocks.index', compact('items', 'overallValue', 'overallQty', 'month', 'nature', 'productTypeId', 'productTypes', 'productCategories', 'monthIn', 'monthOut', 'serialsByItem', 'serialSearch','incomingByItem', 'replacementReceived', 'companyAdmin'));
+        return view('admin.stocks.index', compact('items', 'overallValue', 'overallQty', 'month', 'nature', 'productTypeId', 'productTypes', 'productCategories', 'monthIn', 'monthOut', 'serialsByItem', 'serialSearch','incomingByItem', 'replacementReceived', 'companyAdmin', 'canManageMarutiStockOut'));
     }
 
     public function history(Request $request, EntryVisibilityService $visibility)
@@ -271,7 +274,13 @@ class StockController extends Controller
             ]);
         });
 
-        return view('admin.stocks.special-stock-out', compact('rows', 'challans'));
+        $isMaruti = app(MarutiStockOutService::class)->enabled((int) auth()->user()->current_company_id);
+        $canManageMarutiStockOut = $isMaruti && (auth()->user()->isSuperAdmin() || auth()->user()->isAdmin());
+        $marutiStockOuts = $isMaruti
+            ? MarutiStockOut::with(['creator', 'restorer'])->where('company_id', auth()->user()->current_company_id)->latest()->get()
+            : collect();
+
+        return view('admin.stocks.special-stock-out', compact('rows', 'challans', 'marutiStockOuts', 'isMaruti', 'canManageMarutiStockOut'));
     }
 
     private function currentSerialsByItem(): array
