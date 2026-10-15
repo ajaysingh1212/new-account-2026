@@ -1188,10 +1188,13 @@ class SalesInvoiceController extends Controller
                             ?? $unit['sku']
                             ?? null;
 
-                        return array_merge($unit, [
+                        $targetUnit = array_merge($unit, [
                             'key' => $identity ?: 'IC-' . $line->id . '-' . $index,
                             'item_id' => $targetItem->id,
                         ]);
+                        $targetUnit['scope_key'] = app(SerialUnitService::class)->scopeUnitKey((int) $targetItem->id, $targetUnit);
+
+                        return $targetUnit;
                     })
                     ->values()
                     ->all();

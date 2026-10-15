@@ -214,12 +214,21 @@ class SerialUnitService
                         'unit' => $unit,
                         'last_movement' => null,
                     ];
+                    // A fresh physical receipt must not be consumed by an
+                    // unmatched legacy return/reversal from an earlier visit.
+                    // Reversals remain signed so reposts can still cancel them.
+                    if ($movement->direction === 'in' && in_array($movement->movement_type, [
+                        'inter_company_purchase', 'inter_company_purchase_repair',
+                    ], true)) {
+                        $balances[$currentItemId][$identity]['balance'] = max(0, $balances[$currentItemId][$identity]['balance']);
+                    }
                     $balances[$currentItemId][$identity]['balance'] += $delta;
                     $balances[$currentItemId][$identity]['last_direction'] = $movement->direction;
                     $balances[$currentItemId][$identity]['last_movement_at'] = $movement->movement_date?->format('Y-m-d');
                     $balances[$currentItemId][$identity]['last_movement_id'] = $movement->id;
                     $balances[$currentItemId][$identity]['unit'] = array_merge($unit, [
                         'item_id' => $currentItemId,
+                        'scope_key' => $this->scopeUnitKey($currentItemId, $unit),
                         'item_name' => $movement->item?->name,
                         'last_movement_type' => $movement->movement_type,
                         'last_movement_date' => $movement->movement_date?->format('Y-m-d'),
