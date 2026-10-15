@@ -28,6 +28,7 @@ class SerialUnitService
 
     public function activeSoldScopedKeys(int $companyId, ?int $excludeInvoiceId = null): array
     {
+        $aliases = $this->legacyUnitAliases($companyId);
         $soldCounts = SalesInvoiceItem::whereHas('salesInvoice', function ($query) use ($companyId, $excludeInvoiceId) {
                 $query->where('company_id', $companyId);
                 if ($excludeInvoiceId) {
@@ -35,8 +36,8 @@ class SerialUnitService
                 }
             })
             ->get()
-            ->flatMap(function ($line) {
-                return collect($line->selected_units ?? [])->map(fn($unit) => $this->scopeUnitKey((int) ($line->item_id ?? 0), $unit))->filter();
+            ->flatMap(function ($line) use ($aliases) {
+                return collect($line->selected_units ?? [])->map(fn($unit) => $this->canonicalScopedKey((int) $line->item_id, $unit, $aliases))->filter();
             })
             ->countBy();
 
@@ -52,12 +53,12 @@ class SerialUnitService
                 )
             )
             ->get()
-            ->flatMap(function ($line) {
-                return collect($line->selected_units ?? [])->map(fn($unit) => $this->scopeUnitKey((int) ($line->item_id ?? 0), $unit))->filter();
+            ->flatMap(function ($line) use ($aliases) {
+                return collect($line->selected_units ?? [])->map(fn($unit) => $this->canonicalScopedKey((int) $line->item_id, $unit, $aliases))->filter();
             })
             ->countBy();
 
-        foreach ($this->interCompanyPurchaseReturnedCounts($companyId, $excludeInvoiceId) as $key => $count) {
+        foreach ($this->interCompanyPurchaseReturnedCounts($companyId, $excludeInvoiceId, $aliases) as $key => $count) {
             $returnedCounts->put($key, (int) $returnedCounts->get($key, 0) + $count);
         }
 
@@ -68,7 +69,7 @@ class SerialUnitService
             ->all();
 
         return array_values(array_unique(array_merge(
-            $salesKeys,
+            $this->expandAliasKeys($salesKeys, $aliases),
             $this->challanKeys($companyId),
             $this->stockOutKeys($companyId)
         )));
@@ -153,6 +154,7 @@ class SerialUnitService
     public function currentStockUnitsByItem(int $companyId, ?int $itemId = null): array
     {
         $balances = [];
+        $aliases = $this->legacyUnitAliases($companyId);
 
         StockMovement::with(['item.productType', 'party'])
             ->where('company_id', $companyId)
@@ -161,7 +163,7 @@ class SerialUnitService
             ->orderBy('movement_date')
             ->orderBy('id')
             ->get()
-            ->each(function (StockMovement $movement) use (&$balances) {
+            ->each(function (StockMovement $movement) use (&$balances, $aliases) {
                 $units = $this->movementUnits($movement);
                 if (empty($units)) {
                     // Quantity-only legacy outflows have no selected identities.
@@ -192,6 +194,14 @@ class SerialUnitService
 
                     $unit['item_id'] = $currentItemId;
                     $identity = $this->unitIdentity($unit, $currentItemId);
+                    $scopedKey = $this->scopeUnitKey($currentItemId, $unit);
+                    if (isset($aliases[$scopedKey])) {
+                        $identity = 'alias:' . $aliases[$scopedKey];
+                        $unit['key'] = substr($aliases[$scopedKey], strlen($currentItemId . ':'));
+                        if (isset($unit['scope_key'])) {
+                            $unit['scope_key'] = $aliases[$scopedKey];
+                        }
+                    }
                     if (!$identity) {
                         continue;
                     }
@@ -222,21 +232,7 @@ class SerialUnitService
 
         // Invoice dates can be backdated before the return that made a unit
         // resellable. Active invoice allocations still take it out of stock.
-        $soldKeys = array_fill_keys($this->activeSoldKeysWithoutOtherDocuments($companyId), true);
-        $soldRepairAliases = SalesInvoiceItem::whereHas('salesInvoice', fn($query) => $query->where('company_id', $companyId))
-            ->when($itemId, fn($query) => $query->where('item_id', $itemId))
-            ->get()
-            ->flatMap(function ($line) use ($soldKeys) {
-                return collect($line->selected_units ?? [])
-                    ->filter(fn($unit) => is_array($unit)
-                        && isset($soldKeys[$this->scopeUnitKey((int) $line->item_id, $unit)])
-                        && str_starts_with((string) ($unit['key'] ?? ''), 'repair-'))
-                    ->map(fn($unit) => $this->repairSerialAlias((int) $line->item_id, $unit))
-                    ->filter();
-            })
-            ->flip()
-            ->all();
-
+        $soldKeys = array_fill_keys($this->activeSoldKeysWithoutOtherDocuments($companyId, $aliases), true);
         return collect($balances)
             ->map(fn($rows) => collect($rows)
                 // A backdated repost can sort before its later-dated reversal.
@@ -246,8 +242,7 @@ class SerialUnitService
                     || ($row['last_movement']?->movement_type ?? null) === 'inter_company_purchase_reversal'
                 ))
                 ->map(fn($row) => $row['unit'])
-                ->reject(fn($unit) => isset($soldKeys[$this->scopeUnitKey((int) $unit['item_id'], $unit)])
-                    || isset($soldRepairAliases[$this->repairSerialAlias((int) $unit['item_id'], $unit)]))
+                ->reject(fn($unit) => isset($soldKeys[$this->scopeUnitKey((int) $unit['item_id'], $unit)]))
                 ->values()
                 ->all())
             ->filter(fn($rows) => !empty($rows))
@@ -321,18 +316,6 @@ class SerialUnitService
         return [];
     }
 
-    private function repairSerialAlias(int $itemId, array $unit): ?string
-    {
-        if (empty($unit['serial_no'])) {
-            return null;
-        }
-
-        // Repair keys are regenerated for the same serial during legacy
-        // inter-company repairs. Do not merge ordinary units by visible serial.
-        return json_encode([$itemId, (string) $unit['serial_no'],
-            (string) ($unit['vts_sim'] ?? ''), (string) ($unit['batch_no'] ?? '')]);
-    }
-
     private function quantityOnlyMovementUnits(StockMovement $movement): array
     {
         $item = $movement->item;
@@ -372,25 +355,88 @@ class SerialUnitService
         return null;
     }
 
-    private function activeSoldKeysWithoutOtherDocuments(int $companyId): array
+    private function canonicalScopedKey(int $itemId, array|string|null $unit, array $aliases): ?string
     {
+        $key = $this->scopeUnitKey($itemId, $unit);
+
+        return $aliases[$key] ?? $key;
+    }
+
+    private function expandAliasKeys(array $keys, array $aliases): array
+    {
+        $active = array_fill_keys($keys, true);
+        foreach ($aliases as $alias => $canonical) {
+            if (isset($active[$canonical])) {
+                $active[$alias] = true;
+            }
+        }
+
+        return array_keys($active);
+    }
+
+    private function legacyUnitAliases(int $companyId): array
+    {
+        // Old auto purchases generated PBI keys; later source invoice edits
+        // restored production keys. Match only unambiguous serial/SIM metadata
+        // within an item, never a shared SKU or buyer code.
+        $groups = [];
+        $add = function (int $itemId, array $units) use (&$groups) {
+            foreach ($units as $unit) {
+                if (!is_array($unit) || empty($unit['key'])
+                    || (empty($unit['serial_no']) && empty($unit['vts_sim']))) {
+                    continue;
+                }
+                $signature = json_encode([$itemId, (string) ($unit['serial_no'] ?? ''),
+                    (string) ($unit['vts_sim'] ?? ''), (string) ($unit['batch_no'] ?? '')]);
+                $key = $this->scopeUnitKey($itemId, $unit);
+                $rawKey = preg_replace('/^' . $itemId . ':/', '', (string) $unit['key']);
+                $groups[$signature][$key] = str_starts_with($rawKey, 'PBI-') || str_starts_with($rawKey, 'repair-');
+            }
+        };
+
+        foreach (StockMovement::where('company_id', $companyId)->whereNotNull('movement_units')->get(['item_id', 'movement_units']) as $movement) {
+            $add((int) $movement->item_id, $movement->movement_units ?? []);
+        }
+        foreach ([SalesInvoiceItem::class => 'salesInvoice', SalesReturnItem::class => 'salesReturn', PurchaseBillItem::class => 'purchaseBill'] as $model => $relation) {
+            foreach ($model::whereHas($relation, fn($query) => $query->where('company_id', $companyId))->get(['item_id', 'selected_units']) as $line) {
+                $add((int) $line->item_id, $line->selected_units ?? []);
+            }
+        }
+
+        $aliases = [];
+        foreach ($groups as $keys) {
+            $stable = array_keys(array_filter($keys, fn($legacy) => !$legacy));
+            if (count($keys) < 2 || count($stable) !== 1) {
+                continue;
+            }
+            foreach ($keys as $key => $legacy) {
+                $aliases[$key] = $stable[0];
+            }
+        }
+
+        return $aliases;
+    }
+
+    private function activeSoldKeysWithoutOtherDocuments(int $companyId, ?array $aliases = null): array
+    {
+        $aliases ??= $this->legacyUnitAliases($companyId);
         $sold = SalesInvoiceItem::whereHas('salesInvoice', fn($q) => $q->where('company_id', $companyId))
             ->get()
-            ->flatMap(fn($line) => collect($line->selected_units ?? [])->map(fn($unit) => $this->scopeUnitKey((int) ($line->item_id ?? 0), $unit)))
+            ->flatMap(fn($line) => collect($line->selected_units ?? [])->map(fn($unit) => $this->canonicalScopedKey((int) $line->item_id, $unit, $aliases)))
             ->filter()
             ->countBy();
         $returned = SalesReturnItem::whereHas('salesReturn', fn($q) => $q->where('company_id', $companyId))
             ->get()
-            ->flatMap(fn($line) => collect($line->selected_units ?? [])->map(fn($unit) => $this->scopeUnitKey((int) ($line->item_id ?? 0), $unit)))
+            ->flatMap(fn($line) => collect($line->selected_units ?? [])->map(fn($unit) => $this->canonicalScopedKey((int) $line->item_id, $unit, $aliases)))
             ->filter()
             ->countBy();
-        foreach ($this->interCompanyPurchaseReturnedCounts($companyId) as $key => $count) {
+        foreach ($this->interCompanyPurchaseReturnedCounts($companyId, null, $aliases) as $key => $count) {
             $returned->put($key, (int) $returned->get($key, 0) + $count);
         }
-        return $sold->filter(fn($count, $key) => $count > (int) $returned->get($key, 0))->keys()->values()->all();
+        return $this->expandAliasKeys($sold->filter(fn($count, $key) => $count > (int) $returned->get($key, 0))->keys()->values()->all(), $aliases);
     }
 
-    private function interCompanyPurchaseReturnedCounts(int $companyId, ?int $excludeInvoiceId = null): array
+    private function interCompanyPurchaseReturnedCounts(int $companyId, ?int $excludeInvoiceId = null, array $aliases = []): array
     {
         // A buyer's purchase return also releases the source company's sale
         // allocation. Update reversals cancel the old return before reposting.
@@ -401,9 +447,9 @@ class SerialUnitService
                 PurchaseReturn::whereHas('bill', fn($bill) => $bill->where('source_sales_invoice_id', $excludeInvoiceId))->select('id')
             ))
             ->get()
-            ->each(function (StockMovement $movement) use (&$counts) {
+            ->each(function (StockMovement $movement) use (&$counts, $aliases) {
                 foreach ($this->movementUnits($movement) as $unit) {
-                    $key = $this->scopeUnitKey((int) $movement->item_id, $unit);
+                    $key = $this->canonicalScopedKey((int) $movement->item_id, $unit, $aliases);
                     if ($key) {
                         $counts[$key] = ($counts[$key] ?? 0) + ($movement->direction === 'in' ? 1 : -1);
                     }

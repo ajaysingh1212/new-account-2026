@@ -24,6 +24,88 @@ class SalesReturnSerialLifecycleTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_legacy_purchase_key_sale_and_both_returns_track_one_physical_unit(): void
+    {
+        [$source, $sourceItem, $sourceLine, $units, $user] = $this->serialSaleContext(1);
+        $unit = array_merge($units[0], ['serial_no' => '1666320643', 'sku' => 'UNIT-SKU-1666320643']);
+        $sourceLine->update(['selected_units' => [$unit]]);
+        $target = Company::create(['name' => 'MARUTI SUZUKI', 'created_by' => $user->id]);
+        $type = ProductType::create(['company_id' => $target->id, 'code' => 'FG', 'name' => 'Finished Goods', 'nature' => 'finished_goods']);
+        $item = Item::create([
+            'company_id' => $target->id, 'product_type_id' => $type->id,
+            'item_code' => $sourceItem->item_code, 'name' => 'Device', 'unit' => 'PCS',
+            'purchase_price' => 50, 'current_stock' => 5, 'track_stock' => true, 'status' => 'active',
+        ]);
+        $sourceLine->salesInvoice->update([
+            'inter_company_transfer' => true, 'inter_company_target_company_ids' => [$target->id],
+        ]);
+        $bill = PurchaseBill::create([
+            'company_id' => $target->id, 'purchase_type' => 'cash', 'invoice_no' => 'IC-LEGACY',
+            'billing_date' => '2026-06-10', 'source_sales_invoice_id' => $sourceLine->sales_invoice_id,
+            'inter_company_source_company_id' => $source->id,
+        ]);
+        PurchaseBillItem::create([
+            'purchase_bill_id' => $bill->id, 'item_id' => $item->id, 'quantity' => 1,
+            'unit' => 'PCS', 'unit_price' => 50, 'line_total' => 50, 'selected_units' => [$unit],
+        ]);
+        $legacy = array_merge($unit, ['key' => 'PBI-1088-0', 'item_id' => $item->id]);
+        $sale = SalesInvoice::create([
+            'company_id' => $target->id, 'sale_type' => 'cash', 'invoice_no' => 'SI-LEGACY',
+            'billing_date' => '2026-06-10', 'subtotal' => 100, 'grand_total' => 100,
+        ]);
+        $line = SalesInvoiceItem::create([
+            'sales_invoice_id' => $sale->id, 'item_id' => $item->id, 'quantity' => 1,
+            'unit' => 'PCS', 'unit_price' => 100, 'line_total' => 100, 'selected_units' => [$legacy],
+        ]);
+        foreach ([
+            [$source, $sourceItem, '2026-06-01', 'production_output', 'in', $unit],
+            [$source, $sourceItem, '2026-06-10', 'sale', 'out', $unit],
+            [$target, $item, '2026-06-10', 'inter_company_purchase', 'in', $unit],
+            [$target, $item, '2026-06-10', 'sale', 'out', $legacy],
+            [$target, $item, '2026-08-06', 'inter_company_purchase_reversal', 'out', $unit],
+            [$target, $item, '2026-06-10', 'inter_company_purchase', 'in', $unit],
+        ] as [$company, $stockItem, $date, $movementType, $direction, $movementUnit]) {
+            StockMovement::create([
+                'company_id' => $company->id, 'item_id' => $stockItem->id,
+                'movement_date' => $date, 'movement_type' => $movementType, 'direction' => $direction,
+                'quantity' => 1, 'unit_price' => 50, 'total_value' => 50, 'stock_after' => 0,
+                'movement_units' => [$movementUnit],
+            ]);
+        }
+        $service = app(SerialUnitService::class);
+        $this->assertSame([], $service->currentStockUnitsByItem($target->id));
+        $this->assertSame([], $service->unitPool($target->id));
+        $this->assertContains($item->id . ':' . $unit['key'], $service->activeSoldScopedKeys($target->id));
+        $this->assertSame([], $service->activeSoldScopedKeys($target->id, $sale->id));
+        $user->update(['current_company_id' => $target->id]);
+        $this->actingAs($user)->withoutMiddleware()->get(route('admin.stocks.index', ['q' => '1666320643']))
+            ->assertOk()->assertViewHas('items', fn($items) => $items->isEmpty());
+
+        $this->post(route('admin.sales-returns.store'), [
+            'sales_invoice_id' => $sale->id, 'return_no' => 'SR-CUSTOMER', 'return_date' => '2026-08-07',
+            'line_id' => [$line->id], 'quantity' => [1], 'returned_units' => [json_encode([$legacy])],
+        ])->assertSessionHasNoErrors()->assertRedirect();
+        $stock = $service->currentStockUnitsByItem($target->id)[$item->id];
+        $this->assertCount(1, $stock);
+        $this->assertSame($unit['key'], $stock[0]['key']);
+        $this->assertSame('1666320643', $stock[0]['serial_no']);
+        $this->assertSame($unit['sku'], $stock[0]['sku']);
+        $this->assertSame($unit['vts_sim'], $stock[0]['vts_sim']);
+        $this->assertSame([], $service->activeSoldScopedKeys($target->id));
+        $this->getJson(route('admin.purchase-returns.bill-items', ['bill_id' => $bill->id]))
+            ->assertOk()->assertJsonPath('lines.0.available_units.0.key', $unit['key']);
+
+        $user->update(['current_company_id' => $source->id]);
+        $this->post(route('admin.sales-returns.store'), [
+            'sales_invoice_id' => $sourceLine->sales_invoice_id, 'return_no' => 'SR-EEMOTRACK',
+            'return_date' => '2026-08-08', 'line_id' => [$sourceLine->id],
+            'quantity' => [1], 'returned_units' => [json_encode([$unit])],
+        ])->assertSessionHasNoErrors()->assertRedirect();
+        $this->assertSame([], $service->currentStockUnitsByItem($target->id));
+        $this->assertSame([], $service->unitPool($target->id));
+        $this->assertSame(['1666320643'], array_column($service->currentStockUnitsByItem($source->id)[$sourceItem->id], 'serial_no'));
+    }
+
     public function test_inter_company_return_selection_includes_stock_returned_on_multiple_dates(): void
     {
         $user = User::factory()->create(['user_type' => 'super_admin']);
