@@ -9,7 +9,7 @@ class StockMovement extends Model
     protected $fillable = [
         'company_id','item_id','party_id','movement_date','movement_type','direction',
         'quantity','unit_price','total_value','stock_after','value_after','reference_type',
-        'reference_id','reference_no','description','movement_units','created_by',
+        'reference_id','reference_no','description','movement_units','created_by','starts_new_receipt',
     ];
 
     protected $casts = [
@@ -20,6 +20,7 @@ class StockMovement extends Model
         'stock_after' => 'decimal:3',
         'value_after' => 'decimal:2',
         'movement_units' => 'array',
+        'starts_new_receipt' => 'boolean',
     ];
 
     public function item() { return $this->belongsTo(Item::class); }

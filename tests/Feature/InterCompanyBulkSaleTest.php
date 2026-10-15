@@ -202,6 +202,11 @@ class InterCompanyBulkSaleTest extends TestCase
         $this->assertGreaterThan(0, (float) $purchase->tax_amount);
         $this->assertSame($sale->items->pluck('tax_amount')->all(), $purchase->items->pluck('tax_amount')->all());
         $this->assertSame($sale->items->pluck('tax_percent')->all(), $purchase->items->pluck('tax_percent')->all());
+        // Editing an existing transfer must not start fresh ownership cycles.
+        $receipts = StockMovement::where('reference_type', PurchaseBill::class)->where('reference_id', $purchase->id)
+            ->where('movement_type', 'inter_company_purchase')->get();
+        $this->assertSame(2, $receipts->where('starts_new_receipt', true)->count());
+        $this->assertFalse($receipts->last()->starts_new_receipt);
     }
 
     private function finishedItem(Company $company, ProductType $type, ProductCategory $category, User $user, string $code, string $name): Item

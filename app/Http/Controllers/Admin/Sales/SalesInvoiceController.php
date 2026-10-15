@@ -1164,6 +1164,7 @@ class SalesInvoiceController extends Controller
                 ->where('source_sales_invoice_id', $invoice->id)
                 ->first();
 
+            $isNewPurchase = !$purchase;
             $oldValues = null;
             if ($purchase) {
                 $purchase->load(['items.item', 'party']);
@@ -1231,6 +1232,7 @@ class SalesInvoiceController extends Controller
                     'reference_no' => $purchase->invoice_no,
                     'description' => 'Auto purchase stock in from inter-company sale.',
                     'movement_units' => $movementUnits,
+                    'starts_new_receipt' => $isNewPurchase,
                 ]);
                 $this->syncInterCompanyVisibilityForEntry($request, $targetItem, $targetCompanyId);
                 if ($movement) {

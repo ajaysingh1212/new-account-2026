@@ -156,14 +156,32 @@ class SerialUnitService
         $balances = [];
         $aliases = $this->legacyUnitAliases($companyId);
 
-        StockMovement::with(['item.productType', 'party'])
+        $movements = StockMovement::with(['item.productType', 'party'])
             ->where('company_id', $companyId)
             ->when($itemId, fn($query) => $query->where('item_id', $itemId))
             ->whereHas('item.productType', fn($query) => $query->whereIn('nature', Item::SALEABLE_PRODUCT_NATURES))
             ->orderBy('movement_date')
             ->orderBy('id')
-            ->get()
-            ->each(function (StockMovement $movement) use (&$balances, $aliases) {
+            ->get();
+
+        // Only an explicitly recorded new receipt starts another ownership
+        // cycle. Historical purchases/reposts must keep their signed balances;
+        // recalculating them as fresh receipts can resurrect cleared stock.
+        $receiptStarts = [];
+        foreach ($movements as $movement) {
+            if (!$movement->starts_new_receipt || $movement->direction !== 'in'
+                || $movement->movement_type !== 'inter_company_purchase') {
+                continue;
+            }
+            foreach ($this->movementUnits($movement) as $unit) {
+                $identity = $this->stockBalanceIdentity($unit, (int) $movement->item_id, $aliases);
+                if ($identity) {
+                    $receiptStarts[$identity] = max($receiptStarts[$identity] ?? 0, $movement->id);
+                }
+            }
+        }
+
+        $movements->each(function (StockMovement $movement) use (&$balances, $aliases, $receiptStarts) {
                 $units = $this->movementUnits($movement);
                 if (empty($units)) {
                     // Quantity-only legacy outflows have no selected identities.
@@ -193,7 +211,7 @@ class SerialUnitService
                     }
 
                     $unit['item_id'] = $currentItemId;
-                    $identity = $this->unitIdentity($unit, $currentItemId);
+                    $identity = $this->stockBalanceIdentity($unit, $currentItemId, $aliases);
                     $scopedKey = $this->scopeUnitKey($currentItemId, $unit);
                     if (isset($aliases[$scopedKey])) {
                         $identity = 'alias:' . $aliases[$scopedKey];
@@ -202,7 +220,7 @@ class SerialUnitService
                             $unit['scope_key'] = $aliases[$scopedKey];
                         }
                     }
-                    if (!$identity) {
+                    if (!$identity || $movement->id < ($receiptStarts[$identity] ?? 0)) {
                         continue;
                     }
 
@@ -214,14 +232,6 @@ class SerialUnitService
                         'unit' => $unit,
                         'last_movement' => null,
                     ];
-                    // A fresh physical receipt must not be consumed by an
-                    // unmatched legacy return/reversal from an earlier visit.
-                    // Reversals remain signed so reposts can still cancel them.
-                    if ($movement->direction === 'in' && in_array($movement->movement_type, [
-                        'inter_company_purchase', 'inter_company_purchase_repair',
-                    ], true)) {
-                        $balances[$currentItemId][$identity]['balance'] = max(0, $balances[$currentItemId][$identity]['balance']);
-                    }
                     $balances[$currentItemId][$identity]['balance'] += $delta;
                     $balances[$currentItemId][$identity]['last_direction'] = $movement->direction;
                     $balances[$currentItemId][$identity]['last_movement_at'] = $movement->movement_date?->format('Y-m-d');
@@ -369,6 +379,13 @@ class SerialUnitService
         $key = $this->scopeUnitKey($itemId, $unit);
 
         return $aliases[$key] ?? $key;
+    }
+
+    private function stockBalanceIdentity(array $unit, int $itemId, array $aliases): ?string
+    {
+        $key = $this->scopeUnitKey($itemId, $unit);
+
+        return isset($aliases[$key]) ? 'alias:' . $aliases[$key] : $this->unitIdentity($unit, $itemId);
     }
 
     private function expandAliasKeys(array $keys, array $aliases): array

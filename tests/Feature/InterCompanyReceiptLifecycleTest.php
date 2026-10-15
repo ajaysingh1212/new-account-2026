@@ -60,6 +60,18 @@ class InterCompanyReceiptLifecycleTest extends TestCase
                 'unit_price' => 100, 'total_value' => 100, 'stock_after' => 0, 'movement_units' => [$oldUnit],
             ]);
         }
+        // This unrelated historical identity already had a zero balance.
+        // Treating every old purchase as a fresh receipt resurrects it.
+        $oldItem = $targetItem->replicate();
+        $oldItem->fill(['item_code' => 'OLD-ZERO-STOCK', 'name' => 'Old zero stock'])->save();
+        foreach ([['2026-08-10', 'out', 'inter_company_purchase_reversal'], ['2026-08-11', 'in', 'inter_company_purchase']] as [$date, $direction, $type]) {
+            StockMovement::create([
+                'company_id' => $target->id, 'item_id' => $oldItem->id, 'movement_date' => $date,
+                'movement_type' => $type, 'direction' => $direction, 'quantity' => 1,
+                'unit_price' => 100, 'total_value' => 100, 'stock_after' => 0,
+                'movement_units' => [['key' => 'OLD-UNIT', 'serial_no' => 'OLD-ZERO-SERIAL']],
+            ]);
+        }
         $serials = app(SerialUnitService::class);
         $this->assertSame([], $serials->currentStockUnitsByItem($target->id));
         $this->actingAs($user)->post(route('admin.sales.store'), [
@@ -72,6 +84,8 @@ class InterCompanyReceiptLifecycleTest extends TestCase
         $bill = PurchaseBill::where('source_sales_invoice_id', $sourceSale->id)->firstOrFail();
         $billLine = $bill->items->first();
         $this->assertSame(1.0, (float) $targetItem->fresh()->current_stock);
+        $this->assertSame([$targetItem->id], array_keys($serials->currentStockUnitsByItem($target->id)));
+        $this->assertTrue(StockMovement::where('reference_type', PurchaseBill::class)->where('reference_id', $bill->id)->firstOrFail()->starts_new_receipt);
         $this->assertSame([], $serials->currentStockUnitsByItem($source->id));
         $pool = $serials->unitPool($target->id)[$targetItem->id] ?? [];
         $this->assertCount(1, $pool);
@@ -81,6 +95,8 @@ class InterCompanyReceiptLifecycleTest extends TestCase
         $this->assertSame($targetItem->id.':85-6', $pool[0]['scope_key']);
         $user->update(['current_company_id' => $target->id]);
         $this->get(route('admin.stocks.index', ['q' => 'SKU-1894172860-AAA']))->assertOk()->assertSee('SKU-1894172860-AAA');
+        $this->get(route('admin.stocks.index'))->assertOk()->assertViewHas('overallQty', 1.0)
+            ->assertDontSee('OLD-ZERO-SERIAL');
         $this->getJson(route('admin.purchase-returns.bill-items', ['bill_id' => $bill->id]))->assertOk()
             ->assertJsonPath('lines.0.current_stock', 1)->assertJsonPath('lines.0.available_units.0.key', '85-6');
 
@@ -117,6 +133,7 @@ class InterCompanyReceiptLifecycleTest extends TestCase
         $this->assertCount(1, $serials->unitPool($source->id)[$sourceItem->id]);
         $this->assertSame(0.0, (float) $targetItem->fresh()->current_stock);
         $this->assertSame(1.0, (float) $sourceItem->fresh()->current_stock);
-        $this->assertSame(1, StockMovement::where('company_id', $target->id)->where('movement_type', 'inter_company_purchase')->count());
+        $this->assertSame(1, StockMovement::where('company_id', $target->id)->where('reference_type', PurchaseBill::class)
+            ->where('reference_id', $bill->id)->where('movement_type', 'inter_company_purchase')->count());
     }
 }
