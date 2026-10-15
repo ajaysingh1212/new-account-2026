@@ -98,6 +98,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::post('expenses/{expense}/reject', [ExpenseController::class, 'reject'])->middleware('permission:expenses.approve')->name('expenses.reject');
         Route::resource('expenses', ExpenseController::class)->only(['create','store'])->middleware('permission:expenses.create');
         Route::resource('expenses', ExpenseController::class)->only(['edit','update'])->middleware('permission:expenses.edit');
+        Route::resource('expenses', ExpenseController::class)->only(['destroy'])->middleware('permission:expenses.delete');
         Route::resource('expenses', ExpenseController::class)->only(['index','show']);
     });
     Route::middleware('permission:other_transactions.view')->group(function () {

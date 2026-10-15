@@ -2,7 +2,7 @@
 @section('title','Expense Details')
 @section('content')
 <div class="card">
-    <div class="card-header d-flex justify-content-between"><h3 class="card-title m-0">{{ $expense->expense_no }}</h3><a href="{{ route('admin.expenses.index') }}" class="btn btn-outline-secondary btn-sm">Back</a></div>
+    <div class="card-header d-flex justify-content-between"><h3 class="card-title m-0">{{ $expense->expense_no }}</h3><div>@include('admin.expenses.delete-button') <a href="{{ route('admin.expenses.index') }}" class="btn btn-outline-secondary btn-sm">Back</a></div></div>
     <div class="card-body">
         <div class="row">
             <div class="col-md-8">

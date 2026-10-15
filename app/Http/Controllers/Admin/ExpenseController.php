@@ -75,8 +75,12 @@ class ExpenseController extends Controller
             $data['attachment'] = $request->file('attachment')->store('expenses', 'public');
         }
         $data['total_amount'] = (float) $data['amount'] + (float) ($data['tax_amount'] ?? 0);
-        $expense->update(array_merge($data, ['status' => 'pending_approval', 'updated_by' => auth()->id()]));
-        $visibility->syncFromRequest($request, $expense);
+        DB::transaction(function () use ($expense, $data, $request, $visibility) {
+            $expense = Expense::whereKey($expense->id)->lockForUpdate()->firstOrFail();
+            abort_if($expense->status === 'approved', 403, 'Approved expense cannot be edited.');
+            $expense->update(array_merge($data, ['status' => 'pending_approval', 'updated_by' => auth()->id()]));
+            $visibility->syncFromRequest($request, $expense);
+        });
 
         return redirect()->route('admin.expenses.show', $expense)->with('success', 'Expense updated and sent for approval.');
     }
@@ -89,12 +93,15 @@ class ExpenseController extends Controller
         $data = $request->validate(['approval_note' => ['nullable','string']]);
 
         DB::transaction(function () use ($expense, $data) {
+            $expense = Expense::whereKey($expense->id)->lockForUpdate()->firstOrFail();
+            abort_if($expense->status === 'approved', 422, 'Expense is already approved.');
             $expense->load(['bankAccount','ledger']);
             $bank = BankAccount::where('company_id', $expense->company_id)->lockForUpdate()->findOrFail($expense->bank_account_id);
+            $ledger = ExpenseLedger::where('company_id', $expense->company_id)->lockForUpdate()->findOrFail($expense->expense_ledger_id);
             abort_if((float) $bank->current_balance < (float) $expense->total_amount, 422, 'Bank balance is insufficient for this expense.');
             $newBalance = (float) $bank->current_balance - (float) $expense->total_amount;
             $bank->update(['current_balance' => $newBalance]);
-            $expense->ledger->update(['current_balance' => (float) $expense->ledger->current_balance + (float) $expense->total_amount]);
+            $ledger->update(['current_balance' => (float) $ledger->current_balance + (float) $expense->total_amount]);
 
             $transaction = BankTransaction::create([
                 'company_id' => $expense->company_id,
@@ -151,15 +158,74 @@ class ExpenseController extends Controller
         abort_unless($user->isSuperAdmin() || ($user->isAdmin() && (int) $expense->company_id === (int) $user->current_company_id) || $user->hasPermission('expenses.approve', $expense->company_id), 403);
         abort_if($expense->status === 'approved', 422, 'Approved expense cannot be rejected.');
         $data = $request->validate(['rejection_reason' => ['required','string']]);
-        $expense->update([
-            'status' => 'rejected',
-            'rejected_at' => now(),
-            'rejected_by' => auth()->id(),
-            'rejection_reason' => $data['rejection_reason'],
-            'updated_by' => auth()->id(),
-        ]);
+        DB::transaction(function () use ($expense, $data) {
+            $expense = Expense::whereKey($expense->id)->lockForUpdate()->firstOrFail();
+            abort_if($expense->status === 'approved', 422, 'Approved expense cannot be rejected.');
+            $expense->update([
+                'status' => 'rejected',
+                'rejected_at' => now(),
+                'rejected_by' => auth()->id(),
+                'rejection_reason' => $data['rejection_reason'],
+                'updated_by' => auth()->id(),
+            ]);
+        });
 
         return back()->with('success', 'Expense rejected.');
+    }
+
+    public function destroy(Expense $expense, EntryVisibilityService $visibility)
+    {
+        $visibility->authorizeManage($expense);
+
+        DB::transaction(function () use ($expense, $visibility) {
+            $expense = Expense::whereKey($expense->id)->lockForUpdate()->firstOrFail();
+            $visibility->authorizeManage($expense);
+            $postings = BankTransaction::where('company_id', $expense->company_id)
+                ->where('reference_type', Expense::class)->where('reference_id', $expense->id)
+                ->orderBy('id')->lockForUpdate()->get();
+            $oldValues = $expense->toArray();
+            $oldValues['bank_postings'] = $postings->toArray();
+
+            foreach ($postings->groupBy('bank_account_id') as $bankId => $rows) {
+                $bank = BankAccount::withTrashed()->where('company_id', $expense->company_id)
+                    ->lockForUpdate()->findOrFail($bankId);
+                $refund = $rows->sum(fn($row) => $row->direction === 'out' ? (float) $row->amount : -(float) $row->amount);
+                $bank->update(['current_balance' => (float) $bank->current_balance + $refund]);
+
+                // Posting balances follow insertion order. Remove only this
+                // expense's effects from subsequent running balances.
+                foreach ($rows as $row) {
+                    $delta = $row->direction === 'out' ? (float) $row->amount : -(float) $row->amount;
+                    BankTransaction::where('company_id', $expense->company_id)->where('bank_account_id', $bank->id)
+                        ->where('id', '>', $row->id)->increment('balance_after', $delta);
+                }
+            }
+
+            $ledgerEffect = $postings->isNotEmpty()
+                ? $postings->sum(fn($row) => $row->direction === 'out' ? (float) $row->amount : -(float) $row->amount)
+                : ($expense->status === 'approved' ? (float) $expense->total_amount : 0);
+            if (abs($ledgerEffect) > 0.001) {
+                $ledger = ExpenseLedger::withTrashed()->where('company_id', $expense->company_id)
+                    ->lockForUpdate()->findOrFail($expense->expense_ledger_id);
+                $ledger->update(['current_balance' => (float) $ledger->current_balance - $ledgerEffect]);
+            }
+
+            EntryVisibility::where('company_id', $expense->company_id)->where(function ($query) use ($expense, $postings) {
+                $query->where(fn($q) => $q->where('entry_type', Expense::class)->where('entry_id', $expense->id))
+                    ->orWhere(fn($q) => $q->where('entry_type', BankTransaction::class)->whereIn('entry_id', $postings->pluck('id')));
+            })->delete();
+            BankTransaction::where('company_id', $expense->company_id)->whereIn('id', $postings->pluck('id'))->delete();
+            $expense->update(['updated_by' => auth()->id()]);
+            $expense->delete();
+
+            AuditLog::log('deleted', [
+                'company_id' => $expense->company_id, 'model' => Expense::class, 'model_id' => $expense->id,
+                'old_values' => $oldValues,
+                'description' => "Expense {$expense->expense_no} deleted; linked bank postings and expense ledger effects reversed.",
+            ]);
+        });
+
+        return redirect()->route('admin.expenses.index')->with('success', 'Expense deleted. Its bank postings and expense ledger effects have been reversed.');
     }
 
     private function formData(Expense $expense): array
