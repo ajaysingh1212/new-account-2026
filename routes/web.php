@@ -260,6 +260,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::get('delivery-challans/{deliveryChallan}/print', [DeliveryChallanController::class, 'print'])->middleware('permission:delivery_challans.print')->name('delivery-challans.print');
         Route::get('delivery-challans/{deliveryChallan}/convert', [DeliveryChallanController::class, 'convertForm'])->middleware('permission:delivery_challans.edit')->name('delivery-challans.convert-form');
         Route::post('delivery-challans/{deliveryChallan}/convert', [DeliveryChallanController::class, 'convert'])->middleware('permission:delivery_challans.edit')->name('delivery-challans.convert');
+        Route::post('delivery-challans/{deliveryChallan}/retry-conversion', [DeliveryChallanController::class, 'retryConversion'])->middleware('permission:delivery_challans.edit')->name('delivery-challans.retry-conversion');
         Route::patch('delivery-challans/{deliveryChallan}/cancel', [DeliveryChallanController::class, 'cancel'])->middleware('permission:delivery_challans.edit')->name('delivery-challans.cancel');
         Route::resource('delivery-challans', DeliveryChallanController::class)->only(['create','store'])->middleware('permission:delivery_challans.create');
         Route::resource('delivery-challans', DeliveryChallanController::class)->only(['edit','update'])->middleware('permission:delivery_challans.edit');

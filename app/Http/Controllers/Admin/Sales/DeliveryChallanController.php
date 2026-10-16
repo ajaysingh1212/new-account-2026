@@ -17,6 +17,7 @@ use App\Services\AccountingService;
 use App\Services\SerialUnitService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 
 class DeliveryChallanController extends Controller
 {
@@ -83,7 +84,7 @@ class DeliveryChallanController extends Controller
     {
         $visibility->authorizeManage($deliveryChallan);
         abort_if($deliveryChallan->status === 'cancelled', 422, 'Cancelled challan cannot be edited.');
-        if ($deliveryChallan->converted_sales_invoice_id) {
+        if ($deliveryChallan->convertedInvoice) {
             $visibility->syncFromRequest($request, $deliveryChallan);
 
             return redirect()->route('admin.delivery-challans.show', $deliveryChallan)
@@ -181,7 +182,6 @@ class DeliveryChallanController extends Controller
     {
         $visibility->authorizeManage($deliveryChallan);
         abort_if($deliveryChallan->status === 'cancelled', 422, 'Cancelled challan cannot be converted.');
-        abort_if($deliveryChallan->converted_sales_invoice_id, 422, 'Delivery challan already converted to sale.');
 
         $data = $request->validate([
             'party_id' => ['nullable','exists:parties,id'],
@@ -198,18 +198,26 @@ class DeliveryChallanController extends Controller
             'selected_units.*' => ['nullable','string'],
         ]);
 
-        DB::transaction(function () use ($deliveryChallan, $accounting, $data) {
+        $invoice = DB::transaction(function () use ($deliveryChallan, $accounting, $data) {
+            $deliveryChallan = DeliveryChallan::lockForUpdate()->findOrFail($deliveryChallan->id);
+            abort_if($deliveryChallan->status === 'cancelled', 422, 'Cancelled challan cannot be converted.');
+            $existing = $deliveryChallan->convertedInvoice
+                ?? SalesInvoice::where('company_id', $deliveryChallan->company_id)->where('source_delivery_challan_id', $deliveryChallan->id)->first();
+            if ($existing) {
+                $deliveryChallan->update(['status' => 'converted', 'converted_sales_invoice_id' => $existing->id, 'converted_at' => $deliveryChallan->converted_at ?? now()]);
+                return $existing;
+            }
             $deliveryChallan->load(['items.item.bomMaterials.rawItem', 'party']);
 
             $invoice = SalesInvoice::create([
                 'company_id' => $deliveryChallan->company_id,
-                'party_id' => $data['party_id'] ?: $deliveryChallan->party_id,
+                'party_id' => ($data['party_id'] ?? null) ?: $deliveryChallan->party_id,
                 'cost_center_id' => $deliveryChallan->cost_center_id,
                 'sub_cost_center_id' => $deliveryChallan->sub_cost_center_id,
                 'sale_type' => $data['sale_type'],
-                'invoice_no' => $data['invoice_no'] ?: $this->nextSaleNo(),
+                'invoice_no' => ($data['invoice_no'] ?? null) ?: $this->nextSaleNo(),
                 'billing_date' => $data['billing_date'],
-                'reference_no' => $data['reference_no'] ?: $deliveryChallan->challan_no,
+                'reference_no' => ($data['reference_no'] ?? null) ?: $deliveryChallan->challan_no,
                 'phone' => $data['phone'] ?? $deliveryChallan->phone,
                 'billing_address' => $data['billing_address'] ?? $deliveryChallan->billing_address,
                 'shipping_address' => $data['shipping_address'] ?? $deliveryChallan->shipping_address,
@@ -229,7 +237,7 @@ class DeliveryChallanController extends Controller
             foreach ($deliveryChallan->items->values() as $i => $line) {
                 $item = $line->item;
                 if (!$item) {
-                    continue;
+                    throw ValidationException::withMessages(['conversion' => 'A challan item is missing or deleted. Restore the item before retrying conversion.']);
                 }
 
                 $selectedUnits = collect($line->selected_units ?? [])->filter(fn($unit) => is_array($unit))->values()->all();
@@ -275,7 +283,7 @@ class DeliveryChallanController extends Controller
             }
 
             if (!$invoiceHasLines) {
-                $invoice->delete();
+                throw ValidationException::withMessages(['conversion' => 'No invoice items could be created. Check the challan items before retrying.']);
             } else {
                 $overallDiscount = (float) ($data['discount_amount'] ?? $deliveryChallan->discount_amount ?? 0);
                 $overallDiscount = $challanGrossTotal > 0 ? round($overallDiscount * ($selectedGrossTotal / $challanGrossTotal), 2) : 0;
@@ -305,9 +313,22 @@ class DeliveryChallanController extends Controller
                 'converted_sales_invoice_id' => $invoiceHasLines ? $invoice->id : null,
                 'converted_at' => now(),
             ]);
+            return $invoice;
         });
 
-        return redirect()->route('admin.delivery-challans.show', $deliveryChallan)->with('success', 'Delivery challan converted to sale.');
+        return redirect()->route('admin.sales.show', $invoice)->with('success', 'Delivery challan converted to sales invoice.');
+    }
+
+    public function retryConversion(Request $request, DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility, AccountingService $accounting, SerialUnitService $serialUnits)
+    {
+        $visibility->authorizeManage($deliveryChallan);
+        abort_unless($deliveryChallan->status === 'converted' || $deliveryChallan->converted_at || $deliveryChallan->converted_sales_invoice_id, 422, 'Convert the challan to sale first.');
+        $request->merge([
+            'sale_type' => $deliveryChallan->party_id ? 'credit' : 'cash',
+            'billing_date' => $deliveryChallan->challan_date->toDateString(),
+        ]);
+
+        return $this->convert($request, $deliveryChallan, $visibility, $accounting, $serialUnits);
     }
 
     public function cancel(DeliveryChallan $deliveryChallan, EntryVisibilityService $visibility, AccountingService $accounting)

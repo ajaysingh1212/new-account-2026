@@ -40,6 +40,7 @@
         </div>
     </div>
     <div class="card-body">
+        @include('admin.delivery-challans.conversion-status', ['challan' => $deliveryChallan])
         <p><b>Party:</b> {{ $deliveryChallan->party?->display_name ?: 'Walk-in' }} | <b>Date:</b> {{ $deliveryChallan->challan_date?->format('d M Y') }} | <b>Status:</b> {{ $deliveryChallan->convertedInvoice ? 'Converted to Sales' : 'Not Converted' }}</p>
         @if($deliveryChallan->convertedInvoice)<p><b>Sales Invoice:</b> <a href="{{ route('admin.sales.show', $deliveryChallan->convertedInvoice) }}">{{ $deliveryChallan->convertedInvoice->invoice_no }}</a></p>@endif
         <p><b>Dispatch:</b> {{ $deliveryChallan->dispatch_through ?: '-' }} | <b>Vehicle:</b> {{ $deliveryChallan->vehicle_no ?: '-' }} | <b>LR:</b> {{ $deliveryChallan->lr_no ?: '-' }}</p>

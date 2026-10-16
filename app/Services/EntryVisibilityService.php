@@ -59,6 +59,9 @@ class EntryVisibilityService
 
         return $query->where(function (Builder $builder) use ($user, $visibleIds) {
             $builder->where('created_by', $user->id);
+            if ($builder->getModel() instanceof \App\Models\SalesInvoice) {
+                $builder->orWhereHas('sourceDeliveryChallan', fn (Builder $source) => $this->scopeForUser($source, \App\Models\DeliveryChallan::class));
+            }
             if (!empty($visibleIds)) {
                 $builder->orWhereIn('id', $visibleIds);
             }
@@ -97,6 +100,12 @@ class EntryVisibilityService
     public function canView(User $user, Model $entry): bool
     {
         if ($user->isSuperAdmin()) {
+            return true;
+        }
+
+        if ($entry instanceof \App\Models\SalesInvoice && $entry->sourceDeliveryChallan
+            && (int) $entry->company_id === (int) $user->current_company_id
+            && $this->canView($user, $entry->sourceDeliveryChallan)) {
             return true;
         }
 

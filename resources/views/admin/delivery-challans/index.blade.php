@@ -28,7 +28,7 @@
                         @endforelse
                         @if($serialUnits->count() > 6)<small class="text-muted">+{{ $serialUnits->count() - 6 }} more</small>@endif
                     </td>
-                    <td><span class="badge-active">{{ ucfirst($challan->status) }}</span>@if($challan->convertedInvoice)<div><span class="badge badge-success mt-1">Converted</span></div>@endif</td>
+                    <td><span class="badge-active">{{ ucfirst($challan->status) }}</span><div>@include('admin.delivery-challans.conversion-status', ['challan' => $challan])</div></td>
                     <td>
                         <a href="{{ route('admin.delivery-challans.show', $challan) }}" class="btn btn-info btn-sm"><i class="fas fa-eye"></i></a>
                         @if($canManage && $challan->status !== 'cancelled' && auth()->user()->can('delivery_challans.edit'))
