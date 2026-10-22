@@ -99,6 +99,8 @@ class OtherTransactionController extends Controller
         $data = $request->validate(['approval_note' => ['nullable', 'string']]);
 
         DB::transaction(function () use ($otherTransaction, $data) {
+            $otherTransaction = OtherTransaction::whereKey($otherTransaction->id)->lockForUpdate()->firstOrFail();
+            abort_if($otherTransaction->status === 'approved', 422, 'Transaction is already approved.');
             $otherTransaction->load(['ledger', 'bankAccount']);
             $ledger = ExpenseLedger::where('company_id', $otherTransaction->company_id)->lockForUpdate()->findOrFail($otherTransaction->expense_ledger_id);
             $bank = null;
@@ -115,15 +117,16 @@ class OtherTransactionController extends Controller
             }
 
             $ledgerBalance = (float) $ledger->opening_balance;
-            $ledger->otherTransactions()
-                ->where('status', 'approved')
-                ->where('id', '<', $otherTransaction->id)
+            BankTransaction::where('company_id', $otherTransaction->company_id)
+                ->where('expense_ledger_id', $ledger->id)
+                ->where('reference_type', OtherTransaction::class)
+                ->where('reference_id', '<', $otherTransaction->id)
                 ->orderBy('id')
                 ->get()
-                ->each(function (OtherTransaction $row) use (&$ledgerBalance) {
-                    $ledgerBalance += $row->transaction_kind === 'income'
-                        ? (float) $row->total_amount
-                        : -(float) $row->total_amount;
+                ->each(function (BankTransaction $row) use (&$ledgerBalance) {
+                    $ledgerBalance += $row->direction === 'in'
+                        ? (float) $row->amount
+                        : -(float) $row->amount;
                 });
             $ledgerBalance += $otherTransaction->transaction_kind === 'income'
                 ? (float) $otherTransaction->total_amount
@@ -200,6 +203,69 @@ class OtherTransactionController extends Controller
         ]);
 
         return back()->with('success', 'Other transaction rejected.');
+    }
+
+    public function destroy(Request $request, OtherTransaction $otherTransaction, EntryVisibilityService $visibility)
+    {
+        $visibility->authorizeManage($otherTransaction);
+        $request->validate(['revert_transactions' => ['sometimes', 'boolean']]);
+        $revert = $request->boolean('revert_transactions', true);
+
+        DB::transaction(function () use ($otherTransaction, $visibility, $revert) {
+            $entry = OtherTransaction::whereKey($otherTransaction->id)->lockForUpdate()->firstOrFail();
+            $visibility->authorizeManage($entry);
+            $postings = BankTransaction::where('company_id', $entry->company_id)
+                ->where('reference_type', OtherTransaction::class)->where('reference_id', $entry->id)
+                ->orderBy('id')->lockForUpdate()->get();
+            $oldValues = $entry->toArray();
+            $oldValues['bank_postings'] = $postings->toArray();
+
+            if ($revert) {
+                foreach ($postings->whereNotNull('bank_account_id')->groupBy('bank_account_id') as $bankId => $rows) {
+                    $bank = BankAccount::withTrashed()->where('company_id', $entry->company_id)
+                        ->lockForUpdate()->findOrFail($bankId);
+                    $refund = $rows->sum(fn ($row) => $row->direction === 'out' ? (float) $row->amount : -(float) $row->amount);
+                    $bank->update(['current_balance' => (float) $bank->current_balance + $refund]);
+                    foreach ($rows as $row) {
+                        $delta = $row->direction === 'out' ? (float) $row->amount : -(float) $row->amount;
+                        $later = BankTransaction::where('company_id', $entry->company_id)
+                            ->where('bank_account_id', $bank->id)->where('id', '>', $row->id);
+                        OtherTransaction::withTrashed()->where('company_id', $entry->company_id)
+                            ->whereIn('id', (clone $later)->where('reference_type', OtherTransaction::class)->select('reference_id'))
+                            ->increment('bank_balance_after', $delta);
+                        $later->increment('balance_after', $delta);
+                    }
+                }
+
+                // Other Income / Expense stores its ledger effect in running snapshots,
+                // rather than changing the expense ledger's current_balance.
+                $ledgerDelta = $postings->sum(fn ($row) => $row->direction === 'out' ? (float) $row->amount : -(float) $row->amount);
+                if (abs($ledgerDelta) > 0.001) {
+                    ExpenseLedger::withTrashed()->where('company_id', $entry->company_id)
+                        ->lockForUpdate()->findOrFail($entry->expense_ledger_id);
+                    OtherTransaction::withTrashed()->where('company_id', $entry->company_id)
+                        ->where('expense_ledger_id', $entry->expense_ledger_id)->where('status', 'approved')
+                        ->where('id', '>', $entry->id)->increment('ledger_balance_after', $ledgerDelta);
+                }
+                EntryVisibility::where('company_id', $entry->company_id)->where('entry_type', BankTransaction::class)
+                    ->whereIn('entry_id', $postings->pluck('id'))->delete();
+                BankTransaction::where('company_id', $entry->company_id)->whereIn('id', $postings->pluck('id'))->delete();
+            }
+
+            EntryVisibility::where('company_id', $entry->company_id)->where('entry_type', OtherTransaction::class)
+                ->where('entry_id', $entry->id)->delete();
+            $entry->update(['updated_by' => auth()->id()]);
+            $entry->delete();
+            AuditLog::log('deleted', [
+                'company_id' => $entry->company_id, 'model' => OtherTransaction::class, 'model_id' => $entry->id,
+                'old_values' => $oldValues, 'new_values' => ['revert_transactions' => $revert],
+                'description' => "Other transaction {$entry->transaction_no} deleted; ".($revert ? 'linked transactions reversed.' : 'linked transactions preserved.'),
+            ]);
+        });
+
+        return redirect()->route('admin.other-transactions.index')->with('success', $revert
+            ? 'Entry deleted and linked transactions reversed.'
+            : 'Entry deleted. Linked transactions and balances have been kept.');
     }
 
     private function formData(OtherTransaction $transaction): array

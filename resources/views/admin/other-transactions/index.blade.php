@@ -34,6 +34,7 @@
                                 <a href="{{ route('admin.other-transactions.edit', $transaction) }}" class="btn btn-warning btn-sm"><i class="fas fa-edit"></i></a>
                             @endcan
                         @endif
+                        @include('admin.other-transactions.delete-button', ['transaction' => $transaction])
                     </td>
                 </tr>
             @endforeach
@@ -41,6 +42,7 @@
         </table>
     </div>
 </div>
+@include('admin.other-transactions.delete-modal')
 @endsection
 @push('scripts')
 <script>$('#otherTxnTable').DataTable({pageLength:25, order:[[0,'desc']]});</script>

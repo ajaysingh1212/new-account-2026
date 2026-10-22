@@ -106,6 +106,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::post('other-transactions/{otherTransaction}/reject', [OtherTransactionController::class, 'reject'])->middleware('permission:other_transactions.approve')->name('other-transactions.reject');
         Route::resource('other-transactions', OtherTransactionController::class)->only(['create','store'])->middleware('permission:other_transactions.create');
         Route::resource('other-transactions', OtherTransactionController::class)->only(['edit','update'])->middleware('permission:other_transactions.edit');
+        Route::resource('other-transactions', OtherTransactionController::class)->only(['destroy'])->middleware('permission:other_transactions.delete');
         Route::resource('other-transactions', OtherTransactionController::class)->only(['index','show']);
     });
     Route::middleware('permission:terms.manage')->group(function () {

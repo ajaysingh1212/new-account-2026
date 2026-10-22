@@ -98,6 +98,7 @@ class PermissionSeeder extends Seeder
             ['name'=>'Create Other Income Expense', 'slug'=>'other_transactions.create', 'module'=>'other_transactions'],
             ['name'=>'Edit Other Income Expense', 'slug'=>'other_transactions.edit', 'module'=>'other_transactions'],
             ['name'=>'Approve Other Income Expense', 'slug'=>'other_transactions.approve', 'module'=>'other_transactions'],
+            ['name'=>'Delete Other Income Expense', 'slug'=>'other_transactions.delete', 'module'=>'other_transactions'],
 
             ['name'=>'View Parties', 'slug'=>'parties.view', 'module'=>'parties'],
             ['name'=>'Create Parties', 'slug'=>'parties.create', 'module'=>'parties'],

@@ -9,6 +9,7 @@
             @if($otherTransaction->status !== 'approved' && auth()->user()->can('other_transactions.edit'))
                 <a href="{{ route('admin.other-transactions.edit', $otherTransaction) }}" class="btn btn-warning btn-sm">Edit</a>
             @endif
+            @include('admin.other-transactions.delete-button', ['transaction' => $otherTransaction])
         </div>
     </div>
     <div class="card-body">
@@ -93,4 +94,5 @@
         </table>
     </div>
 </div>
+@include('admin.other-transactions.delete-modal')
 @endsection
