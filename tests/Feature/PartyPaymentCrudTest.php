@@ -12,6 +12,8 @@ use App\Models\PartyPayment;
 use App\Models\SalesInvoice;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class PartyPaymentCrudTest extends TestCase
@@ -157,6 +159,60 @@ class PartyPaymentCrudTest extends TestCase
         $this->assertSame(1000.0, (float) $account->fresh()->current_balance);
         $this->assertSame(0, PartyLedger::where('reference_type', PartyPayment::class)->where('reference_id', $payment->id)->count());
         $this->assertSame(0, BankTransaction::where('reference_type', PartyPayment::class)->where('reference_id', $payment->id)->count());
+    }
+
+    #[DataProvider('deletedPaymentRelations')]
+    public function test_payment_delete_handles_deleted_relations(string $relation): void
+    {
+        [$user, $party, $account] = $this->openingBalanceContext();
+
+        $this->actingAs($user)->withoutMiddleware()->post(route('admin.party-payments.store'), [
+            'payment_type' => 'payment_in',
+            'party_id' => $party->id,
+            'bank_account_id' => $account->id,
+            'payment_date' => '2026-07-20',
+            'amount' => 250,
+            'payment_mode' => 'Cash',
+            'settlement_source' => 'opening_balance',
+            'opening_balance_amount' => 250,
+        ])->assertRedirect();
+
+        $payment = PartyPayment::firstOrFail();
+        if ($relation === 'missing_party') {
+            // Simulate a legacy orphan while deferring SQLite's FK check until
+            // the payment and its dependent records have been removed.
+            DB::statement('PRAGMA defer_foreign_keys = ON');
+            DB::table('party_payments')->where('id', $payment->id)->update(['party_id' => 999999]);
+        } elseif ($relation === 'deleted_party') {
+            $party->delete();
+        } else {
+            $account->delete();
+        }
+
+        $this->actingAs($user)->withoutMiddleware()
+            ->delete(route('admin.party-payments.destroy', $payment))
+            ->assertRedirect(route('admin.party-payments.index', ['type' => 'payment_in']));
+
+        $this->assertDatabaseMissing('party_payments', ['id' => $payment->id]);
+        $this->assertDatabaseMissing('party_payment_allocations', ['party_payment_id' => $payment->id]);
+        $this->assertDatabaseMissing('party_ledgers', ['reference_type' => PartyPayment::class, 'reference_id' => $payment->id]);
+        $this->assertDatabaseMissing('bank_transactions', ['reference_type' => PartyPayment::class, 'reference_id' => $payment->id]);
+        $this->assertSame(1000.0, (float) BankAccount::withTrashed()->findOrFail($account->id)->current_balance);
+        if ($relation !== 'missing_party') {
+            $revertedParty = Party::withTrashed()->findOrFail($party->id);
+            $this->assertSame(1000.0, (float) $revertedParty->opening_balance);
+            $this->assertSame(-1000.0, (float) $revertedParty->current_balance);
+            $this->assertSame($relation === 'deleted_party', $revertedParty->trashed());
+        }
+    }
+
+    public static function deletedPaymentRelations(): array
+    {
+        return [
+            'soft-deleted party' => ['deleted_party'],
+            'missing party' => ['missing_party'],
+            'soft-deleted bank account' => ['deleted_bank'],
+        ];
     }
 
     public function test_payment_in_outsource_expense_closes_invoice_but_collects_net_amount(): void

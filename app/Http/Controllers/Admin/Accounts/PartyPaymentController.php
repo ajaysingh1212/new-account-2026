@@ -519,8 +519,13 @@ class PartyPaymentController extends Controller
     private function revertPayment(PartyPayment $payment, PartyAdvanceService $advanceService, bool $keepPaymentRecord = false): void
     {
         $companyId = $payment->company_id;
-        $party = Party::where('company_id', $companyId)->lockForUpdate()->findOrFail($payment->party_id);
-        $account = BankAccount::where('company_id', $companyId)->lockForUpdate()->findOrFail($payment->bank_account_id);
+        // Deleted parties still need their balances reversed. Legacy payments may
+        // also reference a missing party; that must not block payment deletion.
+        $partyQuery = Party::withTrashed()->where('company_id', $companyId)->lockForUpdate();
+        $party = $keepPaymentRecord
+            ? $partyQuery->find($payment->party_id)
+            : $partyQuery->findOrFail($payment->party_id);
+        $account = BankAccount::withTrashed()->where('company_id', $companyId)->lockForUpdate()->findOrFail($payment->bank_account_id);
 
         if ($payment->advance) {
             $advanceService->releaseForDocument(PartyAdvance::class, $payment->advance->id);
@@ -529,7 +534,7 @@ class PartyPaymentController extends Controller
 
         $ledger = PartyLedger::where('reference_type', PartyPayment::class)->where('reference_id', $payment->id)->first();
         if ($ledger) {
-            $party->update([
+            $party?->update([
                 'current_balance' => (float) $party->current_balance - ((float) $ledger->credit - (float) $ledger->debit),
             ]);
             $ledger->delete();
@@ -546,7 +551,7 @@ class PartyPaymentController extends Controller
         $openingAmount = (float) $payment->allocations()
             ->where('bill_type', 'opening_balance')
             ->sum('amount');
-        if ($openingAmount > 0) {
+        if ($party && $openingAmount > 0) {
             $party->update([
                 'opening_balance' => round((float) $party->opening_balance + $openingAmount, 2),
                 'updated_by' => auth()->id(),
