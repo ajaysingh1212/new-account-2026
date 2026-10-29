@@ -72,7 +72,7 @@ class PurchaseReturnSerialStockTest extends TestCase
             // invoice key rather than the purchase line's legacy PBI key.
             'movement_units' => [[
                 'key' => 'INVOICE-RESTORED-1',
-                'serial_no' => 'SER-AVAILABLE',
+                'serial_no' => 'SER-RESTORED',
             ]],
         ]);
         StockMovement::create([

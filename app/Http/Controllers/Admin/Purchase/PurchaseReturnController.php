@@ -370,14 +370,9 @@ class PurchaseReturnController extends Controller
 
         $serialUnits = app(SerialUnitService::class);
         $currentUnits = collect($serialUnits->currentStockUnitsByItem($companyId, (int) $line->item_id)[$line->item_id] ?? []);
-        // Sales returns can restore a unit using the invoice's key while the
-        // original purchase line has a legacy PBI key. Match on the stable
-        // serial/SIM identity and return the active stock unit payload.
-        $purchasedIdentities = $purchasedUnits
-            ->map(fn($unit) => $this->physicalUnitIdentity($unit, $serialUnits, (int) $line->item_id))
-            ->filter()
-            ->flip();
-
+        // The bill controls the maximum return quantity, while the current
+        // stock ledger controls which physical serials can actually be sent
+        // back. Sales returns may restore stock under a different bill key.
         $returnedIdentities = PurchaseReturnItem::where('purchase_bill_item_id', $line->id)
             ->when($includeReturnId, fn($query) => $query->where('purchase_return_id', '<>', $includeReturnId))
             ->get()
@@ -387,11 +382,10 @@ class PurchaseReturnController extends Controller
             ->all();
 
         return $currentUnits
-            ->filter(function ($unit) use ($serialUnits, $line, $purchasedIdentities, $returnedIdentities) {
+            ->filter(function ($unit) use ($serialUnits, $line, $returnedIdentities) {
                 $identity = $this->physicalUnitIdentity($unit, $serialUnits, (int) $line->item_id);
 
                 return $identity
-                    && $purchasedIdentities->has($identity)
                     && !in_array($identity, $returnedIdentities, true);
             })
             ->values()
