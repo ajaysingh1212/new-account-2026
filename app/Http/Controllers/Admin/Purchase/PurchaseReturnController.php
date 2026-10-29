@@ -373,21 +373,7 @@ class PurchaseReturnController extends Controller
         // The bill controls the maximum return quantity, while the current
         // stock ledger controls which physical serials can actually be sent
         // back. Sales returns may restore stock under a different bill key.
-        $returnedIdentities = PurchaseReturnItem::where('purchase_bill_item_id', $line->id)
-            ->when($includeReturnId, fn($query) => $query->where('purchase_return_id', '<>', $includeReturnId))
-            ->get()
-            ->flatMap(fn($returnLine) => collect($returnLine->selected_units ?? [])
-                ->map(fn($unit) => $this->physicalUnitIdentity($unit, $serialUnits, (int) $line->item_id)))
-            ->filter()
-            ->all();
-
         return $currentUnits
-            ->filter(function ($unit) use ($serialUnits, $line, $returnedIdentities) {
-                $identity = $this->physicalUnitIdentity($unit, $serialUnits, (int) $line->item_id);
-
-                return $identity
-                    && !in_array($identity, $returnedIdentities, true);
-            })
             ->values()
             ->all();
     }
