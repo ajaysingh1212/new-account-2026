@@ -328,7 +328,7 @@ class SalesReturnSerialLifecycleTest extends TestCase
             'name' => 'GPS Device', 'unit' => 'PCS', 'purchase_price' => 50, 'sale_price' => 100,
             'current_stock' => 1, 'stock_value' => 50, 'track_stock' => true, 'status' => 'active',
         ]);
-        $sourceUnit = ['key' => 'SRC-1', 'serial_no' => 'SER-100', 'item_id' => $sourceItem->id];
+        $sourceUnit = ['key' => 'SRC-1', 'serial_no' => '1211419803-CHENNAI', 'item_id' => $sourceItem->id];
         // Legacy target stock stores the physical serial in `key`, while the
         // source invoice stores it in `serial_no` under a generated key.
         $targetUnit = ['key' => '1211419803-CHENNAI', 'item_id' => $targetItem->id];
@@ -345,7 +345,9 @@ class SalesReturnSerialLifecycleTest extends TestCase
         ]);
         $bill = PurchaseBill::create([
             'company_id' => $target->id, 'purchase_type' => 'credit', 'invoice_no' => 'AUTO-SI-IC-1',
-            'billing_date' => '2026-09-20', 'source_sales_invoice_id' => $invoice->id,
+            // Legacy auto purchase lacks the direct invoice link; the invoice
+            // target-company list must still expose and deduct its stock.
+            'billing_date' => '2026-09-20',
             'inter_company_source_company_id' => $source->id,
         ]);
         PurchaseBillItem::create([

@@ -8,6 +8,7 @@ use App\Models\SalesInvoice;
 use App\Models\PurchaseBill;
 use App\Models\SalesReturn;
 use App\Models\SalesReturnItem;
+use App\Models\Item;
 use App\Models\StockMovement;
 use App\Services\AccountingService;
 use App\Services\EntryVisibilityService;
@@ -446,35 +447,31 @@ class SalesReturnController extends Controller
             return collect();
         }
 
-        return PurchaseBill::with(['items.item'])
-            ->where('source_sales_invoice_id', $invoice->id)
-            ->get()
-            ->flatMap(function (PurchaseBill $bill) use ($invoiceLine, $serialUnits, $soldUnits, &$stockUnitsByCompany) {
-                return $bill->items
-                    ->filter(fn($line) => $line->item?->item_code === $invoiceLine->item?->item_code)
-                    ->flatMap(function ($targetLine) use ($bill, $serialUnits, $soldUnits, &$stockUnitsByCompany) {
-                        if ($stockUnitsByCompany !== null) {
-                            // Reuse stock only while building this read-only form.
-                            // Posting returns still reads fresh balances per item.
-                            $stockUnitsByCompany[$bill->company_id] ??= $serialUnits->currentStockUnitsByItem((int) $bill->company_id);
-                            $currentUnits = collect($stockUnitsByCompany[$bill->company_id][$targetLine->item_id] ?? []);
-                        } else {
-                            $currentUnits = collect($serialUnits->currentStockUnitsByItem(
-                                (int) $bill->company_id,
-                                (int) $targetLine->item_id
-                            )[$targetLine->item_id] ?? []);
-                        }
+        return $this->interCompanyTargetLines($invoice, $invoiceLine)
+            ->flatMap(function ($targetLine) use ($serialUnits, $soldUnits, &$stockUnitsByCompany) {
+                $targetItem = $targetLine->item;
+                $companyId = (int) $targetItem->company_id;
+                if ($stockUnitsByCompany !== null) {
+                    // Reuse stock only while building this read-only form.
+                    // Posting returns still reads fresh balances per item.
+                    $stockUnitsByCompany[$companyId] ??= $serialUnits->currentStockUnitsByItem($companyId);
+                    $currentUnits = collect($stockUnitsByCompany[$companyId][$targetItem->id] ?? []);
+                } else {
+                    $currentUnits = collect($serialUnits->currentStockUnitsByItem(
+                        $companyId,
+                        (int) $targetItem->id
+                    )[$targetItem->id] ?? []);
+                }
 
-                        return $soldUnits->map(function ($soldUnit) use ($currentUnits, $targetLine) {
-                            $currentUnit = $currentUnits->first(fn($unit) => $this->unitsMatch($soldUnit, $unit));
+                return $soldUnits->map(function ($soldUnit) use ($currentUnits, $targetItem) {
+                    $currentUnit = $currentUnits->first(fn($unit) => $this->unitsMatch($soldUnit, $unit));
 
-                            return $currentUnit ? [
-                                'unit' => $soldUnit,
-                                'target_unit' => $currentUnit,
-                                'target_item' => $targetLine->item,
-                            ] : null;
-                        })->filter();
-                    });
+                    return $currentUnit ? [
+                        'unit' => $soldUnit,
+                        'target_unit' => $currentUnit,
+                        'target_item' => $targetItem,
+                    ] : null;
+                })->filter();
             })
             ->unique(fn($row) => $row['unit']['key'])
             ->values();
@@ -540,12 +537,36 @@ class SalesReturnController extends Controller
 
     private function interCompanyTargetLines(SalesInvoice $invoice, $invoiceLine): \Illuminate\Support\Collection
     {
-        return PurchaseBill::with(['items.item'])
+        $linkedItems = PurchaseBill::with(['items.item'])
             ->where('source_sales_invoice_id', $invoice->id)
             ->get()
             ->flatMap(fn(PurchaseBill $bill) => $bill->items)
             ->filter(fn($line) => $line->item?->item_code === $invoiceLine->item?->item_code)
             ->values();
+
+        if ($linkedItems->isNotEmpty()) {
+            return $linkedItems;
+        }
+
+        // Older inter-company invoices can predate the source_sales_invoice_id
+        // link on their auto purchase. Fall back to the invoice's configured
+        // target companies so current stock there remains returnable.
+        $targetCompanyIds = collect($invoice->inter_company_target_company_ids ?? [])
+            ->map(fn($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($targetCompanyIds->isEmpty() || !$invoiceLine->item?->item_code) {
+            return collect();
+        }
+
+        return Item::with('productType')
+            ->whereIn('company_id', $targetCompanyIds)
+            ->where('item_code', $invoiceLine->item->item_code)
+            ->whereHas('productType', fn($query) => $query->whereIn('nature', Item::SALEABLE_PRODUCT_NATURES))
+            ->get()
+            ->map(fn(Item $item) => (object) ['item' => $item]);
     }
 
     private function postInterCompanySalesReturnOut($targetItem, SalesReturn $return, float $qty, array $units, AccountingService $accounting): void
