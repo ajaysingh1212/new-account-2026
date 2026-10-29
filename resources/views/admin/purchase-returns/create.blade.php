@@ -715,7 +715,7 @@
         const line      = linesData[activeSerialIndex];
         const required  = requiredQty(activeSerialIndex);
         const key       = $(this).data('key');
-        const allUnits  = line.purchased_units || [];
+        const allUnits  = line.available_units || [];
 
         if ($(this).is(':checked')) {
             if (modalSelection.length >= required) {
@@ -819,7 +819,7 @@
         $('#serialRequirement').text(`Exactly ${required} serial${required === 1 ? '' : 's'} select karein (${modalSelection.length} selected)`);
 
         $('#serialGrid').html(
-            (line.purchased_units || []).map(unit => {
+            (line.available_units || []).map(unit => {
                 const available = availableKeys.includes(unit.key);
                 const selected  = selectedKeys.includes(unit.key);
                 return `
@@ -836,7 +836,7 @@
                             SKU: ${escHtml(unit.sku || '-')}
                         </div>
                         <div class="${available ? 'text-success' : 'text-muted'} small font-weight-bold">
-                            ${available ? 'Stock mein available' : 'Stock mein nahi hai'}
+                    Stock mein available
                         </div>
                     </span>
                 </label>`;

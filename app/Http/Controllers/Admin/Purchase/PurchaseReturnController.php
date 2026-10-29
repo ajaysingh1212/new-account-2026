@@ -374,7 +374,7 @@ class PurchaseReturnController extends Controller
         // original purchase line has a legacy PBI key. Match on the stable
         // serial/SIM identity and return the active stock unit payload.
         $purchasedIdentities = $purchasedUnits
-            ->map(fn($unit) => $serialUnits->unitIdentity($unit, (int) $line->item_id))
+            ->map(fn($unit) => $this->physicalUnitIdentity($unit, $serialUnits, (int) $line->item_id))
             ->filter()
             ->flip();
 
@@ -382,13 +382,13 @@ class PurchaseReturnController extends Controller
             ->when($includeReturnId, fn($query) => $query->where('purchase_return_id', '<>', $includeReturnId))
             ->get()
             ->flatMap(fn($returnLine) => collect($returnLine->selected_units ?? [])
-                ->map(fn($unit) => $serialUnits->unitIdentity($unit, (int) $line->item_id)))
+                ->map(fn($unit) => $this->physicalUnitIdentity($unit, $serialUnits, (int) $line->item_id)))
             ->filter()
             ->all();
 
         return $currentUnits
             ->filter(function ($unit) use ($serialUnits, $line, $purchasedIdentities, $returnedIdentities) {
-                $identity = $serialUnits->unitIdentity($unit, (int) $line->item_id);
+                $identity = $this->physicalUnitIdentity($unit, $serialUnits, (int) $line->item_id);
 
                 return $identity
                     && $purchasedIdentities->has($identity)
@@ -396,6 +396,17 @@ class PurchaseReturnController extends Controller
             })
             ->values()
             ->all();
+    }
+
+    private function physicalUnitIdentity(array $unit, SerialUnitService $serialUnits, int $itemId): ?string
+    {
+        foreach (['serial_no', 'vts_sim', 'buyer_code', 'sku', 'key'] as $field) {
+            if (!empty($unit[$field])) {
+                return $field . ':' . mb_strtolower(trim((string) $unit[$field]));
+            }
+        }
+
+        return $serialUnits->unitIdentity($unit, $itemId);
     }
 
     private function moveInterCompanyReturnStock(PurchaseBill $bill, $line, PurchaseReturn $return, AccountingService $accounting, array $units, string $direction, float $qty, float $lineTotal): void
