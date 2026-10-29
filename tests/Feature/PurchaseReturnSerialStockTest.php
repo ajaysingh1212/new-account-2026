@@ -68,7 +68,12 @@ class PurchaseReturnSerialStockTest extends TestCase
             'unit_price' => 100,
             'total_value' => 100,
             'stock_after' => 1,
-            'movement_units' => [$units[0]],
+            // Sales returns may restore the same physical serial under the
+            // invoice key rather than the purchase line's legacy PBI key.
+            'movement_units' => [[
+                'key' => 'INVOICE-RESTORED-1',
+                'serial_no' => 'SER-AVAILABLE',
+            ]],
         ]);
         StockMovement::create([
             'company_id' => $company->id,
@@ -90,7 +95,7 @@ class PurchaseReturnSerialStockTest extends TestCase
             ->json('lines.0');
 
         $this->assertSame(1, $response['current_stock']);
-        $this->assertSame(['PBI-1-0'], collect($response['available_units'])->pluck('key')->all());
+        $this->assertSame(['INVOICE-RESTORED-1'], collect($response['available_units'])->pluck('key')->all());
     }
 
     public function test_current_stock_screen_uses_available_serial_count_for_serialised_items(): void
