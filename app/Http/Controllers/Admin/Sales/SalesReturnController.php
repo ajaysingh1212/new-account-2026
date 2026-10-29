@@ -733,25 +733,19 @@ class SalesReturnController extends Controller
 
     private function unitsMatch(array $left, array $right): bool
     {
-        // Auto purchases preserve the source key. Prefer it over display
-        // identifiers, which can be shared by different physical units.
-        if (!empty($left['key']) && !empty($right['key'])
-            && (string) $left['key'] === (string) $right['key']) {
-            return true;
-        }
+        // Some older purchase receipts kept the physical serial only in
+        // `key`, while the sales invoice kept it in `serial_no` (or vice
+        // versa). Compare serial-bearing fields across both shapes, not only
+        // like-for-like fields. Never use SKU/buyer code as physical identity.
+        $identifiers = static function (array $unit): array {
+            return collect(['serial_no', 'vts_sim', 'key'])
+                ->map(fn($field) => trim((string) ($unit[$field] ?? '')))
+                ->filter(fn($value) => $value !== '')
+                ->map(fn($value) => mb_strtolower(preg_replace('/^\d+:/', '', $value)))
+                ->unique()
+                ->all();
+        };
 
-        // Legacy repairs may regenerate keys; use serial/SIM before SKU.
-        foreach (['serial_no', 'vts_sim'] as $field) {
-            if (!empty($left[$field]) && !empty($right[$field])) {
-                return strcasecmp(trim((string) $left[$field]), trim((string) $right[$field])) === 0;
-            }
-        }
-
-        if (!empty($left['key']) && !empty($right['key'])) {
-            return false;
-        }
-
-        return !empty($left['sku']) && !empty($right['sku'])
-            && strcasecmp(trim((string) $left['sku']), trim((string) $right['sku'])) === 0;
+        return !empty(array_intersect($identifiers($left), $identifiers($right)));
     }
 }

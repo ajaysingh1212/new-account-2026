@@ -329,7 +329,9 @@ class SalesReturnSerialLifecycleTest extends TestCase
             'current_stock' => 1, 'stock_value' => 50, 'track_stock' => true, 'status' => 'active',
         ]);
         $sourceUnit = ['key' => 'SRC-1', 'serial_no' => 'SER-100', 'item_id' => $sourceItem->id];
-        $targetUnit = ['key' => 'SRC-1', 'serial_no' => 'SER-100', 'item_id' => $targetItem->id];
+        // Legacy target stock stores the physical serial in `key`, while the
+        // source invoice stores it in `serial_no` under a generated key.
+        $targetUnit = ['key' => '1211419803-CHENNAI', 'item_id' => $targetItem->id];
         $invoice = SalesInvoice::create([
             'company_id' => $source->id, 'sale_type' => 'cash', 'invoice_no' => 'SI-IC-1',
             'billing_date' => '2026-09-20', 'subtotal' => 100, 'grand_total' => 100,
