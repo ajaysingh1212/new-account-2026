@@ -421,7 +421,24 @@ class PurchaseReturnController extends Controller
             ->map(fn($value) => mb_strtolower(preg_replace('/^\d+:/', '', $value)))
             ->all();
 
-        return !empty(array_intersect($identifiers($left), $identifiers($right)));
+        foreach ($identifiers($left) as $leftId) {
+            foreach ($identifiers($right) as $rightId) {
+                if ($leftId === $rightId) {
+                    return true;
+                }
+
+                // Some legacy receipts append a branch label to a numeric
+                // serial, while the bill preserved only the numeric portion.
+                foreach ([[$leftId, $rightId], [$rightId, $leftId]] as [$long, $short]) {
+                    if (preg_match('/^\d{8,}$/', $short)
+                        && preg_match('/^' . preg_quote($short, '/') . '[^0-9].+$/', $long)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     private function moveInterCompanyReturnStock(PurchaseBill $bill, $line, PurchaseReturn $return, AccountingService $accounting, array $units, string $direction, float $qty, float $lineTotal): void

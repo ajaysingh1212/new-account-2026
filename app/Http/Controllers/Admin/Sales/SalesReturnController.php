@@ -53,10 +53,12 @@ class SalesReturnController extends Controller
                     ->where('sales_invoice_item_id', $line->id);
                 $salesReturned = (float) $returnLines->sum('quantity');
                 $purchaseReturnDetails = $this->purchaseReturnDetailsForLine($line, $purchaseReturns);
-                $alreadyReturned = $salesReturned + $purchaseReturnDetails['quantity'];
                 $returnedKeys = $returnLines->flatMap(fn($returnLine) => collect($returnLine->selected_units ?? [])->pluck('key'))
                     ->filter()->values()->all();
                 $soldUnits = collect($line->selected_units ?? [])->values();
+                $alreadyReturned = $soldUnits->isNotEmpty()
+                    ? collect($returnedKeys)->merge($purchaseReturnDetails['keys'])->filter()->unique()->count()
+                    : $salesReturned + $purchaseReturnDetails['quantity'];
                 $availableUnits = $soldUnits
                     ->reject(fn($unit) => in_array($unit['key'] ?? null, $returnedKeys, true)
                         || in_array($unit['key'] ?? null, $purchaseReturnDetails['keys'], true))
@@ -155,7 +157,18 @@ class SalesReturnController extends Controller
                     ->lockForUpdate()
                     ->sum('quantity');
                 $purchaseReturnDetails = $this->purchaseReturnDetailsForLine($line, $purchaseReturns);
-                $alreadyReturned += $purchaseReturnDetails['quantity'];
+                $soldUnits = collect($line->selected_units ?? [])->filter(fn($unit) => !empty($unit['key']))->values();
+                if ($soldUnits->isNotEmpty()) {
+                    $returnedKeys = SalesReturnItem::where('sales_invoice_item_id', $line->id)
+                        ->get()
+                        ->flatMap(fn($returnLine) => collect($returnLine->selected_units ?? [])->pluck('key'))
+                        ->merge($purchaseReturnDetails['keys'])
+                        ->filter()
+                        ->unique();
+                    $alreadyReturned = $returnedKeys->count();
+                } else {
+                    $alreadyReturned += $purchaseReturnDetails['quantity'];
+                }
                 $remainingQty = max(0, (float) $line->quantity - $alreadyReturned);
                 $qty = round((float) ($request->quantity[$i] ?? 0), 3);
                 if ($qty <= 0) continue;
@@ -165,7 +178,6 @@ class SalesReturnController extends Controller
                     ]);
                 }
 
-                $soldUnits = collect($line->selected_units ?? [])->filter(fn($unit) => !empty($unit['key']))->values();
                 $returnedKeys = SalesReturnItem::where('sales_invoice_item_id', $line->id)
                     ->get()
                     ->flatMap(fn($returnLine) => collect($returnLine->selected_units ?? [])->pluck('key'))
@@ -775,6 +787,26 @@ class SalesReturnController extends Controller
                 ->all();
         };
 
-        return !empty(array_intersect($identifiers($left), $identifiers($right)));
+        $leftIds = $identifiers($left);
+        $rightIds = $identifiers($right);
+        foreach ($leftIds as $leftId) {
+            foreach ($rightIds as $rightId) {
+                if ($leftId === $rightId) {
+                    return true;
+                }
+
+                // A legacy stock row may append a branch label to an otherwise
+                // numeric physical serial (for example 1211419803-CHENNAI),
+                // while the source invoice kept only the numeric serial.
+                foreach ([[$leftId, $rightId], [$rightId, $leftId]] as [$long, $short]) {
+                    if (preg_match('/^\d{8,}$/', $short)
+                        && preg_match('/^' . preg_quote($short, '/') . '[^0-9].+$/', $long)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 }
