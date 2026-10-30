@@ -102,6 +102,7 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
         Route::resource('expenses', ExpenseController::class)->only(['index','show']);
     });
     Route::middleware('permission:other_transactions.view')->group(function () {
+        Route::post('other-transactions/bulk-delete', [OtherTransactionController::class, 'bulkDestroy'])->middleware('permission:other_transactions.delete')->name('other-transactions.bulk-delete');
         Route::post('other-transactions/{otherTransaction}/approve', [OtherTransactionController::class, 'approve'])->middleware('permission:other_transactions.approve')->name('other-transactions.approve');
         Route::post('other-transactions/{otherTransaction}/reject', [OtherTransactionController::class, 'reject'])->middleware('permission:other_transactions.approve')->name('other-transactions.reject');
         Route::resource('other-transactions', OtherTransactionController::class)->only(['create','store'])->middleware('permission:other_transactions.create');
