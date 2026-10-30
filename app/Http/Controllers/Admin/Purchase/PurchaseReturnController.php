@@ -192,7 +192,8 @@ class PurchaseReturnController extends Controller
                 continue;
             }
 
-            $availableQty = collect($line->selected_units ?? [])->filter(fn($unit) => !empty($unit['key']))->isNotEmpty()
+            $isSerialItem = collect($line->selected_units ?? [])->filter(fn($unit) => !empty($unit['key']))->isNotEmpty();
+            $availableQty = $isSerialItem
                 ? count($this->availableUnitsForPurchaseLine($line, $return->id))
                 : $this->currentStock($line->item_id, $bill->company_id);
             if ($qty > $availableQty) {
@@ -219,20 +220,31 @@ class PurchaseReturnController extends Controller
                 'selected_units' => $selectedUnits,
             ]);
 
-            $accounting->moveStock($line->item, [
-                'party_id' => $bill->party_id,
-                'movement_date' => $return->return_date,
-                'movement_type' => 'purchase_return',
-                'direction' => 'out',
-                'quantity' => $qty,
-                'unit_price' => $line->unit_price,
-                'total_value' => $lineTotal,
-                'reference_type' => PurchaseReturn::class,
-                'reference_id' => $return->id,
-                'reference_no' => $return->return_no,
-                'description' => 'Purchase return stock out.',
-                'movement_units' => $selectedUnits,
-            ]);
+            $stockGroups = collect($selectedUnits)->groupBy(fn($unit) => (int) ($unit['item_id'] ?? $line->item_id));
+            if ($stockGroups->isEmpty()) {
+                $stockGroups->put((int) $line->item_id, collect());
+            }
+            foreach ($stockGroups as $stockItemId => $units) {
+                $stockItem = (int) $stockItemId === (int) $line->item_id
+                    ? $line->item
+                    : Item::where('company_id', $bill->company_id)->findOrFail($stockItemId);
+                $movementQty = $selectedUnits ? $units->count() : $qty;
+                $movementValue = $selectedUnits && $qty > 0 ? $lineTotal * ($movementQty / $qty) : $lineTotal;
+                $accounting->moveStock($stockItem, [
+                    'party_id' => $bill->party_id,
+                    'movement_date' => $return->return_date,
+                    'movement_type' => 'purchase_return',
+                    'direction' => 'out',
+                    'quantity' => $movementQty,
+                    'unit_price' => $line->unit_price,
+                    'total_value' => $movementValue,
+                    'reference_type' => PurchaseReturn::class,
+                    'reference_id' => $return->id,
+                    'reference_no' => $return->return_no,
+                    'description' => 'Purchase return stock out.',
+                    'movement_units' => $units->values()->all(),
+                ]);
+            }
 
             $this->moveInterCompanyReturnStock($bill, $line, $return, $accounting, $selectedUnits, 'in', $qty, $lineTotal);
 
@@ -369,11 +381,23 @@ class PurchaseReturnController extends Controller
         }
 
         $serialUnits = app(SerialUnitService::class);
-        $currentUnits = collect($serialUnits->currentStockUnitsByItem($companyId, (int) $line->item_id)[$line->item_id] ?? []);
-        // The bill controls the maximum return quantity, while the current
-        // stock ledger controls which physical serials can actually be sent
-        // back. Sales returns may restore stock under a different bill key.
-        return $currentUnits
+        $stockByItem = $serialUnits->currentStockUnitsByItem($companyId);
+        $matchingItemIds = Item::where('company_id', $companyId)
+            ->where('item_code', $line->item?->item_code)
+            ->pluck('id')
+            ->map(fn($id) => (int) $id)
+            ->all();
+
+        // Stock can be under a duplicate item record created by an older
+        // inter-company import. Match the bill's physical serial across every
+        // same-code item in this company, then return the actual stock row so
+        // the posting deducts the item that owns that serial.
+        return collect($matchingItemIds)
+            ->flatMap(fn($itemId) => collect($stockByItem[$itemId] ?? []))
+            ->filter(fn($unit) => $purchasedUnits->contains(
+                fn($purchased) => $this->physicalUnitsMatch($purchased, $unit)
+            ))
+            ->unique(fn($unit) => $this->physicalUnitIdentity($unit, $serialUnits, (int) $line->item_id))
             ->values()
             ->all();
     }
@@ -387,6 +411,17 @@ class PurchaseReturnController extends Controller
         }
 
         return $serialUnits->unitIdentity($unit, $itemId);
+    }
+
+    private function physicalUnitsMatch(array $left, array $right): bool
+    {
+        $identifiers = static fn(array $unit) => collect(['serial_no', 'vts_sim', 'key'])
+            ->map(fn($field) => trim((string) ($unit[$field] ?? '')))
+            ->filter()
+            ->map(fn($value) => mb_strtolower(preg_replace('/^\d+:/', '', $value)))
+            ->all();
+
+        return !empty(array_intersect($identifiers($left), $identifiers($right)));
     }
 
     private function moveInterCompanyReturnStock(PurchaseBill $bill, $line, PurchaseReturn $return, AccountingService $accounting, array $units, string $direction, float $qty, float $lineTotal): void

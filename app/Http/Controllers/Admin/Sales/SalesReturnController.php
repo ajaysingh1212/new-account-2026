@@ -537,9 +537,16 @@ class SalesReturnController extends Controller
 
     private function interCompanyTargetLines(SalesInvoice $invoice, $invoiceLine): \Illuminate\Support\Collection
     {
-        $linkedItems = PurchaseBill::with(['items.item'])
-            ->where('source_sales_invoice_id', $invoice->id)
-            ->get()
+        $purchaseBills = PurchaseBill::with(['items.item'])
+            ->where(function ($query) use ($invoice) {
+                $query->where('source_sales_invoice_id', $invoice->id)
+                    ->orWhere(function ($legacy) use ($invoice) {
+                        $legacy->where('inter_company_source_company_id', $invoice->company_id)
+                            ->where('supplier_bill_no', $invoice->invoice_no);
+                    });
+            })
+            ->get();
+        $linkedItems = $purchaseBills
             ->flatMap(fn(PurchaseBill $bill) => $bill->items)
             ->filter(fn($line) => $line->item?->item_code === $invoiceLine->item?->item_code)
             ->values();
@@ -549,6 +556,7 @@ class SalesReturnController extends Controller
         // later stock transfers/repairs leave the physical unit under another
         // item with the same code.
         $targetCompanyIds = collect($invoice->inter_company_target_company_ids ?? [])
+            ->concat($purchaseBills->pluck('company_id'))
             ->map(fn($id) => (int) $id)
             ->filter()
             ->unique()
