@@ -544,29 +544,29 @@ class SalesReturnController extends Controller
             ->filter(fn($line) => $line->item?->item_code === $invoiceLine->item?->item_code)
             ->values();
 
-        if ($linkedItems->isNotEmpty()) {
-            return $linkedItems;
-        }
-
-        // Older inter-company invoices can predate the source_sales_invoice_id
-        // link on their auto purchase. Fall back to the invoice's configured
-        // target companies so current stock there remains returnable.
+        // Include every matching item in the configured merged companies.
+        // Legacy auto-purchase bills can point at a duplicate item record while
+        // later stock transfers/repairs leave the physical unit under another
+        // item with the same code.
         $targetCompanyIds = collect($invoice->inter_company_target_company_ids ?? [])
             ->map(fn($id) => (int) $id)
             ->filter()
             ->unique()
             ->values();
 
-        if ($targetCompanyIds->isEmpty() || !$invoiceLine->item?->item_code) {
-            return collect();
-        }
-
-        return Item::with('productType')
+        $fallbackItems = $targetCompanyIds->isEmpty() || !$invoiceLine->item?->item_code
+            ? collect()
+            : Item::with('productType')
             ->whereIn('company_id', $targetCompanyIds)
             ->where('item_code', $invoiceLine->item->item_code)
             ->whereHas('productType', fn($query) => $query->whereIn('nature', Item::SALEABLE_PRODUCT_NATURES))
             ->get()
             ->map(fn(Item $item) => (object) ['item' => $item]);
+
+        return $linkedItems->concat($fallbackItems)
+            ->filter(fn($line) => $line->item)
+            ->unique(fn($line) => (int) $line->item->id)
+            ->values();
     }
 
     private function postInterCompanySalesReturnOut($targetItem, SalesReturn $return, float $qty, array $units, AccountingService $accounting): void

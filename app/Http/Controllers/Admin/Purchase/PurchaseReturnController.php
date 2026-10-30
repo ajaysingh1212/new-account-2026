@@ -421,10 +421,21 @@ class PurchaseReturnController extends Controller
 
     private function currentStock(int $itemId, ?int $companyId = null): float
     {
-        return max(0, (float) StockMovement::where('item_id', $itemId)
-            ->where('company_id', $companyId ?: auth()->user()->current_company_id)
+        $companyId = $companyId ?: auth()->user()->current_company_id;
+        $ledgerStock = (float) StockMovement::where('item_id', $itemId)
+            ->where('company_id', $companyId)
             ->selectRaw("SUM(CASE WHEN direction='in' THEN quantity ELSE -quantity END) as net")
-            ->value('net'));
+            ->value('net');
+
+        // AccountingService and the stock screen use Item.current_stock as
+        // the live balance. Legacy inter-company entries may have an
+        // incomplete movement ledger, so do not reject a return that the
+        // inventory balance and the stock-out posting both allow.
+        $itemStock = (float) Item::whereKey($itemId)
+            ->where('company_id', $companyId)
+            ->value('current_stock');
+
+        return $itemStock > 0 ? $itemStock : max(0, $ledgerStock);
     }
 
     private function nextNo(): string
