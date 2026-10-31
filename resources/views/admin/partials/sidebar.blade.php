@@ -59,6 +59,13 @@
                         <i class="nav-icon fas fa-tachometer-alt"></i><p>Dashboard</p>
                     </a>
                 </li>
+                @can('ai_assistant.use')
+                    <li class="nav-item">
+                        <a href="{{ route('admin.ai.index') }}" class="nav-link {{ request()->routeIs('admin.ai.*') ? 'active' : '' }}">
+                            <i class="nav-icon fas fa-magic" style="color:#c4b5fd"></i><p>AI Assistant</p>
+                        </a>
+                    </li>
+                @endcan
                 @if($user->isSuperAdmin())
                 <li class="nav-item">
                     <a href="{{ route('admin.company-merges.index') }}"

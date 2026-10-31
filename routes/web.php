@@ -56,6 +56,11 @@ Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'screen_
 
     // Dashboard
     Route::get('/dashboard', [Admin\DashboardController::class, 'index'])->name('dashboard');
+    Route::middleware('permission:ai_assistant.use')->prefix('ai')->name('ai.')->group(function () {
+        Route::get('/', [Admin\AiAssistantController::class, 'index'])->name('index');
+        Route::post('/chat', [Admin\AiAssistantController::class, 'chat'])->middleware('throttle:20,1')->name('chat');
+        Route::post('/drafts/{draft}/confirm', [Admin\AiAssistantController::class, 'confirm'])->middleware('throttle:10,1')->name('drafts.confirm');
+    });
 
     // Profile
     Route::get('/profile', [Admin\ProfileController::class, 'edit'])->name('profile.edit');

@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'nvidia' => [
+        'key' => env('NVIDIA_API_KEY'),
+        'model' => env('NVIDIA_MODEL', 'nvidia/nemotron-3.5-super-vl-120b-a12b'),
+        'base_url' => env('NVIDIA_API_BASE_URL', 'https://integrate.api.nvidia.com/v1'),
+        'timeout' => (int) env('NVIDIA_API_TIMEOUT', 120),
+        'ca_bundle' => base_path(env('NVIDIA_CA_BUNDLE', 'storage/app/certs/cacert.pem')),
+    ],
+
 ];
